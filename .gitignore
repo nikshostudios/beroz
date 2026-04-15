@@ -2,3 +2,15 @@ node_modules/
 .DS_Store
 auth-session/
 *.png
+__pycache__/
+*.pyc
+.env
+credentials.json
+backend/resumes/
+backend/source_tmp/
+backend/screen_profile_tmp/
+backend/outputs/
+backend/ai-agents/logs/
+backend/ai-agents/submissions/
+backend/last_screening_results.json
+nimbalyst-local/
