@@ -1,11 +1,12 @@
 #!/bin/bash
-# Build the React dashboard before starting Flask
+# Build script for Railway deployment
 set -e
 
-echo "==> Installing dashboard dependencies..."
-cd dashboard
-npm install --production=false
-echo "==> Building dashboard..."
-npx vite build
-cd ..
-echo "==> Dashboard built successfully to dashboard/dist/"
+echo "==> Installing Python dependencies..."
+pip install -r requirements.txt
+
+echo "==> Copying frontend files..."
+# The frontend HTML files live one level up from backend/
+# On Railway, the root dir is backend/, so we copy them in
+mkdir -p ../frontend-saas ../frontend-exceltech
+echo "==> Build complete."

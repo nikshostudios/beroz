@@ -1,0 +1,10 @@
+[phases.setup]
+nixPkgs = []
+
+[phases.build]
+cmds = [
+  "pip install -r backend/requirements.txt",
+]
+
+[start]
+cmd = "cd backend && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
