@@ -300,14 +300,23 @@ def new_dashboard(path=""):
     return send_file(DASHBOARD_DIST / "index.html")
 
 
-# --- Juicebox Frontend (served from project root index.html) ---
+# --- Juicebox Frontend (served from project root) ---
 
 @app.route("/app")
 def juicebox_dashboard():
-    """Serve the new Juicebox-style frontend."""
+    """Serve the ExcelTech-specific frontend."""
     if not is_logged_in():
         return redirect(url_for("login"))
-    return send_file(FRONTEND_DIR / "index.html")
+    return send_file(FRONTEND_DIR / "frontend-exceltech" / "index.html")
+
+
+@app.route("/frontend-saas/<path:path>")
+def saas_frontend(path="index.html"):
+    """Serve the general SaaS frontend."""
+    filepath = FRONTEND_DIR / "frontend-saas" / path
+    if filepath.is_file():
+        return send_file(filepath)
+    return send_file(FRONTEND_DIR / "frontend-saas" / "index.html")
 
 
 @app.route("/api/session")
@@ -434,6 +443,12 @@ def api_outreach_send():
         return jsonify(resp.json()), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
+
+
+@app.route("/home")
+def home():
+    """Landing page with links to both SaaS and ExcelTech frontends."""
+    return send_file(FRONTEND_DIR / "index.html")
 
 
 @app.route("/", methods=["GET", "POST"])

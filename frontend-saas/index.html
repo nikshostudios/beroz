@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Juicebox</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+  <style>
+    /* ── Reset & Variables ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand-purple: #2f0c46;
+      --brand-purple-light: #29246a;
+      --brand-blue: #3c5ccf;
+      --brand-green: #37cd84;
+      --brand-black: #1d1f27;
+      --brand-sand: #f8efe6;
+      --brand-brown: #6d6156;
+      --brand-red: #ff715b;
+      --bg-main: #fcfcfc;
+      --bg-sidebar: #ffffff;
+      --bg-card: #ffffff;
+      --border-color: rgba(0,0,0,0.08);
+      --text-primary: #1d1f27;
+      --text-secondary: #666a73;
+      --text-muted: #999;
+      --sidebar-width: 240px;
+      --header-height: 56px;
+      --radius: 8px;
+      --radius-sm: 4px;
+      --radius-lg: 12px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .sidebar-header {
+      padding: 16px 16px 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #6c3dab, #3c5ccf);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .org-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .collapse-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+    }
+    .collapse-btn:hover { background: rgba(0,0,0,0.04); }
+
+    /* Project selector */
+    .project-selector {
+      margin: 8px 12px;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border-radius: var(--radius);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .project-selector:hover { background: #ebebeb; }
+    .project-selector .material-icons-outlined { font-size: 18px; color: var(--text-secondary); }
+    .project-selector span { flex: 1; }
+
+    /* Nav */
+    .nav-section {
+      padding: 4px 8px;
+      flex: 1;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+      user-select: none;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: rgba(0,0,0,0.04); color: var(--text-primary); }
+    .nav-item.active { background: rgba(60,92,207,0.08); color: var(--brand-blue); }
+    .nav-item .material-icons-outlined { font-size: 20px; }
+
+    .nav-divider { height: 1px; background: var(--border-color); margin: 8px 12px; }
+
+    /* Analytics sub-items */
+    .nav-sub-items { padding-left: 20px; display: none; }
+    .nav-sub-items.open { display: block; }
+    .nav-sub-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+    .nav-sub-item:hover { background: rgba(0,0,0,0.04); color: var(--text-primary); }
+    .nav-sub-item.active { color: var(--brand-blue); }
+
+    .expand-arrow {
+      margin-left: auto;
+      font-size: 18px !important;
+      transition: transform 0.2s;
+    }
+    .expand-arrow.rotated { transform: rotate(90deg); }
+
+    /* Sidebar footer */
+    .sidebar-footer {
+      padding: 8px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* Quick Find */
+    .quick-find {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin: 4px 8px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-secondary);
+      transition: background 0.15s;
+    }
+    .quick-find:hover { background: rgba(0,0,0,0.04); }
+    .quick-find .material-icons-outlined { font-size: 20px; }
+    .quick-find .shortcut {
+      margin-left: auto;
+      font-size: 11px;
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    /* ── Main Area ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Header */
+    .header {
+      height: var(--header-height);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 16px;
+      background: var(--bg-card);
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 8px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .icon-btn:hover { background: rgba(0,0,0,0.04); }
+    .icon-btn .material-icons-outlined { font-size: 20px; }
+
+    .btn-primary {
+      background: var(--brand-blue);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: #3050b8; }
+    .btn-primary .material-icons-outlined { font-size: 18px; }
+
+    .btn-secondary {
+      background: white;
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 7px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { background: #f8f8f8; }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6c3dab, #3c5ccf);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .getting-started-badge {
+      background: var(--brand-green);
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ── Content Area ── */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Cards & Tables ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-change {
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+    .stat-change.positive { color: #058a5e; }
+    .stat-change.negative { color: var(--brand-red); }
+
+    /* Table */
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .table-header-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .table-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      background: #fafafa;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: var(--text-primary); }
+
+    td {
+      padding: 12px 20px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(0,0,0,0.015); }
+
+    .checkbox {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ccc;
+      border-radius: 3px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .checkbox:checked {
+      background: var(--brand-blue);
+      border-color: var(--brand-blue);
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      gap: 4px;
+    }
+    .tag-active { background: #e8f5e9; color: #058a5e; }
+    .tag-public { background: #e3f2fd; color: #1565c0; }
+    .tag-draft { background: #f5f5f5; color: #666; }
+    .tag-linkedin { background: #e8f0fe; color: #0a66c2; }
+    .tag-email { background: #fce4ec; color: #c62828; }
+
+    /* Status dot */
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-dot.green { background: var(--brand-green); }
+    .status-dot.yellow { background: #f59e0b; }
+    .status-dot.red { background: var(--brand-red); }
+    .status-dot.gray { background: #ccc; }
+
+    /* Progress bar */
+    .progress-bar {
+      width: 100px;
+      height: 6px;
+      background: #eee;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--brand-green);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    /* ── Agent Home ── */
+    .agent-chat-area {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .agent-greeting {
+      text-align: center;
+      padding: 60px 0 40px;
+    }
+
+    .agent-greeting h2 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .agent-greeting p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .chat-input-area {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+    }
+
+    .chat-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      line-height: 1.5;
+      min-height: 24px;
+      background: transparent;
+    }
+
+    .chat-send-btn {
+      background: var(--brand-purple);
+      color: white;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .chat-send-btn:hover { background: #3c0366; }
+
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .quick-action-chip {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+      color: var(--text-secondary);
+    }
+    .quick-action-chip:hover { border-color: var(--brand-blue); color: var(--brand-blue); }
+
+    /* ── Analytics ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border-color);
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text-primary); }
+    .tab.active {
+      color: var(--brand-blue);
+      border-bottom-color: var(--brand-blue);
+    }
+
+    .chart-placeholder {
+      background: #f8f9fa;
+      border: 1px dashed #ddd;
+      border-radius: var(--radius);
+      height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* ── Integrations ── */
+    .integration-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .integration-card:hover { border-color: var(--brand-blue); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+    .integration-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius);
+      background: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .integration-info { flex: 1; }
+    .integration-info h4 { font-size: 14px; font-weight: 600; }
+    .integration-info p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    .integrations-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+
+    /* ── Sequences ── */
+    .sequence-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .sequence-item:hover { border-color: var(--brand-blue); }
+
+    .sequence-info { flex: 1; }
+    .sequence-info h4 { font-size: 14px; font-weight: 500; }
+    .sequence-info p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    .sequence-stats {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ── Settings ── */
+    .settings-section {
+      max-width: 640px;
+    }
+
+    .settings-field {
+      margin-bottom: 20px;
+    }
+
+    .settings-field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+
+    .settings-field input, .settings-field select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .settings-field input:focus, .settings-field select:focus {
+      border-color: var(--brand-blue);
+    }
+
+    .profile-pic-area {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .profile-pic {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6c3dab, #3c5ccf);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 24px;
+    }
+
+    /* ── Search ── */
+    .search-page-input {
+      width: 100%;
+      padding: 14px 16px 14px 44px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      background: var(--bg-card);
+      transition: border-color 0.15s;
+    }
+    .search-page-input:focus { border-color: var(--brand-blue); }
+
+    .search-input-wrapper {
+      position: relative;
+      margin-bottom: 24px;
+    }
+    .search-input-wrapper .material-icons-outlined {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 20px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .material-icons-outlined { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state p { font-size: 14px; }
+
+    /* ── Shortlist ── */
+    .shortlist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .person-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+    .person-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+    .person-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .person-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e0c3fc, #8ec5fc);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .person-name { font-weight: 600; font-size: 14px; }
+    .person-role { font-size: 12px; color: var(--text-secondary); }
+
+    .person-card-detail {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .person-card-detail .material-icons-outlined { font-size: 14px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #bbb; }
+
+    /* Transitions */
+    .page { animation: fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ═══════ SIDEBAR ═══════ -->
+    <aside class="sidebar" aria-label="Main sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">J</div>
+        <span class="org-name">NikSho Studios</span>
+        <button class="collapse-btn" aria-label="Collapse Sidebar">
+          <span class="material-icons-outlined" style="font-size:18px">chevron_left</span>
+        </button>
+      </div>
+
+      <div class="project-selector" aria-label="Select project">
+        <span class="material-icons-outlined">folder_open</span>
+        <span>Recruitment Agent</span>
+        <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
+      </div>
+
+      <nav class="nav-section">
+        <a class="nav-item active" data-page="agent-home" href="#">
+          <span class="material-icons-outlined">chat_bubble_outline</span> Agent Home
+        </a>
+        <a class="nav-item" data-page="all-projects" href="#">
+          <span class="material-icons-outlined">apps</span> All Projects
+        </a>
+        <a class="nav-item" data-page="all-agents" href="#">
+          <span class="material-icons-outlined">people_outline</span> All Agents
+        </a>
+        <a class="nav-item" data-page="shortlist" href="#">
+          <span class="material-icons-outlined">star_outline</span> Shortlist
+        </a>
+        <a class="nav-item" data-page="contacts" href="#">
+          <span class="material-icons-outlined">person_outline</span> Contacts
+        </a>
+        <a class="nav-item" data-page="sequences" href="#">
+          <span class="material-icons-outlined">mail_outline</span> Sequences
+        </a>
+
+        <a class="nav-item" id="analytics-toggle" href="#">
+          <span class="material-icons-outlined">insert_chart_outlined</span> Analytics
+          <span class="material-icons-outlined expand-arrow">chevron_right</span>
+        </a>
+        <div class="nav-sub-items" id="analytics-sub">
+          <a class="nav-sub-item" data-page="analytics" data-tab="projects" href="#">Projects</a>
+          <a class="nav-sub-item" data-page="analytics" data-tab="agents" href="#">Agents</a>
+          <a class="nav-sub-item" data-page="analytics" data-tab="outreach" href="#">Outreach</a>
+          <a class="nav-sub-item active" data-page="analytics" data-tab="usage" href="#">Usage</a>
+        </div>
+
+        <a class="nav-item" data-page="integrations" href="#">
+          <span class="material-icons-outlined">extension</span> Integrations
+        </a>
+
+        <div class="nav-divider"></div>
+
+        <a class="nav-item" data-page="search" href="#">
+          <span class="material-icons-outlined">search</span> Search
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="quick-find" aria-label="Quick Find">
+          <span class="material-icons-outlined">search</span>
+          Quick Find
+          <span class="shortcut">&#8984;K</span>
+        </div>
+
+        <a class="nav-item" data-page="settings" href="#">
+          <span class="material-icons-outlined">settings</span> Settings
+        </a>
+        <a class="nav-item" href="#">
+          <span class="material-icons-outlined">help_outline</span> Support
+        </a>
+      </div>
+    </aside>
+
+    <!-- ═══════ MAIN ═══════ -->
+    <div class="main">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-title" id="page-title">Agent Home</div>
+        <div class="header-actions">
+          <div class="getting-started-badge">
+            <span class="material-icons-outlined" style="font-size:14px">flag</span>
+            Getting Started 50%
+          </div>
+          <button class="icon-btn" aria-label="Notifications">
+            <span class="material-icons-outlined">notifications_none</span>
+          </button>
+          <div class="avatar" aria-label="User menu">S</div>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <div class="content">
+
+        <!-- ── AGENT HOME ── -->
+        <div class="page active" id="page-agent-home">
+          <div class="agent-chat-area">
+            <div class="agent-greeting">
+              <h2>Hi there! I'm your Recruitment Agent</h2>
+              <p>I can help you find candidates, manage outreach, and build your pipeline. What would you like to do?</p>
+            </div>
+            <div class="chat-input-area">
+              <textarea class="chat-input" placeholder="Ask your agent anything..." rows="1"></textarea>
+              <button class="chat-send-btn">
+                <span class="material-icons-outlined" style="font-size:20px">arrow_upward</span>
+              </button>
+            </div>
+            <div class="quick-actions">
+              <div class="quick-action-chip">Find software engineers in SF</div>
+              <div class="quick-action-chip">Draft outreach sequence</div>
+              <div class="quick-action-chip">Show recent candidates</div>
+              <div class="quick-action-chip">Analyze pipeline metrics</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ALL PROJECTS ── -->
+        <div class="page" id="page-all-projects">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total Projects</div>
+              <div class="stat-value">3</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Active Agents</div>
+              <div class="stat-value">2</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total Contacts</div>
+              <div class="stat-value">147</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Emails Sent</div>
+              <div class="stat-value">89</div>
+              <div class="stat-change positive">+12% this week</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <div class="table-header">
+              <div class="table-header-title">All Projects</div>
+              <div class="table-header-actions">
+                <button class="btn-primary">
+                  <span class="material-icons-outlined">add</span> New Project
+                </button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:32px"><input type="checkbox" class="checkbox"></th>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                  <th>Created On</th>
+                  <th>Collaborators</th>
+                  <th style="width:40px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">Recruitment Agent</td>
+                  <td><span class="tag tag-active"><span class="status-dot green"></span>Active</span></td>
+                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:72%"></div></div></td>
+                  <td>Mar 15, 2026</td>
+                  <td>
+                    <div style="display:flex;gap:-4px">
+                      <div class="avatar" style="width:24px;height:24px;font-size:10px">S</div>
+                    </div>
+                  </td>
+                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">Sales Prospector</td>
+                  <td><span class="tag tag-active"><span class="status-dot green"></span>Active</span></td>
+                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:45%"></div></div></td>
+                  <td>Feb 28, 2026</td>
+                  <td>
+                    <div style="display:flex">
+                      <div class="avatar" style="width:24px;height:24px;font-size:10px">N</div>
+                    </div>
+                  </td>
+                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">Market Research</td>
+                  <td><span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span></td>
+                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:10%"></div></div></td>
+                  <td>Apr 2, 2026</td>
+                  <td>
+                    <div style="display:flex">
+                      <div class="avatar" style="width:24px;height:24px;font-size:10px">S</div>
+                    </div>
+                  </td>
+                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── ALL AGENTS ── -->
+        <div class="page" id="page-all-agents">
+          <div class="table-container">
+            <div class="table-header">
+              <div class="table-header-title">All Agents</div>
+              <div class="table-header-actions">
+                <button class="btn-secondary">
+                  <span class="material-icons-outlined" style="font-size:16px">filter_list</span> All Time
+                </button>
+                <button class="btn-primary">
+                  <span class="material-icons-outlined">add</span> New Agent
+                </button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent Name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Contacts Found</th>
+                  <th>Emails Sent</th>
+                  <th>Last Active</th>
+                  <th style="width:40px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight:500">Recruitment Agent</td>
+                  <td>People Search</td>
+                  <td><span class="tag tag-active"><span class="status-dot green"></span>Running</span></td>
+                  <td>147</td>
+                  <td>89</td>
+                  <td>2 min ago</td>
+                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
+                </tr>
+                <tr>
+                  <td style="font-weight:500">Sales Prospector</td>
+                  <td>Company Search</td>
+                  <td><span class="tag tag-active"><span class="status-dot yellow"></span>Paused</span></td>
+                  <td>63</td>
+                  <td>28</td>
+                  <td>1 hour ago</td>
+                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── SHORTLIST ── -->
+        <div class="page" id="page-shortlist">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h3 style="font-size:16px;font-weight:600">Shortlisted Candidates (6)</h3>
+            <button class="btn-secondary">
+              <span class="material-icons-outlined" style="font-size:16px">filter_list</span> Filter
+            </button>
+          </div>
+          <div class="shortlist-grid">
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar">AK</div>
+                <div>
+                  <div class="person-name">Anika Kumar</div>
+                  <div class="person-role">Senior Software Engineer</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Google</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> San Francisco, CA</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> Stanford University</div>
+            </div>
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar" style="background:linear-gradient(135deg,#fbc2eb,#a6c1ee)">JM</div>
+                <div>
+                  <div class="person-name">James Mitchell</div>
+                  <div class="person-role">Engineering Manager</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Meta</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> New York, NY</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> MIT</div>
+            </div>
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar" style="background:linear-gradient(135deg,#a1c4fd,#c2e9fb)">SP</div>
+                <div>
+                  <div class="person-name">Sarah Park</div>
+                  <div class="person-role">Staff Engineer</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Stripe</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> Seattle, WA</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> UC Berkeley</div>
+            </div>
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar" style="background:linear-gradient(135deg,#ffecd2,#fcb69f)">DL</div>
+                <div>
+                  <div class="person-name">David Lee</div>
+                  <div class="person-role">Principal Engineer</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Netflix</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> Los Gatos, CA</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> Carnegie Mellon</div>
+            </div>
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar" style="background:linear-gradient(135deg,#d4fc79,#96e6a1)">MR</div>
+                <div>
+                  <div class="person-name">Maya Rodriguez</div>
+                  <div class="person-role">Backend Lead</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Airbnb</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> Austin, TX</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> Georgia Tech</div>
+            </div>
+            <div class="person-card">
+              <div class="person-card-header">
+                <div class="person-avatar" style="background:linear-gradient(135deg,#fdcbf1,#e6dee9)">TC</div>
+                <div>
+                  <div class="person-name">Tom Chen</div>
+                  <div class="person-role">Full Stack Developer</div>
+                </div>
+              </div>
+              <div class="person-card-detail"><span class="material-icons-outlined">business</span> Shopify</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">location_on</span> Toronto, ON</div>
+              <div class="person-card-detail"><span class="material-icons-outlined">school</span> University of Waterloo</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── CONTACTS ── -->
+        <div class="page" id="page-contacts">
+          <div class="table-container">
+            <div class="table-header">
+              <div class="table-header-title">All Contacts (4)</div>
+              <div class="table-header-actions">
+                <button class="btn-secondary">
+                  <span class="material-icons-outlined" style="font-size:16px">filter_list</span> Add Filter
+                </button>
+                <button class="btn-secondary">
+                  <span class="material-icons-outlined" style="font-size:16px">label</span> Add Tags
+                </button>
+                <button class="icon-btn" aria-label="Refresh">
+                  <span class="material-icons-outlined">refresh</span>
+                </button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:32px"><input type="checkbox" class="checkbox"></th>
+                  <th>Full Name <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">swap_vert</span></th>
+                  <th>Current Role <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">swap_vert</span></th>
+                  <th>Organization <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">swap_vert</span></th>
+                  <th>Education <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">swap_vert</span></th>
+                  <th>Location <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">swap_vert</span></th>
+                  <th>Tags</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">Anika Kumar</td>
+                  <td>Senior Software Engineer</td>
+                  <td>Google</td>
+                  <td>Stanford University</td>
+                  <td>San Francisco, CA</td>
+                  <td><span class="tag tag-linkedin">LinkedIn</span></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">James Mitchell</td>
+                  <td>Engineering Manager</td>
+                  <td>Meta</td>
+                  <td>MIT</td>
+                  <td>New York, NY</td>
+                  <td><span class="tag tag-email">Email Outreach</span></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">Sarah Park</td>
+                  <td>Staff Engineer</td>
+                  <td>Stripe</td>
+                  <td>UC Berkeley</td>
+                  <td>Seattle, WA</td>
+                  <td><span class="tag tag-linkedin">LinkedIn</span></td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="checkbox"></td>
+                  <td style="font-weight:500">David Lee</td>
+                  <td>Principal Engineer</td>
+                  <td>Netflix</td>
+                  <td>Carnegie Mellon</td>
+                  <td>Los Gatos, CA</td>
+                  <td><span class="tag tag-linkedin">LinkedIn</span> <span class="tag tag-email">Email Outreach</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── SEQUENCES ── -->
+        <div class="page" id="page-sequences">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h3 style="font-size:16px;font-weight:600">Sequences</h3>
+            <button class="btn-primary">
+              <span class="material-icons-outlined">add</span> New Sequence
+            </button>
+          </div>
+          <div class="sequence-item">
+            <span class="material-icons-outlined" style="color:var(--brand-blue)">mail_outline</span>
+            <div class="sequence-info">
+              <h4>Initial Outreach - Software Engineers</h4>
+              <p>3-step email sequence &middot; Created Mar 20, 2026</p>
+            </div>
+            <div class="sequence-stats">
+              <span><strong>24</strong> enrolled</span>
+              <span><strong>68%</strong> open rate</span>
+              <span><strong>12%</strong> reply rate</span>
+            </div>
+            <span class="tag tag-active"><span class="status-dot green"></span>Active</span>
+          </div>
+          <div class="sequence-item">
+            <span class="material-icons-outlined" style="color:var(--brand-blue)">mail_outline</span>
+            <div class="sequence-info">
+              <h4>Follow-up - Interested Candidates</h4>
+              <p>2-step email sequence &middot; Created Mar 25, 2026</p>
+            </div>
+            <div class="sequence-stats">
+              <span><strong>8</strong> enrolled</span>
+              <span><strong>82%</strong> open rate</span>
+              <span><strong>25%</strong> reply rate</span>
+            </div>
+            <span class="tag tag-active"><span class="status-dot green"></span>Active</span>
+          </div>
+          <div class="sequence-item">
+            <span class="material-icons-outlined" style="color:var(--text-muted)">mail_outline</span>
+            <div class="sequence-info">
+              <h4>Re-engagement Campaign</h4>
+              <p>4-step email sequence &middot; Created Apr 1, 2026</p>
+            </div>
+            <div class="sequence-stats">
+              <span><strong>0</strong> enrolled</span>
+              <span><strong>--</strong> open rate</span>
+              <span><strong>--</strong> reply rate</span>
+            </div>
+            <span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span>
+          </div>
+        </div>
+
+        <!-- ── ANALYTICS ── -->
+        <div class="page" id="page-analytics">
+          <div class="tabs">
+            <div class="tab" data-analytics-tab="projects">Projects</div>
+            <div class="tab" data-analytics-tab="agents">Agents</div>
+            <div class="tab" data-analytics-tab="outreach">Outreach</div>
+            <div class="tab active" data-analytics-tab="usage">Usage</div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">People Searched</div>
+              <div class="stat-value">1,247</div>
+              <div class="stat-change positive">+18% vs last month</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Emails Sent</div>
+              <div class="stat-value">89</div>
+              <div class="stat-change positive">+5% vs last month</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Profile Views</div>
+              <div class="stat-value">342</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Credits Used</div>
+              <div class="stat-value">2,150</div>
+              <div class="stat-change negative">75% of plan</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="material-icons-outlined" style="font-size:18px">show_chart</span>
+              Usage Over Time
+            </div>
+            <div class="chart-placeholder">
+              <div style="text-align:center">
+                <span class="material-icons-outlined" style="font-size:32px;opacity:0.3">insert_chart_outlined</span>
+                <p style="margin-top:8px">Chart visualization</p>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="material-icons-outlined" style="font-size:18px">pie_chart_outline</span>
+              Activity Breakdown
+            </div>
+            <div class="chart-placeholder">
+              <div style="text-align:center">
+                <span class="material-icons-outlined" style="font-size:32px;opacity:0.3">donut_large</span>
+                <p style="margin-top:8px">Activity breakdown chart</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── INTEGRATIONS ── -->
+        <div class="page" id="page-integrations">
+          <div style="margin-bottom:20px">
+            <h3 style="font-size:16px;font-weight:600;margin-bottom:4px">Integrations</h3>
+            <p style="color:var(--text-secondary);font-size:13px">Connect your email and other tools to power your outreach.</p>
+          </div>
+
+          <div class="card" style="margin-bottom:24px">
+            <div class="card-title">Connected Mailboxes</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Sender Name</th>
+                  <th>Email Address</th>
+                  <th>Max Emails/Day</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span style="display:flex;align-items:center;gap:6px"><span style="color:#ea4335;font-size:18px">&#9679;</span> Gmail</span></td>
+                  <td>NikSho Studios</td>
+                  <td>contact@nikshostudios.com</td>
+                  <td>50</td>
+                  <td><span class="tag tag-active"><span class="status-dot green"></span>Connected</span></td>
+                  <td><button class="btn-secondary" style="font-size:12px;padding:4px 10px">Edit Settings</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card-title" style="margin-bottom:12px">Available Integrations</div>
+          <div class="integrations-grid">
+            <div class="integration-card">
+              <div class="integration-icon">&#128231;</div>
+              <div class="integration-info">
+                <h4>Gmail</h4>
+                <p>Send emails via your Gmail account</p>
+              </div>
+              <span class="tag tag-active">Connected</span>
+            </div>
+            <div class="integration-card">
+              <div class="integration-icon">&#128202;</div>
+              <div class="integration-info">
+                <h4>Outlook</h4>
+                <p>Connect your Microsoft Outlook mailbox</p>
+              </div>
+              <button class="btn-secondary" style="font-size:12px;padding:4px 10px">Connect</button>
+            </div>
+            <div class="integration-card">
+              <div class="integration-icon">&#128279;</div>
+              <div class="integration-info">
+                <h4>LinkedIn</h4>
+                <p>Import contacts from LinkedIn</p>
+              </div>
+              <button class="btn-secondary" style="font-size:12px;padding:4px 10px">Connect</button>
+            </div>
+            <div class="integration-card">
+              <div class="integration-icon">&#128736;</div>
+              <div class="integration-info">
+                <h4>Slack</h4>
+                <p>Get notifications in Slack</p>
+              </div>
+              <button class="btn-secondary" style="font-size:12px;padding:4px 10px">Connect</button>
+            </div>
+            <div class="integration-card">
+              <div class="integration-icon">&#128200;</div>
+              <div class="integration-info">
+                <h4>Salesforce</h4>
+                <p>Sync contacts with your CRM</p>
+              </div>
+              <button class="btn-secondary" style="font-size:12px;padding:4px 10px">Connect</button>
+            </div>
+            <div class="integration-card">
+              <div class="integration-icon">&#128221;</div>
+              <div class="integration-info">
+                <h4>HubSpot</h4>
+                <p>Push contacts to HubSpot CRM</p>
+              </div>
+              <button class="btn-secondary" style="font-size:12px;padding:4px 10px">Connect</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SEARCH ── -->
+        <div class="page" id="page-search">
+          <div class="search-input-wrapper">
+            <span class="material-icons-outlined">search</span>
+            <input type="text" class="search-page-input" placeholder="Search contacts, projects, agents...">
+          </div>
+          <div class="empty-state">
+            <span class="material-icons-outlined">search</span>
+            <p>Start typing to search across your workspace</p>
+          </div>
+        </div>
+
+        <!-- ── SETTINGS ── -->
+        <div class="page" id="page-settings">
+          <div class="tabs" style="margin-bottom:24px">
+            <div class="tab active">User</div>
+            <div class="tab">Team</div>
+            <div class="tab">Billing</div>
+          </div>
+          <div class="settings-section">
+            <div class="profile-pic-area">
+              <div class="profile-pic">S</div>
+              <div>
+                <div style="font-weight:600;margin-bottom:4px">Profile Picture</div>
+                <button class="btn-secondary" style="font-size:12px">Change Profile Picture</button>
+              </div>
+            </div>
+            <div class="settings-field">
+              <label>Full Name</label>
+              <input type="text" value="Shoham Shree">
+            </div>
+            <div class="settings-field">
+              <label>Email Address</label>
+              <input type="email" value="contact@nikshostudios.com">
+            </div>
+            <div class="settings-field">
+              <label>Organization</label>
+              <input type="text" value="NikSho Studios">
+            </div>
+            <div class="settings-field">
+              <label>Role</label>
+              <input type="text" value="Admin">
+            </div>
+            <button class="btn-primary" style="margin-top:8px">Save Changes</button>
+          </div>
+        </div>
+
+      </div><!-- /content -->
+    </div><!-- /main -->
+  </div><!-- /app -->
+
+  <script>
+    // ── Navigation ──
+    const navItems = document.querySelectorAll('.nav-item[data-page], .nav-sub-item[data-page]');
+    const pages = document.querySelectorAll('.page');
+    const pageTitle = document.getElementById('page-title');
+    const analyticsToggle = document.getElementById('analytics-toggle');
+    const analyticsSub = document.getElementById('analytics-sub');
+    const expandArrow = analyticsToggle.querySelector('.expand-arrow');
+
+    const pageTitles = {
+      'agent-home': 'Agent Home',
+      'all-projects': 'All Projects',
+      'all-agents': 'All Agents',
+      'shortlist': 'Shortlist',
+      'contacts': 'Contacts',
+      'sequences': 'Sequences',
+      'analytics': 'Analytics',
+      'integrations': 'Integrations',
+      'search': 'Search',
+      'settings': 'Settings'
+    };
+
+    function switchPage(pageId) {
+      pages.forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+      const target = document.getElementById('page-' + pageId);
+      if (target) {
+        target.classList.add('active');
+        // Re-trigger animation
+        target.style.animation = 'none';
+        target.offsetHeight;
+        target.style.animation = '';
+      }
+
+      const navLink = document.querySelector('.nav-item[data-page="' + pageId + '"]');
+      if (navLink) navLink.classList.add('active');
+
+      pageTitle.textContent = pageTitles[pageId] || pageId;
+    }
+
+    navItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const page = item.dataset.page;
+        switchPage(page);
+
+        // Handle analytics tab switching
+        if (item.dataset.tab) {
+          document.querySelectorAll('.nav-sub-item').forEach(s => s.classList.remove('active'));
+          item.classList.add('active');
+          // Switch analytics tab
+          const tabs = document.querySelectorAll('[data-analytics-tab]');
+          tabs.forEach(t => t.classList.toggle('active', t.dataset.analyticsTab === item.dataset.tab));
+        }
+      });
+    });
+
+    // Analytics expand/collapse
+    analyticsToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      analyticsSub.classList.toggle('open');
+      expandArrow.classList.toggle('rotated');
+    });
+
+    // Analytics tab clicks
+    document.querySelectorAll('[data-analytics-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-analytics-tab]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        // Also update sidebar sub-items
+        document.querySelectorAll('.nav-sub-item').forEach(s => {
+          s.classList.toggle('active', s.dataset.tab === tab.dataset.analyticsTab);
+        });
+      });
+    });
+
+    // Auto-resize chat textarea
+    const chatInput = document.querySelector('.chat-input');
+    if (chatInput) {
+      chatInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+    }
+  </script>
+</body>
+</html>
