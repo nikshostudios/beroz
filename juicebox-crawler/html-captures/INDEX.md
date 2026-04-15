@@ -1,0 +1,56 @@
+# Juicebox HTML Captures
+
+Total: 52 files
+
+- [agent-home](001-agent-home.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agent
+- [All Projects](002-all-projects.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA
+- [All Projects-recruitment agent](003-all-projects-recruitment-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA
+- [All Agents](004-all-agents.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agents
+- [All Agents-recruitment agent](005-all-agents-recruitment-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agents
+- [All Agents-​](006-all-agents.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agents
+- [All Agents-All time](007-all-agents-all-time.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agents
+- [Shortlist](008-shortlist.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/shortlist
+- [Shortlist-recruitment agent](009-shortlist-recruitment-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/shortlist
+- [Contacts](010-contacts.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Full Name](011-contacts-full-name.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Current Role](012-contacts-current-role.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Organization](013-contacts-organization.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Education](014-contacts-education.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Location](015-contacts-location.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Contacts-Add Tags](016-contacts-add-tags.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [Sequences](017-sequences.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/sequences
+- [Sequences-0](018-sequences-0.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/sequences
+- [Sequences-2](019-sequences-2.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/sequences
+- [Sequences-recruitment agent](020-sequences-recruitment-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/sequences
+- [Analytics](021-analytics.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/usage
+- [Analytics-recruitment agent](022-analytics-recruitment-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/usage
+- [Integrations](023-integrations.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Provider](024-integrations-provider.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Sender Name](025-integrations-sender-name.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Email Address](026-integrations-email-address.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Max Emails Per Day](027-integrations-max-emails-per-day.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Signature](028-integrations-signature.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Status](029-integrations-status.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Actions](030-integrations-actions.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-Gmail](031-integrations-gmail.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Integrations-NikSho Studios](032-integrations-niksho-studios.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/integrations
+- [Settings](033-settings.html) — https://app.juicebox.ai/account?tab=user
+- [Analytics](034-analytics.html) — https://app.juicebox.ai/account?tab=user
+- [Getting Started50%](035-getting-started50.html) — https://app.juicebox.ai/account?tab=user
+- [Quick Find⌘K](036-quick-find-k.html) — https://app.juicebox.ai/account?tab=user
+- [Support](037-support.html) — https://app.juicebox.ai/account?tab=user
+- [all-projects-list](038-all-projects-list.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA
+- [create-Create new project](039-create-create-new-project.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA
+- [create-Create new agent](040-create-create-new-agent.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/agents
+- [create-Add Filter](041-create-add-filter.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/contacts
+- [settings-team](042-settings-team.html) — https://app.juicebox.ai/account?tab=team
+- [settings-billing](043-settings-billing.html) — https://app.juicebox.ai/account?tab=billing
+- [search-page-empty](044-search-page-empty.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/search
+- [analytics-usage](045-analytics-usage.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/usage
+- [analytics-agents](046-analytics-agents.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/agents
+- [analytics-tab-Analytics](047-analytics-tab-analytics.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/usage
+- [analytics-tab-Usage](048-analytics-tab-usage.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/usage
+- [analytics-tab-Projects](049-analytics-tab-projects.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/projects
+- [analytics-tab-Outreach](050-analytics-tab-outreach.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/outreach?dateRange=last_1y&dateFrom=2025-04-14T00:00:00.000Z&dateTo=2026-04-14T23:59:59.999Z
+- [analytics-tab-Agents](051-analytics-tab-agents.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/analytics/agents
+- [user-menu-open](052-user-menu-open.html) — https://app.juicebox.ai/project/azOIT7xZWnbDRh7RHxuA/search

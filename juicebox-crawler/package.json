@@ -1,0 +1,13 @@
+{
+  "name": "juicebox-crawler",
+  "version": "1.0.0",
+  "description": "Crawl Juicebox UI and save live DOM for cloning",
+  "main": "crawl.js",
+  "scripts": {
+    "crawl": "node crawl.js",
+    "crawl-missing": "node crawl-missing.js"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}
