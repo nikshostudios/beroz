@@ -103,7 +103,11 @@
     }
     .collapse-btn:hover { background: rgba(0,0,0,0.04); }
 
+    /* Top-level persistent nav item (outside nav-section) */
+    .nav-item-top { margin: 4px 8px; }
+
     /* Project selector */
+    .projects-wrapper { position: relative; }
     .project-selector {
       margin: 8px 12px;
       padding: 8px 12px;
@@ -119,7 +123,64 @@
     }
     .project-selector:hover { background: #ebebeb; }
     .project-selector .material-icons-outlined { font-size: 18px; color: var(--text-secondary); }
-    .project-selector span { flex: 1; }
+    .project-selector > span:not(.material-icons-outlined) { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Projects dropdown */
+    .projects-dropdown {
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 12px;
+      right: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 100;
+      padding: 8px;
+    }
+    .projects-dropdown-search {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 6px;
+    }
+    .projects-dropdown-search:focus { border-color: var(--brand-blue); }
+    .projects-list {
+      list-style: none;
+      max-height: 220px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+    }
+    .projects-list li {
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .projects-list li:hover { background: rgba(0,0,0,0.04); }
+    .projects-list li .material-icons-outlined { font-size: 16px; color: var(--text-secondary); }
+    .projects-list li.empty { color: var(--text-muted); cursor: default; font-style: italic; }
+    .projects-list li.empty:hover { background: transparent; }
+    .projects-dropdown-footer {
+      display: block;
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--brand-blue);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .projects-dropdown-footer:hover { background: rgba(60,92,207,0.06); border-radius: var(--radius-sm); }
 
     /* Nav */
     .nav-section {
@@ -295,6 +356,42 @@
       font-weight: 600;
       font-size: 13px;
       cursor: pointer;
+    }
+
+    /* Avatar dropdown */
+    .avatar-wrapper { position: relative; }
+    .avatar-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 220px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 100;
+      padding: 4px;
+    }
+    .avatar-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text-primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .avatar-dropdown-item:hover { background: rgba(0,0,0,0.04); }
+    .avatar-dropdown-item .material-icons-outlined {
+      font-size: 18px;
+      color: var(--text-secondary);
+    }
+    .avatar-dropdown-item-signout {
+      border-top: 1px solid var(--border-color);
+      margin-top: 4px;
+      padding-top: 10px;
     }
 
     .getting-started-badge {
@@ -486,85 +583,6 @@
       border-radius: 3px;
       transition: width 0.3s;
     }
-
-    /* ── Agent Home ── */
-    .agent-chat-area {
-      max-width: 720px;
-      margin: 0 auto;
-    }
-
-    .agent-greeting {
-      text-align: center;
-      padding: 60px 0 40px;
-    }
-
-    .agent-greeting h2 {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .agent-greeting p {
-      color: var(--text-secondary);
-      font-size: 14px;
-    }
-
-    .chat-input-area {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 16px;
-      display: flex;
-      align-items: flex-end;
-      gap: 12px;
-    }
-
-    .chat-input {
-      flex: 1;
-      border: none;
-      outline: none;
-      font-size: 14px;
-      font-family: inherit;
-      resize: none;
-      line-height: 1.5;
-      min-height: 24px;
-      background: transparent;
-    }
-
-    .chat-send-btn {
-      background: var(--brand-purple);
-      color: white;
-      border: none;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .chat-send-btn:hover { background: #3c0366; }
-
-    .quick-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 16px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .quick-action-chip {
-      background: white;
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
-      padding: 8px 16px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.15s;
-      color: var(--text-secondary);
-    }
-    .quick-action-chip:hover { border-color: var(--brand-blue); color: var(--brand-blue); }
 
     /* ── Analytics ── */
     .tabs {
@@ -808,6 +826,82 @@
     /* Transitions */
     .page { animation: fadeIn 0.2s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Project context strip (Search/Shortlist) */
+    .project-context-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      background: rgba(60,92,207,0.06);
+      border: 1px solid rgba(60,92,207,0.15);
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .project-context-strip .material-icons-outlined { font-size: 16px; color: var(--brand-blue); }
+    .project-context-strip strong { color: var(--text-primary); font-weight: 600; }
+
+    /* Clickable project rows */
+    #projects-tbody tr { cursor: pointer; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop[hidden] { display: none; }
+    .modal {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      width: 480px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .modal-header h3 { font-size: 16px; font-weight: 600; }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .radio-group { display: flex; gap: 16px; }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 400 !important;
+      color: var(--text-primary) !important;
+      margin-bottom: 0 !important;
+    }
+    .modal select[multiple] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      min-height: 72px;
+    }
+    .modal select[multiple]:focus { border-color: var(--brand-blue); }
   </style>
 </head>
 <body>
@@ -822,19 +916,24 @@
         </button>
       </div>
 
-      <div class="project-selector" aria-label="Select project">
-        <span class="material-icons-outlined">folder_open</span>
-        <span>Recruitment Agent</span>
-        <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
+      <a class="nav-item nav-item-top active" data-page="all-projects" href="#">
+        <span class="material-icons-outlined">apps</span> All Projects
+      </a>
+
+      <div class="projects-wrapper">
+        <div class="project-selector" id="projects-selector" aria-label="Select project">
+          <span class="material-icons-outlined">folder_open</span>
+          <span id="projects-selector-label">Projects</span>
+          <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
+        </div>
+        <div class="projects-dropdown" id="projects-dropdown" hidden>
+          <input type="text" class="projects-dropdown-search" id="projects-dropdown-search" placeholder="Search projects…">
+          <ul class="projects-list" id="projects-list"></ul>
+          <a class="projects-dropdown-footer" data-page="all-projects" href="#">View all projects →</a>
+        </div>
       </div>
 
       <nav class="nav-section">
-        <a class="nav-item active" data-page="agent-home" href="#">
-          <span class="material-icons-outlined">chat_bubble_outline</span> Agent Home
-        </a>
-        <a class="nav-item" data-page="all-projects" href="#">
-          <span class="material-icons-outlined">apps</span> All Projects
-        </a>
         <a class="nav-item" data-page="all-agents" href="#">
           <span class="material-icons-outlined">people_outline</span> All Agents
         </a>
@@ -890,7 +989,7 @@
     <div class="main">
       <!-- Header -->
       <header class="header">
-        <div class="header-title" id="page-title">Agent Home</div>
+        <div class="header-title" id="page-title">All Projects</div>
         <div class="header-actions">
           <div class="getting-started-badge">
             <span class="material-icons-outlined" style="font-size:14px">flag</span>
@@ -899,37 +998,34 @@
           <button class="icon-btn" aria-label="Notifications">
             <span class="material-icons-outlined">notifications_none</span>
           </button>
-          <div class="avatar" aria-label="User menu">S</div>
+          <div class="avatar-wrapper">
+            <div class="avatar" id="avatar-btn" aria-label="User menu">S</div>
+            <div class="avatar-dropdown" id="avatar-dropdown" hidden>
+              <a class="avatar-dropdown-item" href="#" data-avatar-action="invite">
+                <span class="material-icons-outlined">person_add</span> Invite members
+              </a>
+              <a class="avatar-dropdown-item" href="#" data-avatar-action="help">
+                <span class="material-icons-outlined">help_outline</span> Help center
+              </a>
+              <a class="avatar-dropdown-item" href="#" data-avatar-action="kb">
+                <span class="material-icons-outlined">menu_book</span> Knowledge base
+              </a>
+              <a class="avatar-dropdown-item" href="#" data-avatar-action="support">
+                <span class="material-icons-outlined">support_agent</span> Contact support
+              </a>
+              <a class="avatar-dropdown-item avatar-dropdown-item-signout" href="#" data-avatar-action="signout">
+                <span class="material-icons-outlined">logout</span> Sign out
+              </a>
+            </div>
+          </div>
         </div>
       </header>
 
       <!-- Content -->
       <div class="content">
 
-        <!-- ── AGENT HOME ── -->
-        <div class="page active" id="page-agent-home">
-          <div class="agent-chat-area">
-            <div class="agent-greeting">
-              <h2>Hi there! I'm your Recruitment Agent</h2>
-              <p>I can help you find candidates, manage outreach, and build your pipeline. What would you like to do?</p>
-            </div>
-            <div class="chat-input-area">
-              <textarea class="chat-input" placeholder="Ask your agent anything..." rows="1"></textarea>
-              <button class="chat-send-btn">
-                <span class="material-icons-outlined" style="font-size:20px">arrow_upward</span>
-              </button>
-            </div>
-            <div class="quick-actions">
-              <div class="quick-action-chip">Find software engineers in SF</div>
-              <div class="quick-action-chip">Draft outreach sequence</div>
-              <div class="quick-action-chip">Show recent candidates</div>
-              <div class="quick-action-chip">Analyze pipeline metrics</div>
-            </div>
-          </div>
-        </div>
-
         <!-- ── ALL PROJECTS ── -->
-        <div class="page" id="page-all-projects">
+        <div class="page active" id="page-all-projects">
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-label">Total Projects</div>
@@ -953,8 +1049,8 @@
             <div class="table-header">
               <div class="table-header-title">All Projects</div>
               <div class="table-header-actions">
-                <button class="btn-primary">
-                  <span class="material-icons-outlined">add</span> New Project
+                <button class="btn-primary" id="create-project-btn">
+                  <span class="material-icons-outlined">add</span> Create new project
                 </button>
               </div>
             </div>
@@ -970,47 +1066,7 @@
                   <th style="width:40px"></th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><input type="checkbox" class="checkbox"></td>
-                  <td style="font-weight:500">Recruitment Agent</td>
-                  <td><span class="tag tag-active"><span class="status-dot green"></span>Active</span></td>
-                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:72%"></div></div></td>
-                  <td>Mar 15, 2026</td>
-                  <td>
-                    <div style="display:flex;gap:-4px">
-                      <div class="avatar" style="width:24px;height:24px;font-size:10px">S</div>
-                    </div>
-                  </td>
-                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
-                </tr>
-                <tr>
-                  <td><input type="checkbox" class="checkbox"></td>
-                  <td style="font-weight:500">Sales Prospector</td>
-                  <td><span class="tag tag-active"><span class="status-dot green"></span>Active</span></td>
-                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:45%"></div></div></td>
-                  <td>Feb 28, 2026</td>
-                  <td>
-                    <div style="display:flex">
-                      <div class="avatar" style="width:24px;height:24px;font-size:10px">N</div>
-                    </div>
-                  </td>
-                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
-                </tr>
-                <tr>
-                  <td><input type="checkbox" class="checkbox"></td>
-                  <td style="font-weight:500">Market Research</td>
-                  <td><span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span></td>
-                  <td><div class="progress-bar"><div class="progress-bar-fill" style="width:10%"></div></div></td>
-                  <td>Apr 2, 2026</td>
-                  <td>
-                    <div style="display:flex">
-                      <div class="avatar" style="width:24px;height:24px;font-size:10px">S</div>
-                    </div>
-                  </td>
-                  <td><button class="icon-btn"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>
-                </tr>
-              </tbody>
+              <tbody id="projects-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1067,6 +1123,10 @@
 
         <!-- ── SHORTLIST ── -->
         <div class="page" id="page-shortlist">
+          <div class="project-context-strip" id="shortlist-context">
+            <span class="material-icons-outlined">folder_open</span>
+            In: <strong id="shortlist-context-label">All projects</strong>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <h3 style="font-size:16px;font-weight:600">Shortlisted Candidates (6)</h3>
             <button class="btn-secondary">
@@ -1412,6 +1472,10 @@
 
         <!-- ── SEARCH ── -->
         <div class="page" id="page-search">
+          <div class="project-context-strip" id="search-context">
+            <span class="material-icons-outlined">folder_open</span>
+            In: <strong id="search-context-label">All projects</strong>
+          </div>
           <div class="search-input-wrapper">
             <span class="material-icons-outlined">search</span>
             <input type="text" class="search-page-input" placeholder="Search contacts, projects, agents...">
@@ -1461,7 +1525,54 @@
     </div><!-- /main -->
   </div><!-- /app -->
 
+  <!-- Create Project Modal -->
+  <div class="modal-backdrop" id="create-project-modal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Create new project</h3>
+        <button class="icon-btn" id="create-project-close" aria-label="Close">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-field">
+          <label>Project Title <span style="color:var(--brand-red)">*</span></label>
+          <input type="text" id="cp-title" placeholder="e.g. HCL — Senior Engineers">
+        </div>
+        <div class="settings-field">
+          <label>Access Level</label>
+          <div class="radio-group">
+            <label class="radio-option"><input type="radio" name="cp-access" value="shared" checked> Shared</label>
+            <label class="radio-option"><input type="radio" name="cp-access" value="private"> Private</label>
+          </div>
+        </div>
+        <div class="settings-field">
+          <label>Collaborators (optional)</label>
+          <select id="cp-collaborators" multiple>
+            <option value="S">Shoham Shree</option>
+            <option value="N">NikSho user</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="create-project-cancel">Cancel</button>
+        <button class="btn-primary" id="create-project-submit">Create Project →</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // ── In-session state (resets on reload) ──
+    const state = {
+      projects: [
+        { id: 1, title: 'Recruitment Agent', status: 'active', progress: 72, createdOn: 'Mar 15, 2026', collaborators: ['S'] },
+        { id: 2, title: 'Sales Prospector',  status: 'active', progress: 45, createdOn: 'Feb 28, 2026', collaborators: ['N'] },
+        { id: 3, title: 'Market Research',   status: 'draft',  progress: 10, createdOn: 'Apr 2, 2026',  collaborators: ['S'] }
+      ],
+      activeProject: null,   // null = "All Projects" view; otherwise a project id
+      nextId: 4
+    };
+
     // ── Navigation ──
     const navItems = document.querySelectorAll('.nav-item[data-page], .nav-sub-item[data-page]');
     const pages = document.querySelectorAll('.page');
@@ -1471,7 +1582,6 @@
     const expandArrow = analyticsToggle.querySelector('.expand-arrow');
 
     const pageTitles = {
-      'agent-home': 'Agent Home',
       'all-projects': 'All Projects',
       'all-agents': 'All Agents',
       'shortlist': 'Shortlist',
@@ -1490,7 +1600,6 @@
       const target = document.getElementById('page-' + pageId);
       if (target) {
         target.classList.add('active');
-        // Re-trigger animation
         target.style.animation = 'none';
         target.offsetHeight;
         target.style.animation = '';
@@ -1500,6 +1609,7 @@
       if (navLink) navLink.classList.add('active');
 
       pageTitle.textContent = pageTitles[pageId] || pageId;
+      renderProjectContext();
     }
 
     navItems.forEach(item => {
@@ -1508,11 +1618,9 @@
         const page = item.dataset.page;
         switchPage(page);
 
-        // Handle analytics tab switching
         if (item.dataset.tab) {
           document.querySelectorAll('.nav-sub-item').forEach(s => s.classList.remove('active'));
           item.classList.add('active');
-          // Switch analytics tab
           const tabs = document.querySelectorAll('[data-analytics-tab]');
           tabs.forEach(t => t.classList.toggle('active', t.dataset.analyticsTab === item.dataset.tab));
         }
@@ -1531,21 +1639,204 @@
       tab.addEventListener('click', () => {
         document.querySelectorAll('[data-analytics-tab]').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        // Also update sidebar sub-items
         document.querySelectorAll('.nav-sub-item').forEach(s => {
           s.classList.toggle('active', s.dataset.tab === tab.dataset.analyticsTab);
         });
       });
     });
 
-    // Auto-resize chat textarea
-    const chatInput = document.querySelector('.chat-input');
-    if (chatInput) {
-      chatInput.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    // ── Renderers ──
+    function renderProjectsTable() {
+      const tbody = document.getElementById('projects-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = state.projects.map(p => {
+        const statusTag = p.status === 'active'
+          ? '<span class="tag tag-active"><span class="status-dot green"></span>Active</span>'
+          : '<span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span>';
+        const collabs = p.collaborators.map(c =>
+          '<div class="avatar" style="width:24px;height:24px;font-size:10px">' + c + '</div>'
+        ).join('');
+        return (
+          '<tr data-project-id="' + p.id + '">' +
+            '<td><input type="checkbox" class="checkbox" onclick="event.stopPropagation()"></td>' +
+            '<td style="font-weight:500">' + escapeHtml(p.title) + '</td>' +
+            '<td>' + statusTag + '</td>' +
+            '<td><div class="progress-bar"><div class="progress-bar-fill" style="width:' + p.progress + '%"></div></div></td>' +
+            '<td>' + p.createdOn + '</td>' +
+            '<td><div style="display:flex;gap:4px">' + collabs + '</div></td>' +
+            '<td><button class="icon-btn" onclick="event.stopPropagation()"><span class="material-icons-outlined" style="font-size:18px">more_horiz</span></button></td>' +
+          '</tr>'
+        );
+      }).join('');
+      // Row click → enter project
+      tbody.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const id = parseInt(tr.dataset.projectId, 10);
+          enterProject(id);
+        });
       });
     }
+
+    function renderProjectsDropdownList(filter) {
+      const list = document.getElementById('projects-list');
+      if (!list) return;
+      const f = (filter || '').toLowerCase().trim();
+      const matches = state.projects.filter(p => !f || p.title.toLowerCase().includes(f));
+      if (matches.length === 0) {
+        list.innerHTML = '<li class="empty">No projects match</li>';
+        return;
+      }
+      list.innerHTML = matches.map(p =>
+        '<li data-project-id="' + p.id + '">' +
+          '<span class="material-icons-outlined">folder_open</span>' +
+          escapeHtml(p.title) +
+        '</li>'
+      ).join('');
+      list.querySelectorAll('li[data-project-id]').forEach(li => {
+        li.addEventListener('click', () => {
+          const id = parseInt(li.dataset.projectId, 10);
+          enterProject(id);
+          closeAllDropdowns();
+        });
+      });
+    }
+
+    function renderProjectContext() {
+      const label = state.activeProject
+        ? (state.projects.find(p => p.id === state.activeProject) || {}).title || 'All projects'
+        : 'All projects';
+      const selectorLabel = document.getElementById('projects-selector-label');
+      if (selectorLabel) selectorLabel.textContent = state.activeProject ? label : 'Projects';
+      const searchLabel = document.getElementById('search-context-label');
+      if (searchLabel) searchLabel.textContent = label;
+      const shortlistLabel = document.getElementById('shortlist-context-label');
+      if (shortlistLabel) shortlistLabel.textContent = label;
+    }
+
+    function enterProject(id) {
+      state.activeProject = id;
+      switchPage('search');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    // ── Dropdowns (shared outside-click closer) ──
+    function closeAllDropdowns() {
+      document.getElementById('avatar-dropdown').hidden = true;
+      document.getElementById('projects-dropdown').hidden = true;
+    }
+
+    document.addEventListener('click', (e) => {
+      // Any click anywhere that didn't originate inside a dropdown or its toggle closes both
+      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#avatar-btn')
+          && !e.target.closest('#projects-dropdown') && !e.target.closest('#projects-selector')) {
+        closeAllDropdowns();
+      }
+    });
+
+    // Avatar dropdown toggle
+    document.getElementById('avatar-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = document.getElementById('avatar-dropdown');
+      const willOpen = d.hidden;
+      closeAllDropdowns();
+      d.hidden = !willOpen;
+    });
+
+    // Avatar dropdown item actions (stubs)
+    document.querySelectorAll('.avatar-dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const action = item.dataset.avatarAction;
+        if (action === 'signout') console.log('Sign out clicked (stub)');
+        else console.log('Avatar action:', action);
+        closeAllDropdowns();
+      });
+    });
+
+    // Projects selector toggle
+    document.getElementById('projects-selector').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = document.getElementById('projects-dropdown');
+      const willOpen = d.hidden;
+      closeAllDropdowns();
+      d.hidden = !willOpen;
+      if (!d.hidden) {
+        document.getElementById('projects-dropdown-search').focus();
+      }
+    });
+
+    // Projects dropdown search
+    document.getElementById('projects-dropdown-search').addEventListener('input', (e) => {
+      renderProjectsDropdownList(e.target.value);
+    });
+
+    // Projects dropdown footer "View all projects →"
+    document.querySelector('.projects-dropdown-footer').addEventListener('click', (e) => {
+      e.preventDefault();
+      state.activeProject = null;
+      switchPage('all-projects');
+      closeAllDropdowns();
+    });
+
+    // ── Create Project modal ──
+    const cpModal = document.getElementById('create-project-modal');
+    const cpTitle = document.getElementById('cp-title');
+    const cpCollaborators = document.getElementById('cp-collaborators');
+
+    function openCreateProjectModal() {
+      closeAllDropdowns();
+      cpTitle.value = '';
+      Array.from(cpCollaborators.options).forEach(o => o.selected = false);
+      document.querySelector('input[name="cp-access"][value="shared"]').checked = true;
+      cpModal.hidden = false;
+      setTimeout(() => cpTitle.focus(), 0);
+    }
+    function closeCreateProjectModal() { cpModal.hidden = true; }
+
+    document.getElementById('create-project-btn').addEventListener('click', openCreateProjectModal);
+    document.getElementById('create-project-close').addEventListener('click', closeCreateProjectModal);
+    document.getElementById('create-project-cancel').addEventListener('click', closeCreateProjectModal);
+    cpModal.addEventListener('click', (e) => {
+      if (e.target === cpModal) closeCreateProjectModal();
+    });
+
+    document.getElementById('create-project-submit').addEventListener('click', () => {
+      const title = cpTitle.value.trim();
+      if (!title) {
+        cpTitle.focus();
+        cpTitle.style.borderColor = 'var(--brand-red)';
+        setTimeout(() => { cpTitle.style.borderColor = ''; }, 1500);
+        return;
+      }
+      const collabs = Array.from(cpCollaborators.selectedOptions).map(o => o.value);
+      const today = new Date();
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const createdOn = months[today.getMonth()] + ' ' + today.getDate() + ', ' + today.getFullYear();
+      const newProject = {
+        id: state.nextId++,
+        title,
+        status: 'draft',
+        progress: 0,
+        createdOn,
+        collaborators: collabs.length ? collabs : ['S']
+      };
+      state.projects.push(newProject);
+      renderProjectsTable();
+      renderProjectsDropdownList();
+      closeCreateProjectModal();
+      enterProject(newProject.id);
+    });
+
+    // ── Initial render ──
+    renderProjectsTable();
+    renderProjectsDropdownList();
+    renderProjectContext();
+
   </script>
 </body>
 </html>
