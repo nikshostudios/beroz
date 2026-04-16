@@ -85,6 +85,18 @@
       display: flex; align-items: center;
     }
     .collapse-btn:hover { background: rgba(0,0,0,0.04); }
+    .collapse-btn .material-icons-outlined { transition: transform 0.2s; }
+
+    /* Collapsed sidebar */
+    .sidebar.collapsed { width: 60px; }
+    .sidebar.collapsed .org-name,
+    .sidebar.collapsed .project-selector,
+    .sidebar.collapsed .nav-item span:not(.material-icons-outlined),
+    .sidebar.collapsed .badge,
+    .sidebar.collapsed .nav-sub-items,
+    .sidebar.collapsed .sidebar-footer .nav-item span:not(.material-icons-outlined) { display: none; }
+    .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
+    .sidebar.collapsed .collapse-btn .material-icons-outlined { transform: rotate(180deg); }
 
     /* Project selector */
     .project-selector {
@@ -2045,6 +2057,11 @@
     function getInitials(name) {
       return (name || '??').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     }
+
+    // ── Sidebar collapse ──
+    document.querySelector('.collapse-btn').addEventListener('click', () => {
+      document.querySelector('.sidebar').classList.toggle('collapsed');
+    });
 
     // ── Boot ──
     init();
