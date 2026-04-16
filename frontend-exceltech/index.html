@@ -1116,11 +1116,10 @@
         delete defaults.headers['Content-Type'];
       }
       const resp = await fetch(url, { ...defaults, ...opts });
-      if (resp.status === 401) {
-        window.location.href = '/';
-        return null;
-      }
-      return resp.json();
+      if (resp.status === 401) { window.location.href = '/'; return null; }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      return data;
     }
 
     // ── Init ──

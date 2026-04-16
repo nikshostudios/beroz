@@ -10,7 +10,9 @@ backend/resumes/
 backend/source_tmp/
 backend/screen_profile_tmp/
 backend/outputs/
-backend/ai-agents/logs/
-backend/ai-agents/submissions/
+backend/ai_agents/logs/
+backend/ai_agents/submissions/
 backend/last_screening_results.json
 nimbalyst-local/
+tests/test-results/
+tests/playwright-report/

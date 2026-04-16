@@ -31,7 +31,6 @@ import fitz  # PyMuPDF for PDF JD extraction
 from docx import Document
 from anthropic import Anthropic
 import gspread
-import requests as http_requests
 from google.oauth2.service_account import Credentials
 
 DASHBOARD_DIST = Path(__file__).parent / "dashboard" / "dist"
@@ -88,7 +87,40 @@ RECRUITER_LOGINS = {
     "recruit": {"password": "recruit59", "name": "Recruit Email", "email": "recruit@exceltechcomputers.com", "role": "recruiter"},
 }
 
-AI_AGENT_URL = os.environ.get("AI_AGENT_URL", "http://localhost:8001")
+# ── AI agent core (formerly a separate FastAPI service on localhost:8001).
+# Now merged into this Flask process — see backend/ai_agents/core.py.
+from ai_agents import core as ai_core
+ai_core.init()
+
+
+def _ai_core_call(fn, *args, **kwargs):
+    """Invoke an ai_core handler and translate CoreError → (body, status)."""
+    try:
+        return jsonify(fn(*args, **kwargs)), 200
+    except ai_core.CoreError as e:
+        return jsonify({"error": e.message}), e.status
+    except Exception as e:
+        app.logger.exception("ai_core handler %s crashed", getattr(fn, "__name__", "?"))
+        return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+
+
+# ── Startup healthcheck ────────────────────────────────────────
+# Verify external dependencies are reachable at boot. Log loudly if not —
+# this is the line that would have caught the original FastAPI-never-deployed
+# bug on day one. Keep this pattern for any future external service.
+try:
+    ai_core.db.get_client().table("requirements").select("id").limit(1).execute()
+    app.logger.info("[startup] Supabase reachable")
+except Exception as _e:
+    app.logger.error("[startup] Supabase unreachable: %s — DB-backed routes will fail", _e)
+
+# Template for future external-service healthchecks (e.g. Foundit, Apollo):
+#
+# try:
+#     http_requests.get(f"{SOME_SERVICE_URL}/health", timeout=2).raise_for_status()
+#     app.logger.info("[startup] %s reachable", SOME_SERVICE_URL)
+# except Exception as _e:
+#     app.logger.error("[startup] %s unreachable: %s", SOME_SERVICE_URL, _e)
 
 
 def _password_env_key(email: str) -> str:
@@ -334,115 +366,56 @@ def api_session():
 
 @app.route("/api/candidates", methods=["GET"])
 def api_candidates():
-    """Fetch candidates from Supabase via the AI agent layer."""
+    """Fetch candidates + pipeline summary via ai_core."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
-    market = request.args.get("market", "")
-    skill = request.args.get("skill", "")
+    market = request.args.get("market") or None
     try:
-        params = {}
-        if market:
-            params["market"] = market
-        if skill:
-            params["skill"] = skill
-        resp = http_requests.get(
-            f"{AI_AGENT_URL}/requirements",
-            params=params,
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=15,
-        )
-        # Try to get candidates from pipeline data
-        pipeline_resp = http_requests.get(
-            f"{AI_AGENT_URL}/pipeline",
-            params={"market": market} if market else {},
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=15,
-        )
-        pipeline_data = pipeline_resp.json() if pipeline_resp.status_code == 200 else {}
-        return jsonify({
-            "candidates": pipeline_data.get("candidates", []),
-            "pipeline": pipeline_data.get("pipeline", []),
-        })
-    except Exception as e:
-        return jsonify({"candidates": [], "error": str(e)}), 502
+        pipeline_data = ai_core.pipeline_summary(market)
+    except ai_core.CoreError as e:
+        return jsonify({"candidates": [], "error": e.message}), e.status
+    return jsonify({
+        "candidates": pipeline_data.get("candidates", []),
+        "pipeline": pipeline_data.get("pipeline", []),
+    })
 
 
 @app.route("/api/search", methods=["POST"])
 def api_search():
-    """Natural language search via AI agent."""
+    """Natural language search parsing via ai_core."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/search/parse",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=30,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.parse_search, request.get_json(silent=True))
 
 
 @app.route("/api/outreach/emails", methods=["POST"])
 def api_outreach_emails():
-    """Fetch and classify inbox emails."""
+    """Fetch and classify inbox emails via ai_core."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/inbox/process",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=60,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.process_inbox, request.get_json(silent=True))
 
 
 @app.route("/api/outreach/suggest", methods=["POST"])
 def api_outreach_suggest():
-    """Get AI-drafted reply suggestion."""
+    """Get AI-drafted reply suggestion via ai_core."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/candidates/prepare-outreach",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=30,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.prepare_outreach,
+                         request.get_json(silent=True), role, email)
 
 
 @app.route("/api/outreach/send", methods=["POST"])
 def api_outreach_send():
-    """Send outreach email via Graph API."""
+    """Send outreach email via ai_core → Graph API."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/candidates/send-outreach",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=30,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.send_outreach,
+                         request.get_json(silent=True), role, email)
 
 
 @app.route("/home")
@@ -3122,8 +3095,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 </html>"""
 
 
-# --- AI Agent Proxy Routes ---
-# These proxy calls from the Flask frontend to the FastAPI AI agent at AI_AGENT_URL
+# --- AI Agent Routes (formerly FastAPI, now served directly by Flask) ---
 
 @app.route("/api/requirements", methods=["GET"])
 def api_requirements():
@@ -3136,21 +3108,7 @@ def api_requirements():
     if not created_after and status == "open":
         from datetime import datetime, timedelta
         created_after = (datetime.utcnow() - timedelta(days=30)).isoformat()
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
-    try:
-        params = {"market": market, "status": status}
-        if created_after:
-            params["created_after"] = created_after
-        resp = http_requests.get(
-            f"{AI_AGENT_URL}/requirements",
-            params=params,
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=15,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"requirements": [], "error": str(e)}), 502
+    return _ai_core_call(ai_core.list_requirements, market, status, created_after)
 
 
 @app.route("/api/requirements/create", methods=["POST"])
@@ -3159,16 +3117,8 @@ def api_create_requirement():
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/requirements/create",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=30,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.create_requirement,
+                         request.get_json(silent=True), role, email)
 
 
 @app.route("/api/requirements/<req_id>/source", methods=["POST"])
@@ -3177,49 +3127,30 @@ def api_source_requirement(req_id):
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/requirements/{req_id}/source",
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=120,
-        )
-        try:
-            data = resp.json()
-        except Exception:
-            return jsonify({"error": f"Agent returned {resp.status_code}: {resp.text[:500]}"}), 502
-        return jsonify(data), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.source_requirement, req_id, role, email)
 
 
 @app.route("/api/requirements/<req_id>/linkedin")
 def api_linkedin_string(req_id):
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    # Generate LinkedIn string locally using sourcing helper
     try:
-        from ai_agents_config_sourcing import generate_linkedin_search_string
-        return jsonify({"linkedin_search_string": "Use Source Now to generate"})
-    except Exception:
-        return jsonify({"linkedin_search_string": "Source the requirement first to get a LinkedIn search string."})
+        requirement = ai_core.db.get_requirement_by_id(req_id)
+        if not requirement:
+            return jsonify({"error": "Requirement not found"}), 404
+        linkedin = ai_core.sourcing.generate_linkedin_search_string(requirement)
+        return jsonify({"linkedin_search_string": linkedin})
+    except Exception as e:
+        app.logger.exception("linkedin string generation failed")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/pipeline")
 def api_pipeline():
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.get(
-            f"{AI_AGENT_URL}/pipeline",
-            params={"market": request.args.get("market")},
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=15,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"pipeline": [], "error": str(e)}), 502
+    market = request.args.get("market")
+    return _ai_core_call(ai_core.pipeline_summary, market)
 
 
 @app.route("/api/tl/queue")
@@ -3228,17 +3159,8 @@ def api_tl_queue():
         return jsonify({"error": "Not authenticated"}), 401
     if session.get("recruiter_role") != "tl":
         return jsonify({"error": "TL only"}), 403
-    role = session.get("recruiter_role", "tl")
-    email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.get(
-            f"{AI_AGENT_URL}/tl/queue",
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=15,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"queue": [], "error": str(e)}), 502
+    return _ai_core_call(ai_core.tl_queue, "tl",
+                         session.get("recruiter_email", ""))
 
 
 @app.route("/api/tl/approve-and-send", methods=["POST"])
@@ -3247,18 +3169,9 @@ def api_tl_approve():
         return jsonify({"error": "Not authenticated"}), 401
     if session.get("recruiter_role") != "tl":
         return jsonify({"error": "TL only"}), 403
-    role = session.get("recruiter_role", "tl")
-    email = session.get("recruiter_email", "")
-    try:
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/tl/approve-and-send",
-            json=request.get_json(),
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=30,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    return _ai_core_call(ai_core.tl_approve_and_send,
+                         request.get_json(silent=True), "tl",
+                         session.get("recruiter_email", ""))
 
 
 @app.route("/api/tl/reject", methods=["POST"])
@@ -3267,51 +3180,30 @@ def api_tl_reject():
         return jsonify({"error": "Not authenticated"}), 401
     if session.get("recruiter_role") != "tl":
         return jsonify({"error": "TL only"}), 403
-    data = request.get_json()
-    sub_id = data.get("submission_id")
-    feedback = data.get("feedback", "")
-    try:
-        # Update submission status and add feedback
-        resp = http_requests.post(
-            f"{AI_AGENT_URL}/tl/reject",
-            json={"submission_id": sub_id, "feedback": feedback},
-            headers={"X-User-Role": "tl", "X-User-Email": session.get("recruiter_email", "")},
-            timeout=15,
-        )
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify({"error": f"Failed to reject submission: {str(e)}"}), 502
+    return _ai_core_call(ai_core.tl_reject, request.get_json(silent=True), "tl")
 
 
 @app.route("/api/notifications")
 def api_notifications():
     if not is_logged_in():
         return jsonify({"notifications": []})
-    # Simple notification polling — combines recent pipeline events
-    role = session.get("recruiter_role", "recruiter")
-    email = session.get("recruiter_email", "")
     try:
-        resp = http_requests.get(
-            f"{AI_AGENT_URL}/pipeline",
-            headers={"X-User-Role": role, "X-User-Email": email},
-            timeout=10,
-        )
-        data = resp.json()
-        notifs = []
-        for p in (data.get("pipeline") or [])[:5]:
-            if p.get("replied", 0) > 0:
-                notifs.append({
-                    "message": f"{p.get('role_title', 'Role')}: {p['replied']} candidate(s) replied",
-                    "read": False, "time": None,
-                })
-            if p.get("shortlisted", 0) > 0:
-                notifs.append({
-                    "message": f"{p.get('role_title', 'Role')}: {p['shortlisted']} shortlisted out of {p.get('screened', 0)} screened",
-                    "read": True, "time": None,
-                })
-        return jsonify({"notifications": notifs})
+        data = ai_core.pipeline_summary(None)
     except Exception:
         return jsonify({"notifications": []})
+    notifs = []
+    for p in (data.get("pipeline") or [])[:5]:
+        if p.get("replied", 0) > 0:
+            notifs.append({
+                "message": f"{p.get('role_title', 'Role')}: {p['replied']} candidate(s) replied",
+                "read": False, "time": None,
+            })
+        if p.get("shortlisted", 0) > 0:
+            notifs.append({
+                "message": f"{p.get('role_title', 'Role')}: {p['shortlisted']} shortlisted out of {p.get('screened', 0)} screened",
+                "read": True, "time": None,
+            })
+    return jsonify({"notifications": notifs})
 
 
 @app.route("/api/download-doc")
