@@ -725,12 +725,14 @@ def tl_queue(user_role: str, user_email: str) -> dict:
                .execute().data)
     enriched = []
     for sub in pending:
-        details = db.get_candidate_details(sub["candidate_id"],
-                                           sub["requirement_id"])
+        cid, rid = sub.get("candidate_id"), sub.get("requirement_id")
+        if not cid or not rid:
+            continue  # skip malformed rows with null UUIDs
+        details = db.get_candidate_details(cid, rid)
         screenings = (db.get_client().table("screenings")
                       .select("score, recommendation, reasoning")
-                      .eq("candidate_id", sub["candidate_id"])
-                      .eq("requirement_id", sub["requirement_id"])
+                      .eq("candidate_id", cid)
+                      .eq("requirement_id", rid)
                       .execute().data)
         enriched.append({
             **sub,
