@@ -625,6 +625,40 @@
     .req-card-meta span { display: flex; align-items: center; gap: 4px; }
     .req-card-meta .material-icons-outlined { font-size: 14px; }
     .req-card-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .req-agent-panel {
+      margin-top: 12px;
+      padding: 14px 16px;
+      background: #f8f9ff;
+      border: 1px solid #e0e4f7;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .agent-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .agent-step.active { color: var(--text-primary); font-weight: 500; }
+    .agent-step.done { color: #16a34a; }
+    .agent-step .step-icon { font-size: 16px; width: 20px; text-align: center; }
+    .agent-step .loading-spinner { width: 14px; height: 14px; flex-shrink: 0; }
+    .agent-candidates { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    .agent-candidate-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; background: white;
+      border: 1px solid var(--border-color); border-radius: 8px;
+      font-size: 13px;
+    }
+    .agent-candidate-row .person-avatar { width: 28px; height: 28px; font-size: 11px; }
+    .agent-view-btn {
+      margin-top: 4px; font-size: 12px; color: var(--brand-blue);
+      background: none; border: none; cursor: pointer; padding: 0;
+      text-align: left; display: flex; align-items: center; gap: 4px;
+    }
 
     /* ── Pipeline Funnel ── */
     .funnel { display: flex; gap: 8px; align-items: flex-end; margin: 24px 0; }
@@ -1380,26 +1414,158 @@
 
     async function sourceRequirement(reqId) {
       const btn = event.target.closest('button');
+      const card = btn.closest('.req-card');
+      const roleTitle = card.querySelector('.req-card-title')?.textContent || 'this role';
+
+      // Build or reuse the inline panel
+      let panel = card.querySelector('.req-agent-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.className = 'req-agent-panel';
+        card.appendChild(panel);
+      }
+
+      // Step 1
+      panel.innerHTML = `
+        <div class="agent-step active" id="step1-${reqId}">
+          <div class="loading-spinner step-icon"></div>
+          <span>Searching Apollo for <strong>${esc(roleTitle)}</strong>…</span>
+        </div>`;
+
       btn.disabled = true;
-      btn.innerHTML = '<div class="loading-spinner"></div> Sourcing...';
+      btn.innerHTML = '<div class="loading-spinner"></div> Sourcing…';
+
       try {
         const data = await api(`/api/requirements/${reqId}/source`, { method: 'POST' });
-        btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">check</span> Done';
-        if (data?.candidates) {
-          alert(`Found ${data.candidates.length} candidates. Check Shortlist page.`);
-        }
+        const foundCount = data?.sourced ?? 0;
+
+        // Step 1 done, show step 2
+        panel.innerHTML = `
+          <div class="agent-step done" id="step1-${reqId}">
+            <span class="material-icons-outlined step-icon" style="font-size:16px;color:#16a34a">check_circle</span>
+            <span>Found <strong>${foundCount}</strong> candidates from Apollo</span>
+          </div>
+          <div class="agent-step active" id="step2-${reqId}">
+            <div class="loading-spinner step-icon"></div>
+            <span>Screening with AI… (this may take a minute)</span>
+          </div>`;
+
+        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">check</span> Sourced';
+
+        // Poll /api/pipeline until candidates for this req appear
+        let attempts = 0;
+        const maxAttempts = 30;
+        const poll = setInterval(async () => {
+          attempts++;
+          try {
+            const pdata = await api('/api/pipeline');
+            const req = (pdata?.pipeline || []).find(r => r.id === reqId);
+            const candidates = (req?.candidates || []).filter(c => (c.score || 0) > 0);
+
+            if (candidates.length > 0 || attempts >= maxAttempts) {
+              clearInterval(poll);
+              const step2 = panel.querySelector(`#step2-${reqId}`);
+              if (step2) {
+                step2.className = 'agent-step done';
+                step2.innerHTML = `
+                  <span class="material-icons-outlined step-icon" style="font-size:16px;color:#16a34a">check_circle</span>
+                  <span>Screened — <strong>${candidates.length}</strong> candidates shortlisted</span>`;
+              }
+
+              if (candidates.length > 0) {
+                const top5 = candidates.sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,5);
+                const rows = top5.map(c => `
+                  <div class="agent-candidate-row">
+                    <div class="person-avatar">${getInitials(c.name||'?')}</div>
+                    <div style="flex:1">
+                      <div style="font-weight:500">${esc(c.name||'Unknown')}</div>
+                      <div style="color:var(--text-secondary);font-size:12px">${esc((c.skills||[]).slice(0,2).join(', '))}</div>
+                    </div>
+                    <span class="score-badge ${(c.score||0)>=8?'score-high':(c.score||0)>=6?'score-mid':'score-low'}">${c.score||0}/10</span>
+                  </div>`).join('');
+                panel.insertAdjacentHTML('beforeend', `
+                  <div class="agent-candidates">${rows}</div>
+                  <button class="agent-view-btn" onclick="switchPage('shortlist')">
+                    <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
+                    View all ${candidates.length} in Shortlist
+                  </button>`);
+              } else {
+                panel.insertAdjacentHTML('beforeend',
+                  `<div style="font-size:12px;color:var(--text-secondary)">No candidates scored yet — check Shortlist in a moment.</div>`);
+              }
+            }
+          } catch(e) { /* silent poll failure */ }
+        }, 3000);
+
       } catch (err) {
         btn.disabled = false;
         btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">person_search</span> Source Now';
-        alert('Error sourcing: ' + err.message);
+        panel.innerHTML = `<div class="agent-step" style="color:var(--brand-red)">
+          <span class="material-icons-outlined step-icon" style="font-size:16px">error_outline</span>
+          <span>${esc(err.message)}</span></div>`;
       }
     }
 
     function viewRequirement(reqId) {
       const req = state.requirements.find(r => r.id === reqId);
       if (!req) return;
-      alert(`${req.role_title}\nClient: ${req.client_name}\nSkills: ${(req.skills_required || []).join(', ')}\nLocation: ${req.location || 'N/A'}\nExperience: ${req.experience_min || 'N/A'}+ yrs`);
+
+      // Remove any existing req-view modal
+      document.getElementById('modal-view-req')?.remove();
+
+      const skills = (req.skills_required || []).join(', ') || '—';
+      const overlay = document.createElement('div');
+      overlay.id = 'modal-view-req';
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:520px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div>
+              <h3 style="margin:0 0 4px">${esc(req.role_title || 'Untitled')}</h3>
+              <div style="font-size:13px;color:var(--text-secondary)">${esc(req.client_name || '')}</div>
+            </div>
+            <button onclick="document.getElementById('modal-view-req').remove()"
+              style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px">
+              <span class="material-icons-outlined" style="font-size:20px">close</span>
+            </button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;margin-bottom:16px">
+            <div>
+              <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Market</div>
+              <div>${esc(req.market || '—')}</div>
+            </div>
+            <div>
+              <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Location</div>
+              <div>${esc(req.location || '—')}</div>
+            </div>
+            <div>
+              <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Experience</div>
+              <div>${req.experience_min != null ? req.experience_min + '+ yrs' : '—'}</div>
+            </div>
+            <div>
+              <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Salary Budget</div>
+              <div>${esc(req.salary_budget || '—')}</div>
+            </div>
+          </div>
+          <div style="margin-bottom:16px">
+            <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Skills Required</div>
+            <div style="font-size:13px">${esc(skills)}</div>
+          </div>
+          ${req.jd_text ? `<div>
+            <div style="color:var(--text-secondary);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Job Description</div>
+            <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;max-height:160px;overflow-y:auto;background:#f8f9ff;border-radius:8px;padding:10px 12px">${esc(req.jd_text)}</div>
+          </div>` : ''}
+          <div class="modal-actions">
+            <button class="btn-secondary" onclick="document.getElementById('modal-view-req').remove()">Close</button>
+            <button class="btn-primary" onclick="document.getElementById('modal-view-req').remove();sourceRequirement('${req.id}')">
+              <span class="material-icons-outlined" style="font-size:16px">person_search</span> Source Now
+            </button>
+          </div>
+        </div>`;
+
+      // Close on backdrop click
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
     }
 
     // Create Requirement
