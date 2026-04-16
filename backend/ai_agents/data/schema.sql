@@ -226,3 +226,34 @@ alter table gebiz_submissions enable row level security;
 alter table client_contacts enable row level security;
 alter table portal_credentials enable row level security;
 alter table match_scores enable row level security;
+
+-- ============================================================
+-- Projects layer (parent of Requirements)
+-- Added for the Projects feature.
+-- ============================================================
+
+-- Projects: a client engagement that groups many Requirements
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  access_level text not null default 'shared' check (access_level in ('shared', 'private')),
+  status text not null default 'active' check (status in ('active', 'draft', 'archived')),
+  created_by text not null,             -- recruiter_email from RECRUITER_LOGINS
+  created_at timestamptz default now()
+);
+
+-- Per-project extra users (on top of owner visibility and 'shared' access)
+create table project_collaborators (
+  project_id uuid references projects(id) on delete cascade,
+  user_email text not null,
+  primary key (project_id, user_email)
+);
+
+-- Link existing Requirements to a Project (nullable keeps old rows intact)
+alter table requirements add column project_id uuid references projects(id);
+create index if not exists idx_requirements_project_id on requirements(project_id);
+create index if not exists idx_projects_created_by on projects(created_by);
+create index if not exists idx_project_collaborators_user on project_collaborators(user_email);
+
+alter table projects enable row level security;
+alter table project_collaborators enable row level security;

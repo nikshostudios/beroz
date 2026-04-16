@@ -170,20 +170,6 @@
     /* Sidebar footer */
     .sidebar-footer { padding: 8px; border-top: 1px solid var(--border-color); }
 
-    /* Quick Find */
-    .quick-find {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 12px; margin: 4px 8px; border-radius: var(--radius);
-      cursor: pointer; font-size: 13px; color: var(--text-secondary);
-      transition: background 0.15s;
-    }
-    .quick-find:hover { background: rgba(0,0,0,0.04); }
-    .quick-find .material-icons-outlined { font-size: 20px; }
-    .quick-find .shortcut {
-      margin-left: auto; font-size: 11px; background: #f0f0f0;
-      padding: 2px 6px; border-radius: 4px; color: var(--text-muted);
-    }
-
     /* ── Main Area ── */
     .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
@@ -342,64 +328,6 @@
     /* Progress bar */
     .progress-bar { width: 100px; height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
     .progress-bar-fill { height: 100%; background: var(--brand-green); border-radius: 3px; transition: width 0.3s; }
-
-    /* ── Agent Home ── */
-    .agent-chat-area { max-width: 720px; margin: 0 auto; }
-
-    .agent-greeting { text-align: center; padding: 60px 0 40px; }
-    .agent-greeting h2 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-    .agent-greeting p { color: var(--text-secondary); font-size: 14px; }
-
-    .chat-input-area {
-      background: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg); padding: 16px;
-      display: flex; align-items: flex-end; gap: 12px;
-    }
-
-    .chat-input {
-      flex: 1; border: none; outline: none; font-size: 14px;
-      font-family: inherit; resize: none; line-height: 1.5;
-      min-height: 24px; background: transparent;
-    }
-
-    .chat-send-btn {
-      background: var(--brand-purple); color: white; border: none;
-      width: 36px; height: 36px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; flex-shrink: 0;
-    }
-    .chat-send-btn:hover { background: #3c0366; }
-
-    .quick-actions {
-      display: flex; gap: 8px; margin-top: 16px;
-      flex-wrap: wrap; justify-content: center;
-    }
-
-    .quick-action-chip {
-      background: white; border: 1px solid var(--border-color);
-      border-radius: 20px; padding: 8px 16px; font-size: 13px;
-      cursor: pointer; transition: all 0.15s; color: var(--text-secondary);
-    }
-    .quick-action-chip:hover { border-color: var(--brand-blue); color: var(--brand-blue); }
-
-    /* Chat messages */
-    .chat-messages { margin-bottom: 24px; }
-    .chat-msg {
-      padding: 12px 16px; margin-bottom: 8px; border-radius: var(--radius-lg);
-      max-width: 85%; font-size: 13px; line-height: 1.6;
-    }
-    .chat-msg.user {
-      background: var(--brand-blue); color: white;
-      margin-left: auto; border-bottom-right-radius: 4px;
-    }
-    .chat-msg.assistant {
-      background: #f5f5f5; color: var(--text-primary);
-      border-bottom-left-radius: 4px;
-    }
-    .chat-msg.assistant pre {
-      background: #e8e8e8; padding: 8px; border-radius: 4px;
-      overflow-x: auto; font-size: 12px; margin: 8px 0;
-    }
 
     /* ── Analytics ── */
     .tabs {
@@ -601,6 +529,348 @@
     .notif-item:last-child { border-bottom: none; }
     .notif-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
+    /* ── Projects Layer ── */
+
+    /* Persistent "All Projects" item at the very top */
+    .nav-item-top { margin: 4px 8px !important; }
+
+    /* Projects dropdown (under the Projects selector) */
+    .projects-wrapper { position: relative; }
+    .projects-dropdown {
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 12px;
+      right: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 100;
+      padding: 8px;
+    }
+    .projects-dropdown.hidden { display: none; }
+    .projects-dropdown-search {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 6px;
+    }
+    .projects-dropdown-search:focus { border-color: var(--brand-blue); }
+    .projects-list {
+      list-style: none;
+      max-height: 220px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+    }
+    .projects-list li {
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .projects-list li:hover { background: rgba(0,0,0,0.04); }
+    .projects-list li .material-icons-outlined { font-size: 16px; color: var(--text-secondary); }
+    .projects-list li.empty { color: var(--text-muted); cursor: default; font-style: italic; padding: 8px 10px; }
+    .projects-list li.empty:hover { background: transparent; }
+    .projects-dropdown-footer {
+      display: block;
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--brand-blue);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .projects-dropdown-footer:hover { background: rgba(60,92,207,0.06); border-radius: var(--radius-sm); }
+
+    /* Sidebar-footer avatar + dropdown that opens UPWARD */
+    .avatar-wrapper { position: relative; margin: 4px 8px; }
+    .avatar-footer {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6c3dab, #3c5ccf);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .sidebar.collapsed .avatar-wrapper { display: flex; justify-content: center; margin: 4px 0; }
+    .avatar-dropdown {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      min-width: 220px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 100;
+      padding: 4px;
+    }
+    .avatar-dropdown.hidden { display: none; }
+    .avatar-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text-primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .avatar-dropdown-item:hover { background: rgba(0,0,0,0.04); }
+    .avatar-dropdown-item .material-icons-outlined {
+      font-size: 18px;
+      color: var(--text-secondary);
+    }
+    .avatar-dropdown-item-signout {
+      border-top: 1px solid var(--border-color);
+      margin-top: 4px;
+      padding-top: 10px;
+    }
+
+    /* Project context strip at top of Shortlist / Search */
+    .project-context-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      background: rgba(60,92,207,0.06);
+      border: 1px solid rgba(60,92,207,0.15);
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .project-context-strip .material-icons-outlined { font-size: 16px; color: var(--brand-blue); }
+    .project-context-strip strong { color: var(--text-primary); font-weight: 600; }
+
+    /* Clickable project rows + collaborator chips */
+    #projects-tbody tr { cursor: pointer; }
+    .collab-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6c3dab, #3c5ccf);
+      color: white;
+      font-weight: 600;
+      font-size: 10px;
+      margin-right: -6px;
+      border: 2px solid white;
+    }
+
+    /* Radio group for Access Level in modal */
+    .radio-group { display: flex; gap: 16px; }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 400 !important;
+      color: var(--text-primary) !important;
+      margin-bottom: 0 !important;
+    }
+
+    /* Project card — boxed group for the active project's scoped items */
+    .project-card {
+      margin: 8px 12px;
+      padding: 8px;
+      background: #fafafa;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      position: relative;
+    }
+    .project-card .project-selector {
+      margin: 0 0 4px;
+      background: white;
+    }
+    .project-card .project-selector:hover { background: #f5f5f5; }
+    .project-card .nav-item { margin: 0; }
+    .sidebar.collapsed .project-card {
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* ── Search Hero (competitor-inspired) ── */
+    .search-hero {
+      max-width: 820px;
+      margin: 24px auto 0;
+      padding: 24px 16px;
+      text-align: center;
+    }
+    .search-hero-greeting {
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      margin-bottom: 28px;
+      line-height: 1.25;
+    }
+    .search-mode-chips {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+    .search-mode-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .search-mode-chip:hover {
+      border-color: #d0c8e8;
+      background: #fbfaff;
+    }
+    .search-mode-chip.active {
+      border-color: #8b5cf6;
+      background: #f6f3ff;
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.10);
+    }
+    .search-mode-chip .material-icons-outlined { font-size: 18px; }
+    .search-hero-input-wrap {
+      position: relative;
+      background: var(--bg-card);
+      border: 2px solid #d8ccff;
+      border-radius: 16px;
+      padding: 18px 56px 18px 20px;
+      box-shadow: 0 0 0 6px rgba(139,92,246,0.05);
+      margin-bottom: 16px;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+    .search-hero-input-wrap:focus-within {
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 6px rgba(139,92,246,0.15);
+    }
+    .search-hero-input {
+      width: 100%;
+      border: none;
+      outline: none;
+      resize: none;
+      font-size: 15px;
+      font-family: inherit;
+      line-height: 1.5;
+      background: transparent;
+      color: var(--text-primary);
+      min-height: 48px;
+    }
+    .search-hero-input::placeholder {
+      color: #a8a6b5;
+    }
+    .search-hero-send {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+    .search-hero-send:hover {
+      background: #8b5cf6;
+      border-color: #8b5cf6;
+      color: white;
+    }
+    .search-hero-send .material-icons-outlined { font-size: 18px; }
+    .search-hero-examples {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 8px;
+      text-align: left;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .search-hero-example {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--text-primary);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .search-hero-example:hover {
+      background: #f6f3ff;
+    }
+    /* When results are showing, tighten the hero */
+    .search-hero.compact { padding-top: 8px; }
+    .search-hero.compact .search-hero-greeting { display: none; }
+    .search-hero.compact .search-mode-chips { margin-bottom: 12px; }
+    .search-hero.compact .search-hero-examples { display: none; }
+
+    /* Row action menu (⋯ popover on projects table) */
+    .row-menu-wrapper { position: relative; display: inline-block; }
+    .row-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      min-width: 140px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      z-index: 200;
+      padding: 4px;
+    }
+    .row-menu.hidden { display: none; }
+    .row-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+      text-decoration: none;
+      user-select: none;
+    }
+    .row-menu-item:hover { background: rgba(0,0,0,0.04); }
+    .row-menu-item .material-icons-outlined { font-size: 16px; color: var(--text-secondary); }
+    .row-menu-item-danger { color: var(--brand-red); }
+    .row-menu-item-danger .material-icons-outlined { color: var(--brand-red); }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -695,21 +965,34 @@
         </button>
       </div>
 
-      <div class="project-selector" aria-label="Select project">
-        <span class="material-icons-outlined">folder_open</span>
-        <span>Recruitment Agent</span>
-        <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
-      </div>
+      <a class="nav-item nav-item-top active" data-page="all-projects" href="#" style="margin:4px 8px">
+        <span class="material-icons-outlined">apps</span> All Projects
+      </a>
 
-      <nav class="nav-section">
-        <a class="nav-item active" data-page="agent-home" href="#">
-          <span class="material-icons-outlined">chat_bubble_outline</span> Agent Home
-        </a>
-        <a class="nav-item" data-page="requirements" href="#">
-          <span class="material-icons-outlined">assignment</span> Requirements
+      <div class="project-card">
+        <div class="projects-wrapper">
+          <div class="project-selector" id="projects-selector" aria-label="Select project">
+            <span class="material-icons-outlined">folder_open</span>
+            <span id="projects-selector-label">Projects</span>
+            <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
+          </div>
+          <div class="projects-dropdown hidden" id="projects-dropdown">
+            <input type="text" class="projects-dropdown-search" id="projects-dropdown-search" placeholder="Search projects…">
+            <ul class="projects-list" id="projects-list"></ul>
+            <a class="projects-dropdown-footer" data-page="all-projects" href="#">View all projects →</a>
+          </div>
+        </div>
+        <a class="nav-item" data-page="search" href="#">
+          <span class="material-icons-outlined">search</span> Searches
         </a>
         <a class="nav-item" data-page="shortlist" href="#">
           <span class="material-icons-outlined">star_outline</span> Shortlist
+        </a>
+      </div>
+
+      <nav class="nav-section">
+        <a class="nav-item" data-page="requirements" href="#">
+          <span class="material-icons-outlined">assignment</span> Requirements
         </a>
         <a class="nav-item" data-page="contacts" href="#">
           <span class="material-icons-outlined">person_outline</span> Contacts
@@ -734,27 +1017,33 @@
         <a class="nav-item" data-page="integrations" href="#">
           <span class="material-icons-outlined">extension</span> Integrations
         </a>
-
-        <div class="nav-divider"></div>
-
-        <a class="nav-item" data-page="search" href="#">
-          <span class="material-icons-outlined">search</span> Search
-        </a>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="quick-find" aria-label="Quick Find">
-          <span class="material-icons-outlined">search</span>
-          Quick Find
-          <span class="shortcut">&#8984;K</span>
-        </div>
-
         <a class="nav-item" data-page="settings" href="#">
           <span class="material-icons-outlined">settings</span> Settings
         </a>
-        <a class="nav-item" href="/logout" id="logout-link">
-          <span class="material-icons-outlined">logout</span> Logout
-        </a>
+
+        <div class="avatar-wrapper">
+          <div class="avatar-footer" id="user-avatar" aria-label="User menu">?</div>
+          <div class="avatar-dropdown hidden" id="avatar-dropdown">
+            <a class="avatar-dropdown-item" href="#" data-avatar-action="invite">
+              <span class="material-icons-outlined">person_add</span> Invite members
+            </a>
+            <a class="avatar-dropdown-item" href="#" data-avatar-action="help">
+              <span class="material-icons-outlined">help_outline</span> Help center
+            </a>
+            <a class="avatar-dropdown-item" href="#" data-avatar-action="kb">
+              <span class="material-icons-outlined">menu_book</span> Knowledge base
+            </a>
+            <a class="avatar-dropdown-item" href="#" data-avatar-action="support">
+              <span class="material-icons-outlined">support_agent</span> Contact support
+            </a>
+            <a class="avatar-dropdown-item avatar-dropdown-item-signout" href="/logout">
+              <span class="material-icons-outlined">logout</span> Sign out
+            </a>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -762,7 +1051,7 @@
     <div class="main">
       <!-- Header -->
       <header class="header">
-        <div class="header-title" id="page-title">Agent Home</div>
+        <div class="header-title" id="page-title">All Projects</div>
         <div class="header-actions">
           <div style="position:relative">
             <button class="icon-btn" aria-label="Notifications" id="notif-btn">
@@ -772,33 +1061,57 @@
               <div class="notif-empty">No new notifications</div>
             </div>
           </div>
-          <div class="avatar" id="user-avatar" aria-label="User menu">?</div>
         </div>
       </header>
 
       <!-- Content -->
       <div class="content">
 
-        <!-- AGENT HOME -->
-        <div class="page active" id="page-agent-home">
-          <div class="agent-chat-area">
-            <div class="agent-greeting" id="agent-greeting">
-              <h2>Hi there! I'm your Recruitment Agent</h2>
-              <p>I can help you find candidates, manage outreach, and build your pipeline. What would you like to do?</p>
+        <!-- ALL PROJECTS -->
+        <div class="page active" id="page-all-projects">
+          <div class="stats-grid" id="projects-stats">
+            <div class="stat-card">
+              <div class="stat-label">Total Projects</div>
+              <div class="stat-value" id="stat-total-projects">0</div>
             </div>
-            <div class="chat-messages" id="chat-messages"></div>
-            <div class="chat-input-area">
-              <textarea class="chat-input" id="chat-input" placeholder="Ask your agent anything..." rows="1"></textarea>
-              <button class="chat-send-btn" id="chat-send">
-                <span class="material-icons-outlined" style="font-size:20px">arrow_upward</span>
-              </button>
+            <div class="stat-card">
+              <div class="stat-label">Active</div>
+              <div class="stat-value" id="stat-active-projects">0</div>
             </div>
-            <div class="quick-actions" id="quick-actions">
-              <div class="quick-action-chip" data-action="source">Source candidates for open roles</div>
-              <div class="quick-action-chip" data-action="pipeline">Show pipeline status</div>
-              <div class="quick-action-chip" data-action="inbox">Check recruiter inbox</div>
-              <div class="quick-action-chip" data-action="requirements">Show open requirements</div>
+            <div class="stat-card">
+              <div class="stat-label">Yours</div>
+              <div class="stat-value" id="stat-owned-projects">0</div>
             </div>
+            <div class="stat-card">
+              <div class="stat-label">Shared</div>
+              <div class="stat-value" id="stat-shared-projects">0</div>
+            </div>
+          </div>
+          <div class="table-container">
+            <div class="table-header">
+              <div class="table-header-title">All Projects</div>
+              <div class="table-header-actions">
+                <button class="btn-primary" id="create-project-btn">
+                  <span class="material-icons-outlined">add</span> Create new project
+                </button>
+              </div>
+            </div>
+            <div id="projects-loading" class="loading-state">
+              <div class="loading-spinner"></div> Loading projects...
+            </div>
+            <table id="projects-table" style="display:none">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                  <th>Created On</th>
+                  <th>Collaborators</th>
+                  <th style="width:40px"></th>
+                </tr>
+              </thead>
+              <tbody id="projects-tbody"></tbody>
+            </table>
           </div>
         </div>
 
@@ -825,6 +1138,10 @@
 
         <!-- SHORTLIST -->
         <div class="page" id="page-shortlist">
+          <div class="project-context-strip" id="shortlist-context">
+            <span class="material-icons-outlined">folder_open</span>
+            In: <strong id="shortlist-context-label">All projects</strong>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <h3 style="font-size:16px;font-weight:600" id="shortlist-title">Shortlisted Candidates</h3>
             <button class="btn-secondary" id="btn-refresh-shortlist">
@@ -1054,20 +1371,56 @@
 
         <!-- SEARCH -->
         <div class="page" id="page-search">
-          <div class="search-input-wrapper">
-            <span class="material-icons-outlined">search</span>
-            <input type="text" class="search-page-input" id="search-input"
-                   placeholder="Search by skills, role, location... (e.g. 'ServiceNow developer in Bangalore with 5+ years')">
+          <div class="project-context-strip" id="search-context">
+            <span class="material-icons-outlined">folder_open</span>
+            In: <strong id="search-context-label">All projects</strong>
           </div>
+
+          <div class="search-hero" id="search-hero">
+            <h1 class="search-hero-greeting">
+              Hey <span id="search-greeting-name">there</span>, who are you looking for?
+            </h1>
+
+            <div class="search-mode-chips" role="tablist">
+              <button class="search-mode-chip active" data-search-mode="natural" type="button">
+                <span class="material-icons-outlined" style="color:#8b5cf6">person_search</span>
+                Find Similar
+              </button>
+              <button class="search-mode-chip" data-search-mode="jd" type="button">
+                <span class="material-icons-outlined" style="color:#ef4444">description</span>
+                Job Description
+              </button>
+              <button class="search-mode-chip" data-search-mode="boolean" type="button">
+                <span class="material-icons-outlined" style="color:#10b981">functions</span>
+                Boolean
+              </button>
+              <button class="search-mode-chip" data-search-mode="manual" type="button">
+                <span class="material-icons-outlined" style="color:#6b7280">build</span>
+                Select Manually
+              </button>
+            </div>
+
+            <div class="search-hero-input-wrap" id="search-hero-input-wrap">
+              <textarea class="search-hero-input" id="search-hero-input" rows="3"
+                placeholder="Software Engineers with 5+ yrs of experience at fintech companies in the Bay Area"></textarea>
+              <button class="search-hero-send" id="search-hero-send" aria-label="Search" type="button">
+                <span class="material-icons-outlined">arrow_forward</span>
+              </button>
+            </div>
+
+            <div class="search-hero-examples">
+              <div class="search-hero-example" data-example="Software Engineers in SF working at Series B companies, skilled in Python and Node.js">Software Engineers in SF working at Series B companies, skilled in Python and Node.js</div>
+              <div class="search-hero-example" data-example="Marketing Manager in Europe, German-speaking, working at a large enterprise">Marketing Manager in Europe, German-speaking, working at a large enterprise</div>
+              <div class="search-hero-example" data-example="Senior Scientist in Australia, 8+ years experience">Senior Scientist in Australia, 8+ years experience</div>
+              <div class="search-hero-example" data-example="Consultant in London with 2+ years experience at top consulting firms">Consultant in London with 2+ years experience at top consulting firms</div>
+              <div class="search-hero-example" data-example="Sales Manager in Dallas with experience in ERP">Sales Manager in Dallas with experience in ERP</div>
+            </div>
+          </div>
+
           <div id="search-loading" class="loading-state" style="display:none">
             <div class="loading-spinner"></div> Parsing search query with AI...
           </div>
-          <div id="search-results">
-            <div class="empty-state">
-              <span class="material-icons-outlined">search</span>
-              <p>Type a natural language query to search across your candidate database</p>
-            </div>
-          </div>
+          <div id="search-results"></div>
         </div>
 
         <!-- SETTINGS -->
@@ -1156,6 +1509,152 @@
     </div>
   </div>
 
+  <!-- Create Project Modal -->
+  <div class="modal-overlay hidden" id="modal-create-project">
+    <div class="modal">
+      <h3>Create new project</h3>
+      <form id="form-create-project" style="display:flex;flex-direction:column;gap:12px">
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Project Title <span style="color:var(--brand-red)">*</span></label>
+          <input type="text" id="cp-title" placeholder="e.g. HCL — Senior Engineers" required>
+        </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Access Level</label>
+          <div class="radio-group">
+            <label class="radio-option"><input type="radio" name="cp-access" value="shared" checked> Shared</label>
+            <label class="radio-option"><input type="radio" name="cp-access" value="private"> Private</label>
+          </div>
+        </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Collaborators (optional)</label>
+          <select id="cp-collaborators" multiple size="5" style="min-height:96px"></select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Hold ⌘/Ctrl to pick multiple</div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-create-project').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn-primary" id="btn-submit-project">
+            Create Project →
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Project Modal -->
+  <div class="modal-overlay hidden" id="modal-edit-project">
+    <div class="modal">
+      <h3>Edit project</h3>
+      <form id="form-edit-project" style="display:flex;flex-direction:column;gap:12px">
+        <input type="hidden" id="ep-id">
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Project Title <span style="color:var(--brand-red)">*</span></label>
+          <input type="text" id="ep-title" required>
+        </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Access Level</label>
+          <div class="radio-group">
+            <label class="radio-option"><input type="radio" name="ep-access" value="shared"> Shared</label>
+            <label class="radio-option"><input type="radio" name="ep-access" value="private"> Private</label>
+          </div>
+        </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Collaborators</label>
+          <select id="ep-collaborators" multiple size="5" style="min-height:96px"></select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Hold ⌘/Ctrl to pick multiple</div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-edit-project').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn-primary" id="btn-submit-edit-project">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Invite Members Modal -->
+  <div class="modal-overlay hidden" id="modal-invite">
+    <div class="modal">
+      <h3>Invite teammates</h3>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Users are currently managed by an admin. To add a new teammate, contact your TL.
+      </div>
+      <div class="settings-field" style="margin-bottom:12px">
+        <label>Email</label>
+        <input type="email" placeholder="name@exceltechcomputers.com" disabled>
+      </div>
+      <div class="card-title" style="margin-bottom:8px">Current team</div>
+      <div id="invite-team-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--radius);padding:4px"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-invite').classList.add('hidden')">Close</button>
+        <button type="button" class="btn-primary" disabled title="Admin-managed">Send invite</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Center Modal -->
+  <div class="modal-overlay hidden" id="modal-help">
+    <div class="modal">
+      <h3>Help center</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a href="#" class="integration-card" style="cursor:pointer">
+          <div class="integration-icon" style="background:#e3f2fd"><span class="material-icons-outlined" style="color:#1565c0">rocket_launch</span></div>
+          <div class="integration-info"><h4>Getting started</h4><p>Login, navigate, and land your first Project.</p></div>
+        </a>
+        <a href="#" class="integration-card" style="cursor:pointer">
+          <div class="integration-icon" style="background:#e8f5e9"><span class="material-icons-outlined" style="color:#058a5e">person_search</span></div>
+          <div class="integration-info"><h4>Sourcing workflows</h4><p>Create Requirements, trigger sourcing, review candidates.</p></div>
+        </a>
+        <a href="#" class="integration-card" style="cursor:pointer">
+          <div class="integration-icon" style="background:#fff3e0"><span class="material-icons-outlined" style="color:#e65100">mail_outline</span></div>
+          <div class="integration-info"><h4>Sequences & outreach</h4><p>Email campaigns, inbox monitoring, reply tracking.</p></div>
+        </a>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-help').classList.add('hidden')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Knowledge Base Modal -->
+  <div class="modal-overlay hidden" id="modal-kb">
+    <div class="modal">
+      <h3>Knowledge base</h3>
+      <div class="settings-field" style="margin-bottom:12px">
+        <input type="text" id="kb-search" placeholder="Search articles…">
+      </div>
+      <ul id="kb-articles" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
+        <li><a href="#" class="row-menu-item"><span class="material-icons-outlined">article</span>How candidate scoring works</a></li>
+        <li><a href="#" class="row-menu-item"><span class="material-icons-outlined">article</span>Using the AI search query parser</a></li>
+        <li><a href="#" class="row-menu-item"><span class="material-icons-outlined">article</span>Setting up Outlook for outreach</a></li>
+        <li><a href="#" class="row-menu-item"><span class="material-icons-outlined">article</span>TL submission queue explained</a></li>
+        <li><a href="#" class="row-menu-item"><span class="material-icons-outlined">article</span>GeBIZ submission tracking</a></li>
+      </ul>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-kb').classList.add('hidden')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Support Modal -->
+  <div class="modal-overlay hidden" id="modal-support">
+    <div class="modal">
+      <h3>Contact support</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">
+        We'll get back to you within one business day.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;background:#f5f5f5;border-radius:var(--radius);font-size:13px;margin-bottom:12px">
+        <span class="material-icons-outlined" style="font-size:18px;color:var(--text-secondary)">email</span>
+        <strong id="support-email">support@exceltechcomputers.com</strong>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="btn-copy-support-email">Copy email</button>
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-support').classList.add('hidden')">Close</button>
+        <a class="btn-primary" id="btn-email-support" href="mailto:support@exceltechcomputers.com?subject=ExcelTech%20Recruitment%20Agent%20support">
+          <span class="material-icons-outlined" style="font-size:16px">send</span> Email us
+        </a>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ══════════════════════════════════════════════════════
     // ExcelTech Recruitment Agent — Frontend Application
@@ -1169,6 +1668,10 @@
       pipeline: [],
       notifications: [],
       currentMarket: '',
+      // Projects layer
+      projects: [],
+      team: [],
+      activeProject: null,   // null = "All projects" view; otherwise the project id
     };
 
     // ── API Helper ──
@@ -1193,10 +1696,14 @@
       if (!data || !data.logged_in) { window.location.href = '/'; return; }
       state.user = data;
 
-      // Update UI with user info
-      document.getElementById('user-avatar').textContent = data.name[0] || '?';
-      document.getElementById('agent-greeting').querySelector('h2').textContent = `Hi ${data.name.split(' ')[0]}! I'm your Recruitment Agent`;
+      // Update UI with user info (avatar lives in sidebar-footer now)
+      const userAvatar = document.getElementById('user-avatar');
+      if (userAvatar) userAvatar.textContent = data.name[0] || '?';
       document.getElementById('settings-avatar').textContent = data.name[0] || '?';
+
+      // Search hero greeting ("Hey <firstName>, who are you looking for?")
+      const greetNameEl = document.getElementById('search-greeting-name');
+      if (greetNameEl) greetNameEl.textContent = (data.name || 'there').split(' ')[0];
       document.getElementById('settings-name').textContent = data.name;
       document.getElementById('settings-role').textContent = data.role === 'tl' ? 'Team Lead' : 'Recruiter';
       document.getElementById('settings-fullname').value = data.name;
@@ -1214,8 +1721,13 @@
       // Populate recruiter dropdowns
       populateRecruiterDropdowns();
 
-      // Load initial data
-      loadRequirements();
+      // Load projects layer + team (for Collaborators picker)
+      await Promise.all([loadTeam(), loadProjects()]);
+
+      // Default landing page
+      switchPage('all-projects');
+
+      // Other passive loads
       loadNotifications();
       startNotificationPolling();
     }
@@ -1257,7 +1769,7 @@
     const expandArrow = analyticsToggle.querySelector('.expand-arrow');
 
     const pageTitles = {
-      'agent-home': 'Agent Home',
+      'all-projects': 'All Projects',
       'requirements': 'Requirements Board',
       'shortlist': 'Shortlist',
       'contacts': 'Contacts',
@@ -1286,11 +1798,14 @@
       pageTitle.textContent = pageTitles[pageId] || pageId;
 
       // Load data on page switch
+      if (pageId === 'all-projects') renderProjectsTable();
       if (pageId === 'requirements') loadRequirements();
       if (pageId === 'shortlist') loadShortlist();
       if (pageId === 'contacts') loadContacts();
       if (pageId === 'analytics') loadPipeline();
       if (pageId === 'submissions') loadSubmissions();
+
+      renderProjectContext();
     }
 
     navItems.forEach(item => {
@@ -1334,13 +1849,6 @@
       });
     });
 
-    // Chat input auto-resize
-    const chatInput = document.getElementById('chat-input');
-    chatInput.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-    });
-
     // ══════════════════════════════════
     // ── Requirements ──
     // ══════════════════════════════════
@@ -1352,6 +1860,7 @@
       listEl.innerHTML = '';
 
       try {
+        // Requirements is global (TL-owned pool); do NOT scope by project_id.
         const params = state.currentMarket ? `?market=${state.currentMarket}` : '';
         const data = await api(`/api/requirements${params}`);
         loadingEl.style.display = 'none';
@@ -1615,7 +2124,8 @@
       grid.innerHTML = '';
 
       try {
-        const data = await api('/api/pipeline');
+        const pp = state.activeProject ? `?project_id=${state.activeProject}` : '';
+        const data = await api(`/api/pipeline${pp}`);
         loading.style.display = 'none';
 
         const pipeline = data?.pipeline || [];
@@ -1908,13 +2418,57 @@
     // ── Search ──
     // ══════════════════════════════════
 
-    document.getElementById('search-input').addEventListener('keydown', async (e) => {
-      if (e.key !== 'Enter') return;
-      const query = e.target.value.trim();
-      if (!query) return;
+    // ── Search Hero wiring ──
 
+    const searchModePlaceholders = {
+      natural: 'Software Engineers with 5+ yrs of experience at fintech companies in the Bay Area',
+      jd:      'Paste a full job description — we\'ll parse skills, seniority, and location for you',
+      boolean: '(Python OR Node.js) AND (Series B OR "Series C") AND "San Francisco" -intern',
+      manual:  'Pick filters manually: role, skills, location, experience, salary…',
+    };
+
+    document.querySelectorAll('.search-mode-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.search-mode-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const mode = chip.dataset.searchMode;
+        const ta = document.getElementById('search-hero-input');
+        if (ta && searchModePlaceholders[mode]) ta.placeholder = searchModePlaceholders[mode];
+        ta?.focus();
+      });
+    });
+
+    document.querySelectorAll('.search-hero-example').forEach(ex => {
+      ex.addEventListener('click', () => {
+        const ta = document.getElementById('search-hero-input');
+        if (!ta) return;
+        ta.value = ex.dataset.example || ex.textContent;
+        ta.focus();
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
+
+    // Enter without Shift submits; Shift+Enter inserts newline
+    document.getElementById('search-hero-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        runHeroSearch();
+      }
+    });
+
+    document.getElementById('search-hero-send').addEventListener('click', runHeroSearch);
+
+    async function runHeroSearch() {
+      const ta = document.getElementById('search-hero-input');
+      const query = (ta?.value || '').trim();
+      if (!query) {
+        ta?.focus();
+        return;
+      }
+      const hero = document.getElementById('search-hero');
       const loading = document.getElementById('search-loading');
       const results = document.getElementById('search-results');
+      hero.classList.add('compact');
       loading.style.display = '';
       results.innerHTML = '';
 
@@ -1960,7 +2514,7 @@
         loading.style.display = 'none';
         results.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
       }
-    });
+    }
 
     // ══════════════════════════════════
     // ── Inbox Monitor ──
@@ -2158,77 +2712,6 @@
     }
 
     // ══════════════════════════════════
-    // ── Agent Chat ──
-    // ══════════════════════════════════
-
-    document.getElementById('chat-send').addEventListener('click', sendChatMessage);
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-    });
-
-    document.querySelectorAll('.quick-action-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const action = chip.dataset.action;
-        if (action === 'requirements') switchPage('requirements');
-        else if (action === 'pipeline') switchPage('analytics');
-        else if (action === 'inbox') switchPage('sequences');
-        else if (action === 'source') switchPage('requirements');
-      });
-    });
-
-    async function sendChatMessage() {
-      const input = document.getElementById('chat-input');
-      const msg = input.value.trim();
-      if (!msg) return;
-
-      const msgs = document.getElementById('chat-messages');
-      const greeting = document.getElementById('agent-greeting');
-      const quickActions = document.getElementById('quick-actions');
-
-      // Hide greeting on first message
-      greeting.style.display = 'none';
-      quickActions.style.display = 'none';
-
-      // Add user message
-      msgs.innerHTML += `<div class="chat-msg user">${esc(msg)}</div>`;
-      input.value = '';
-      input.style.height = 'auto';
-
-      // Show thinking
-      msgs.innerHTML += `<div class="chat-msg assistant" id="thinking"><div class="loading-spinner"></div> Thinking...</div>`;
-      msgs.scrollTop = msgs.scrollHeight;
-
-      try {
-        // Use search/parse for natural language queries
-        const data = await api('/api/search', { method: 'POST', body: { query: msg } });
-        const thinkingEl = document.getElementById('thinking');
-
-        if (data?.parsed) {
-          const p = data.parsed;
-          let reply = `I parsed your query:\n`;
-          if (p.skills_required?.length) reply += `• Skills: ${p.skills_required.join(', ')}\n`;
-          if (p.min_experience) reply += `• Min Experience: ${p.min_experience} years\n`;
-          if (p.location) reply += `• Location: ${p.location}\n`;
-          if (p.market) reply += `• Market: ${p.market}\n`;
-          reply += '\nI can source candidates matching these criteria. Go to the Requirements page to create a requirement and start sourcing.';
-          thinkingEl.innerHTML = reply.replace(/\n/g, '<br>');
-          thinkingEl.id = '';
-        } else {
-          thinkingEl.innerHTML = 'I can help you with:\n• Finding candidates (use Search)\n• Managing requirements (use Requirements page)\n• Checking inbox (use Outreach & Inbox)\n• Viewing pipeline (use Analytics)\n\nNavigate using the sidebar or ask me to search for specific skills/roles.'.replace(/\n/g, '<br>');
-          thinkingEl.id = '';
-        }
-      } catch (err) {
-        const thinkingEl = document.getElementById('thinking');
-        if (thinkingEl) {
-          thinkingEl.innerHTML = `Sorry, I encountered an error: ${esc(err.message)}. Please try again or use the sidebar to navigate directly.`;
-          thinkingEl.id = '';
-        }
-      }
-
-      msgs.scrollTop = msgs.scrollHeight;
-    }
-
-    // ══════════════════════════════════
     // ── Helpers ──
     // ══════════════════════════════════
 
@@ -2247,6 +2730,462 @@
     document.querySelector('.collapse-btn').addEventListener('click', () => {
       document.querySelector('.sidebar').classList.toggle('collapsed');
     });
+
+    // ══════════════════════════════════
+    // ── Projects Layer ──
+    // ══════════════════════════════════
+
+    async function loadTeam() {
+      try {
+        const data = await api('/api/team');
+        state.team = data?.team || [];
+        // Populate the Collaborators multi-select (exclude the current user)
+        const sel = document.getElementById('cp-collaborators');
+        if (sel) {
+          sel.innerHTML = '';
+          state.team
+            .filter(m => m.email !== state.user?.email)
+            .forEach(m => {
+              const opt = document.createElement('option');
+              opt.value = m.email;
+              opt.textContent = `${m.name} (${m.role === 'tl' ? 'TL' : 'Recruiter'})`;
+              sel.appendChild(opt);
+            });
+        }
+      } catch (err) {
+        console.error('loadTeam failed:', err);
+      }
+    }
+
+    async function loadProjects() {
+      try {
+        const data = await api('/api/projects');
+        state.projects = data?.projects || [];
+      } catch (err) {
+        console.error('loadProjects failed:', err);
+        state.projects = [];
+      }
+      renderProjectsTable();
+      renderProjectsDropdownList('');
+      renderProjectsStats();
+    }
+
+    function renderProjectsStats() {
+      const all = state.projects;
+      const active = all.filter(p => p.status === 'active').length;
+      const owned = all.filter(p => p.created_by === state.user?.email).length;
+      const shared = all.filter(p => p.access_level === 'shared').length;
+      const el = id => document.getElementById(id);
+      if (el('stat-total-projects')) el('stat-total-projects').textContent = all.length;
+      if (el('stat-active-projects')) el('stat-active-projects').textContent = active;
+      if (el('stat-owned-projects')) el('stat-owned-projects').textContent = owned;
+      if (el('stat-shared-projects')) el('stat-shared-projects').textContent = shared;
+    }
+
+    function renderProjectsTable() {
+      const tbody = document.getElementById('projects-tbody');
+      const loading = document.getElementById('projects-loading');
+      const table = document.getElementById('projects-table');
+      if (!tbody) return;
+
+      loading.style.display = 'none';
+      table.style.display = '';
+      tbody.innerHTML = '';
+
+      if (state.projects.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6">
+          <div class="empty-state" style="padding:48px 20px">
+            <span class="material-icons-outlined">apps</span>
+            <p>No projects yet. Click <strong>Create new project</strong> to get started.</p>
+          </div></td></tr>`;
+        return;
+      }
+
+      state.projects.forEach(p => {
+        const statusTag = p.status === 'active'
+          ? '<span class="tag tag-active"><span class="status-dot green"></span>Active</span>'
+          : p.status === 'archived'
+          ? '<span class="tag tag-draft"><span class="status-dot gray"></span>Archived</span>'
+          : '<span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span>';
+
+        const collabEmails = [p.created_by, ...(p.collaborators || [])];
+        const uniqueCollabs = [...new Set(collabEmails)].slice(0, 4);
+        const collabs = uniqueCollabs.map(e => {
+          const initial = (e || '?')[0].toUpperCase();
+          return `<span class="collab-chip" title="${esc(e)}">${initial}</span>`;
+        }).join('');
+
+        const dt = p.created_at ? new Date(p.created_at) : new Date();
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const createdOn = `${months[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
+
+        const isOwner = p.created_by === state.user?.email;
+        const menuCell = isOwner ? `
+          <div class="row-menu-wrapper" onclick="event.stopPropagation()">
+            <button class="icon-btn row-menu-toggle" data-project-id="${esc(p.id)}">
+              <span class="material-icons-outlined" style="font-size:18px">more_horiz</span>
+            </button>
+            <div class="row-menu hidden" data-menu-for="${esc(p.id)}">
+              <a class="row-menu-item" data-row-action="edit"    data-project-id="${esc(p.id)}"><span class="material-icons-outlined">edit</span>Edit</a>
+              <a class="row-menu-item" data-row-action="archive" data-project-id="${esc(p.id)}"><span class="material-icons-outlined">archive</span>Archive</a>
+              <a class="row-menu-item row-menu-item-danger" data-row-action="delete"  data-project-id="${esc(p.id)}"><span class="material-icons-outlined">delete</span>Delete</a>
+            </div>
+          </div>` : '';
+
+        const tr = document.createElement('tr');
+        tr.dataset.projectId = p.id;
+        tr.innerHTML = `
+          <td style="font-weight:500">${esc(p.title)}</td>
+          <td>${statusTag}</td>
+          <td><div class="progress-bar"><div class="progress-bar-fill" style="width:${p.progress || 0}%"></div></div></td>
+          <td>${createdOn}</td>
+          <td><div style="display:flex">${collabs}</div></td>
+          <td>${menuCell}</td>
+        `;
+        tr.addEventListener('click', () => enterProject(p.id));
+        tbody.appendChild(tr);
+      });
+
+      // Wire up the ⋯ toggles AFTER rows are in the DOM
+      tbody.querySelectorAll('.row-menu-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.projectId;
+          const menu = tbody.querySelector(`.row-menu[data-menu-for="${id}"]`);
+          const willOpen = menu.classList.contains('hidden');
+          closeAllDropdowns();
+          closeAllRowMenus();
+          if (willOpen) menu.classList.remove('hidden');
+        });
+      });
+      tbody.querySelectorAll('.row-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const action = item.dataset.rowAction;
+          const id = item.dataset.projectId;
+          closeAllRowMenus();
+          if (action === 'edit') openEditProjectModal(id);
+          else if (action === 'archive') handleArchiveProject(id);
+          else if (action === 'delete') handleDeleteProject(id);
+        });
+      });
+    }
+
+    function closeAllRowMenus() {
+      document.querySelectorAll('.row-menu').forEach(m => m.classList.add('hidden'));
+    }
+
+    function renderProjectsDropdownList(filter) {
+      const list = document.getElementById('projects-list');
+      if (!list) return;
+      const f = (filter || '').toLowerCase().trim();
+      const matches = state.projects.filter(p => !f || (p.title || '').toLowerCase().includes(f));
+      if (matches.length === 0) {
+        list.innerHTML = '<li class="empty">No projects match</li>';
+        return;
+      }
+      list.innerHTML = matches.map(p =>
+        `<li data-project-id="${esc(p.id)}">
+          <span class="material-icons-outlined">folder_open</span>${esc(p.title)}
+        </li>`
+      ).join('');
+      list.querySelectorAll('li[data-project-id]').forEach(li => {
+        li.addEventListener('click', () => {
+          enterProject(li.dataset.projectId);
+          closeAllDropdowns();
+        });
+      });
+    }
+
+    function renderProjectContext() {
+      const active = state.activeProject
+        ? state.projects.find(p => p.id === state.activeProject)
+        : null;
+      const label = active ? active.title : 'All projects';
+      const selLabel = document.getElementById('projects-selector-label');
+      if (selLabel) selLabel.textContent = active ? label : 'Projects';
+      const slc = document.getElementById('shortlist-context-label');
+      if (slc) slc.textContent = label;
+      const src = document.getElementById('search-context-label');
+      if (src) src.textContent = label;
+    }
+
+    function enterProject(id) {
+      state.activeProject = id;
+      switchPage('search');
+    }
+
+    // ── Dropdown toggles (shared outside-click closer) ──
+
+    function closeAllDropdowns() {
+      const ad = document.getElementById('avatar-dropdown');
+      const pd = document.getElementById('projects-dropdown');
+      if (ad) ad.classList.add('hidden');
+      if (pd) pd.classList.add('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#user-avatar')
+          && !e.target.closest('#projects-dropdown') && !e.target.closest('#projects-selector')) {
+        closeAllDropdowns();
+      }
+      if (!e.target.closest('.row-menu') && !e.target.closest('.row-menu-toggle')) {
+        closeAllRowMenus();
+      }
+    });
+
+    document.getElementById('user-avatar').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = document.getElementById('avatar-dropdown');
+      const willOpen = d.classList.contains('hidden');
+      closeAllDropdowns();
+      if (willOpen) d.classList.remove('hidden');
+    });
+
+    document.querySelectorAll('.avatar-dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const action = item.dataset.avatarAction;
+        closeAllDropdowns();
+        if (action === 'invite')      { e.preventDefault(); openInviteModal(); }
+        else if (action === 'help')   { e.preventDefault(); document.getElementById('modal-help').classList.remove('hidden'); }
+        else if (action === 'kb')     { e.preventDefault(); document.getElementById('modal-kb').classList.remove('hidden'); }
+        else if (action === 'support'){ e.preventDefault(); document.getElementById('modal-support').classList.remove('hidden'); }
+        // signout has no data-avatar-action-click handler — href="/logout" takes over.
+      });
+    });
+
+    function openInviteModal() {
+      const list = document.getElementById('invite-team-list');
+      if (list) {
+        if (!state.team.length) {
+          list.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:12px">Team list unavailable.</div>';
+        } else {
+          list.innerHTML = state.team.map(m => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border-color)">
+              <div class="collab-chip" style="position:relative;margin:0;width:28px;height:28px;font-size:11px">${esc((m.name || '?')[0].toUpperCase())}</div>
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:500">${esc(m.name)}</div>
+                <div style="font-size:11px;color:var(--text-secondary)">${esc(m.email)}</div>
+              </div>
+              <span class="tag ${m.role === 'tl' ? 'tag-open' : 'tag-draft'}">${m.role === 'tl' ? 'TL' : 'Recruiter'}</span>
+            </div>`).join('');
+        }
+      }
+      document.getElementById('modal-invite').classList.remove('hidden');
+    }
+
+    // Close placeholder modals on backdrop click
+    ['modal-invite', 'modal-help', 'modal-kb', 'modal-support', 'modal-edit-project'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', (e) => { if (e.target === el) el.classList.add('hidden'); });
+    });
+
+    // Contact support: copy-to-clipboard button
+    document.getElementById('btn-copy-support-email')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-copy-support-email');
+      try {
+        await navigator.clipboard.writeText(document.getElementById('support-email').textContent.trim());
+        const prev = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = prev; }, 1200);
+      } catch { alert('Copy failed — please select manually.'); }
+    });
+
+    // KB search (filter placeholder list)
+    document.getElementById('kb-search')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('#kb-articles li').forEach(li => {
+        li.style.display = (!q || li.textContent.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    });
+
+    document.getElementById('projects-selector').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = document.getElementById('projects-dropdown');
+      const willOpen = d.classList.contains('hidden');
+      closeAllDropdowns();
+      if (willOpen) {
+        d.classList.remove('hidden');
+        document.getElementById('projects-dropdown-search').focus();
+      }
+    });
+
+    document.getElementById('projects-dropdown-search').addEventListener('input', (e) => {
+      renderProjectsDropdownList(e.target.value);
+    });
+
+    document.querySelector('.projects-dropdown-footer').addEventListener('click', (e) => {
+      e.preventDefault();
+      state.activeProject = null;
+      switchPage('all-projects');
+      closeAllDropdowns();
+    });
+
+    // ── Create Project Modal ──
+
+    const cpModal = document.getElementById('modal-create-project');
+    const cpTitle = document.getElementById('cp-title');
+
+    document.getElementById('create-project-btn').addEventListener('click', () => {
+      closeAllDropdowns();
+      cpTitle.value = '';
+      document.querySelector('input[name="cp-access"][value="shared"]').checked = true;
+      const sel = document.getElementById('cp-collaborators');
+      if (sel) Array.from(sel.options).forEach(o => o.selected = false);
+      cpModal.classList.remove('hidden');
+      setTimeout(() => cpTitle.focus(), 0);
+    });
+
+    cpModal.addEventListener('click', (e) => {
+      if (e.target === cpModal) cpModal.classList.add('hidden');
+    });
+
+    document.getElementById('form-create-project').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-project');
+      const title = cpTitle.value.trim();
+      if (!title) {
+        cpTitle.focus();
+        cpTitle.style.borderColor = 'var(--brand-red)';
+        setTimeout(() => { cpTitle.style.borderColor = ''; }, 1500);
+        return;
+      }
+      const access = document.querySelector('input[name="cp-access"]:checked').value;
+      const collabs = Array.from(document.getElementById('cp-collaborators').selectedOptions)
+                          .map(o => o.value);
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner"></div> Creating...';
+      try {
+        const resp = await api('/api/projects/create', {
+          method: 'POST',
+          body: { title, access_level: access, collaborators: collabs }
+        });
+        const proj = resp?.project;
+        if (proj) {
+          state.projects.unshift(proj);
+          renderProjectsTable();
+          renderProjectsDropdownList('');
+          renderProjectsStats();
+          cpModal.classList.add('hidden');
+          enterProject(proj.id);
+        }
+      } catch (err) {
+        alert('Error creating project: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Create Project →';
+      }
+    });
+
+    // ── Edit / Archive / Delete Project ──
+
+    const epModal = document.getElementById('modal-edit-project');
+    const epId = document.getElementById('ep-id');
+    const epTitle = document.getElementById('ep-title');
+
+    function openEditProjectModal(projectId) {
+      const p = state.projects.find(x => x.id === projectId);
+      if (!p) return;
+      epId.value = p.id;
+      epTitle.value = p.title || '';
+      document.querySelector(`input[name="ep-access"][value="${p.access_level || 'shared'}"]`).checked = true;
+
+      // Populate collaborators dropdown with team list, pre-selecting current collaborators
+      const sel = document.getElementById('ep-collaborators');
+      sel.innerHTML = '';
+      const current = new Set(p.collaborators || []);
+      state.team
+        .filter(m => m.email !== state.user?.email)
+        .forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.email;
+          opt.textContent = `${m.name} (${m.role === 'tl' ? 'TL' : 'Recruiter'})`;
+          if (current.has(m.email)) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+      epModal.classList.remove('hidden');
+      setTimeout(() => epTitle.focus(), 0);
+    }
+
+    document.getElementById('form-edit-project').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-edit-project');
+      const id = epId.value;
+      const title = epTitle.value.trim();
+      if (!title) {
+        epTitle.focus();
+        epTitle.style.borderColor = 'var(--brand-red)';
+        setTimeout(() => { epTitle.style.borderColor = ''; }, 1500);
+        return;
+      }
+      const access = document.querySelector('input[name="ep-access"]:checked').value;
+      const collabs = Array.from(document.getElementById('ep-collaborators').selectedOptions).map(o => o.value);
+
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner"></div> Saving...';
+      try {
+        const resp = await api(`/api/projects/${id}`, {
+          method: 'PATCH',
+          body: { title, access_level: access, collaborators: collabs }
+        });
+        const updated = resp?.project;
+        if (updated) {
+          const idx = state.projects.findIndex(x => x.id === id);
+          if (idx !== -1) state.projects[idx] = updated;
+          renderProjectsTable();
+          renderProjectsDropdownList('');
+          renderProjectsStats();
+          renderProjectContext();
+        }
+        epModal.classList.add('hidden');
+      } catch (err) {
+        alert('Error saving project: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save changes';
+      }
+    });
+
+    async function handleArchiveProject(projectId) {
+      const p = state.projects.find(x => x.id === projectId);
+      if (!p) return;
+      if (!confirm(`Archive "${p.title}"? It will be hidden from the active list but not deleted.`)) return;
+      try {
+        const resp = await api(`/api/projects/${projectId}/archive`, { method: 'POST' });
+        const updated = resp?.project;
+        if (updated) {
+          const idx = state.projects.findIndex(x => x.id === projectId);
+          if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
+          renderProjectsTable();
+          renderProjectsDropdownList('');
+          renderProjectsStats();
+        }
+      } catch (err) {
+        alert('Error archiving project: ' + err.message);
+      }
+    }
+
+    async function handleDeleteProject(projectId) {
+      const p = state.projects.find(x => x.id === projectId);
+      if (!p) return;
+      if (!confirm(`Permanently delete "${p.title}"? This cannot be undone. Any requirements tied to this project will be orphaned (they stay in your Requirements list).`)) return;
+      try {
+        await api(`/api/projects/${projectId}`, { method: 'DELETE' });
+        state.projects = state.projects.filter(x => x.id !== projectId);
+        // If the active project was the one deleted, clear context
+        if (state.activeProject === projectId) {
+          state.activeProject = null;
+          renderProjectContext();
+        }
+        renderProjectsTable();
+        renderProjectsDropdownList('');
+        renderProjectsStats();
+      } catch (err) {
+        alert('Error deleting project: ' + err.message);
+      }
+    }
 
     // ── Boot ──
     init();

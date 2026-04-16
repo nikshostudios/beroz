@@ -172,16 +172,19 @@ def insert_requirement(data: dict) -> dict:
     return get_client().table("requirements").insert(data).execute().data[0]
 
 
-def get_open_requirements(market: str | None = None, created_after: str | None = None):
+def get_open_requirements(market: str | None = None, created_after: str | None = None,
+                          project_id: str | None = None):
     q = get_client().table("requirements").select(
         "id, market, client_name, role_title, skillset, skills_required, "
         "experience_min, salary_budget, location, contract_type, status, "
-        "assigned_recruiters, created_at"
+        "assigned_recruiters, created_at, project_id"
     ).eq("status", "open")
     if market:
         q = q.eq("market", market)
     if created_after:
         q = q.gte("created_at", created_after)
+    if project_id:
+        q = q.eq("project_id", project_id)
     return q.order("created_at", desc=True).execute().data
 
 
@@ -281,13 +284,22 @@ def tl_approve_submission(submission_id: str) -> dict:
             .eq("id", submission_id).execute().data[0])
 
 
-def get_pipeline_summary(market: str | None = None):
+def get_pipeline_summary(market: str | None = None, project_id: str | None = None):
     q = get_client().table("submissions").select(
         "id, candidate_id, requirement_id, client_name, market, "
         "final_status, placement_type, submitted_at, tl_approved"
     )
     if market:
         q = q.eq("market", market)
+    if project_id:
+        # Submissions don't carry project_id directly — filter via the requirement FK.
+        req_ids = [r["id"] for r in (get_client().table("requirements")
+                                     .select("id")
+                                     .eq("project_id", project_id)
+                                     .execute().data)]
+        if not req_ids:
+            return []
+        q = q.in_("requirement_id", req_ids)
     return q.order("submitted_at", desc=True).execute().data
 
 
@@ -307,3 +319,87 @@ def get_gebiz_by_candidate(candidate_id: str):
                     "rechecking_date, status, remarks")
             .eq("candidate_id", candidate_id)
             .execute().data)
+
+
+# ── Projects ────────────────────────────────────────────────
+
+def insert_project(data: dict) -> dict:
+    return get_client().table("projects").insert(data).execute().data[0]
+
+
+def list_projects_for_user(user_email: str) -> list[dict]:
+    """Return every project the given user can see:
+      - projects they created, OR
+      - projects with access_level='shared', OR
+      - projects where they're listed in project_collaborators.
+    De-duped by id. Ordered newest first.
+    """
+    client = get_client()
+    owned = (client.table("projects").select("*")
+             .eq("created_by", user_email).execute().data)
+    shared = (client.table("projects").select("*")
+              .eq("access_level", "shared").execute().data)
+    collab_rows = (client.table("project_collaborators").select("project_id")
+                   .eq("user_email", user_email).execute().data)
+    collab_ids = [r["project_id"] for r in collab_rows]
+    collab = (client.table("projects").select("*")
+              .in_("id", collab_ids).execute().data) if collab_ids else []
+    seen, out = set(), []
+    for p in owned + shared + collab:
+        if p["id"] not in seen:
+            seen.add(p["id"])
+            out.append(p)
+    out.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+    return out
+
+
+def get_project(project_id: str) -> dict | None:
+    rows = (get_client().table("projects").select("*")
+            .eq("id", project_id).execute().data)
+    return rows[0] if rows else None
+
+
+def insert_project_collaborators(project_id: str, emails: list[str]) -> None:
+    """Upsert a list of collaborator emails for a project.  No-op on empty list."""
+    if not emails:
+        return
+    rows = [{"project_id": project_id, "user_email": e} for e in emails]
+    (get_client().table("project_collaborators")
+     .upsert(rows, on_conflict="project_id,user_email").execute())
+
+
+def get_project_collaborators(project_id: str) -> list[str]:
+    rows = (get_client().table("project_collaborators").select("user_email")
+            .eq("project_id", project_id).execute().data)
+    return [r["user_email"] for r in rows]
+
+
+def get_all_requirements_for_project(project_id: str) -> list[dict]:
+    """All requirements (any status) for a project — used for progress calc."""
+    return (get_client().table("requirements")
+            .select("id, status")
+            .eq("project_id", project_id)
+            .execute().data)
+
+
+def update_project(project_id: str, patch: dict) -> dict:
+    """Patch any subset of {title, access_level, status}.  Returns updated row."""
+    return (get_client().table("projects").update(patch)
+            .eq("id", project_id).execute().data[0])
+
+
+def delete_project(project_id: str) -> None:
+    """Hard-delete a project.
+    - Null out requirements.project_id first (defensive — FK is nullable, but
+      this is explicit and doesn't rely on DB behaviour).
+    - project_collaborators has ON DELETE CASCADE in the schema.
+    """
+    (get_client().table("requirements").update({"project_id": None})
+     .eq("project_id", project_id).execute())
+    (get_client().table("projects").delete()
+     .eq("id", project_id).execute())
+
+
+def clear_project_collaborators(project_id: str) -> None:
+    (get_client().table("project_collaborators").delete()
+     .eq("project_id", project_id).execute())

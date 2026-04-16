@@ -3104,11 +3104,13 @@ def api_requirements():
     market = request.args.get("market")
     status = request.args.get("status", "open")
     created_after = request.args.get("created_after")
+    project_id = request.args.get("project_id") or None
     # Default: only show requirements from the last 30 days to reduce clutter
     if not created_after and status == "open":
         from datetime import datetime, timedelta
         created_after = (datetime.utcnow() - timedelta(days=30)).isoformat()
-    return _ai_core_call(ai_core.list_requirements, market, status, created_after)
+    return _ai_core_call(ai_core.list_requirements, market, status,
+                         created_after, project_id)
 
 
 @app.route("/api/requirements/create", methods=["POST"])
@@ -3150,7 +3152,63 @@ def api_pipeline():
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     market = request.args.get("market")
-    return _ai_core_call(ai_core.pipeline_summary, market)
+    project_id = request.args.get("project_id") or None
+    return _ai_core_call(ai_core.pipeline_summary, market, project_id)
+
+
+# ── Projects API ─────────────────────────────────────────────
+
+@app.route("/api/projects", methods=["GET"])
+def api_list_projects():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.list_projects, email)
+
+
+@app.route("/api/projects/create", methods=["POST"])
+def api_create_project():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_project,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/api/team", methods=["GET"])
+def api_list_team():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.list_team)
+
+
+@app.route("/api/projects/<project_id>", methods=["PATCH"])
+def api_update_project(project_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_project, project_id,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/api/projects/<project_id>/archive", methods=["POST"])
+def api_archive_project(project_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.archive_project, project_id, role, email)
+
+
+@app.route("/api/projects/<project_id>", methods=["DELETE"])
+def api_delete_project(project_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.delete_project, project_id, role, email)
 
 
 @app.route("/api/tl/queue")

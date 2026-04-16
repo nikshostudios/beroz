@@ -480,20 +480,24 @@ def parse_search(payload: dict) -> dict:
 # ── Requirements ───────────────────────────────────────────────
 
 def list_requirements(market: str | None, status: str = "open",
-                      created_after: str | None = None) -> dict:
+                      created_after: str | None = None,
+                      project_id: str | None = None) -> dict:
     if market == "all":
         market = None
     if status == "open":
-        reqs = db.get_open_requirements(market, created_after=created_after)
+        reqs = db.get_open_requirements(market, created_after=created_after,
+                                        project_id=project_id)
     else:
         q = (db.get_client().table("requirements")
              .select("id, market, client_name, role_title, skills_required, "
-                     "status, assigned_recruiters, created_at")
+                     "status, assigned_recruiters, created_at, project_id")
              .eq("status", status))
         if market:
             q = q.eq("market", market)
         if created_after:
             q = q.gte("created_at", created_after)
+        if project_id:
+            q = q.eq("project_id", project_id)
         reqs = q.execute().data
     return {"requirements": reqs, "count": len(reqs)}
 
@@ -808,8 +812,8 @@ def tl_reject(payload: Any, user_role: str) -> dict:
 
 # ── Pipeline ───────────────────────────────────────────────────
 
-def pipeline_summary(market: str | None) -> dict:
-    reqs = db.get_open_requirements(market)
+def pipeline_summary(market: str | None, project_id: str | None = None) -> dict:
+    reqs = db.get_open_requirements(market, project_id=project_id)
     if not reqs:
         return {"pipeline": []}
     reqs = reqs[:50]
@@ -891,3 +895,123 @@ def pipeline_summary(market: str | None) -> dict:
                                   if s.get("sent_to_client_at")),
         })
     return {"pipeline": pipeline}
+
+
+# ── Projects & Team ─────────────────────────────────────────
+
+def list_team() -> dict:
+    """Return all recruiters/TLs as {name, email, role} — no passwords.
+    Populates the Collaborators picker in the Create Project modal.
+    Local import of RECRUITER_LOGINS avoids a circular import at startup."""
+    from app import RECRUITER_LOGINS
+    team = [{"name": u["name"], "email": u["email"], "role": u["role"]}
+            for u in RECRUITER_LOGINS.values()]
+    return {"team": team}
+
+
+def list_projects(user_email: str) -> dict:
+    """Return all projects visible to this user, each enriched with
+    progress (% of requirements closed) and collaborator emails."""
+    projects = db.list_projects_for_user(user_email)
+    for p in projects:
+        reqs = db.get_all_requirements_for_project(p["id"])
+        total = len(reqs)
+        closed = sum(1 for r in reqs if r.get("status") == "closed")
+        p["progress"] = round((closed / total) * 100) if total else 0
+        p["requirements_count"] = total
+        p["collaborators"] = db.get_project_collaborators(p["id"])
+    return {"projects": projects, "count": len(projects)}
+
+
+def create_project(payload: Any, user_role: str, user_email: str) -> dict:
+    """Create a Project. No role gate — any logged-in user can create.
+    Body: { title (required), access_level ('shared'|'private', default 'shared'),
+            collaborators: [email,...] (optional) }."""
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    title = (payload.get("title") or "").strip()
+    if not title:
+        raise CoreError(422, "Project title is required")
+    access = payload.get("access_level") or "shared"
+    if access not in ("shared", "private"):
+        raise CoreError(422, "access_level must be 'shared' or 'private'")
+    collabs = payload.get("collaborators") or []
+    if not isinstance(collabs, list):
+        raise CoreError(422, "collaborators must be a list of emails")
+
+    proj = db.insert_project({
+        "title": title,
+        "access_level": access,
+        "status": "active",
+        "created_by": user_email,
+    })
+    clean_collabs = [e.strip() for e in collabs
+                     if isinstance(e, str) and e.strip() and e.strip() != user_email]
+    db.insert_project_collaborators(proj["id"], clean_collabs)
+    proj["collaborators"] = clean_collabs
+    proj["progress"] = 0
+    proj["requirements_count"] = 0
+    return {"project": proj}
+
+
+def update_project(project_id: str, payload: Any,
+                   user_role: str, user_email: str) -> dict:
+    """Edit a project's title / access_level / collaborators.
+    Only the creator (created_by) may edit."""
+    proj = db.get_project(project_id)
+    if not proj:
+        raise CoreError(404, "Project not found")
+    if proj.get("created_by") != user_email:
+        raise CoreError(403, "Only the project creator can edit this project")
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+
+    patch = {}
+    if "title" in payload:
+        title = (payload["title"] or "").strip()
+        if not title:
+            raise CoreError(422, "title cannot be empty")
+        patch["title"] = title
+    if "access_level" in payload:
+        if payload["access_level"] not in ("shared", "private"):
+            raise CoreError(422, "access_level must be 'shared' or 'private'")
+        patch["access_level"] = payload["access_level"]
+
+    if "collaborators" in payload:
+        if not isinstance(payload["collaborators"], list):
+            raise CoreError(422, "collaborators must be a list of emails")
+        db.clear_project_collaborators(project_id)
+        clean = [e.strip() for e in payload["collaborators"]
+                 if isinstance(e, str) and e.strip() and e.strip() != user_email]
+        db.insert_project_collaborators(project_id, clean)
+
+    updated = db.update_project(project_id, patch) if patch else proj
+    updated["collaborators"] = db.get_project_collaborators(project_id)
+    reqs = db.get_all_requirements_for_project(project_id)
+    total = len(reqs)
+    closed = sum(1 for r in reqs if r.get("status") == "closed")
+    updated["progress"] = round((closed / total) * 100) if total else 0
+    updated["requirements_count"] = total
+    return {"project": updated}
+
+
+def archive_project(project_id: str, user_role: str, user_email: str) -> dict:
+    """Mark a project archived.  Owner-only."""
+    proj = db.get_project(project_id)
+    if not proj:
+        raise CoreError(404, "Project not found")
+    if proj.get("created_by") != user_email:
+        raise CoreError(403, "Only the project creator can archive this project")
+    updated = db.update_project(project_id, {"status": "archived"})
+    return {"project": updated}
+
+
+def delete_project(project_id: str, user_role: str, user_email: str) -> dict:
+    """Hard-delete a project.  Owner-only.  Requirements are orphaned."""
+    proj = db.get_project(project_id)
+    if not proj:
+        raise CoreError(404, "Project not found")
+    if proj.get("created_by") != user_email:
+        raise CoreError(403, "Only the project creator can delete this project")
+    db.delete_project(project_id)
+    return {"deleted": project_id}
