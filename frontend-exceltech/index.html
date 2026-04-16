@@ -94,15 +94,28 @@
     .sidebar.collapsed .project-selector,
     .sidebar.collapsed .badge,
     .sidebar.collapsed .nav-sub-items { display: none; }
-    /* Hide all text nodes inside nav items without hiding icons */
-    .sidebar.collapsed .nav-item { justify-content: center; padding: 10px 0; gap: 0; }
-    .sidebar.collapsed .nav-item > span.material-icons-outlined { margin: 0; }
-    .sidebar.collapsed .nav-item > *:not(.material-icons-outlined) { display: none; }
-    .sidebar.collapsed .sidebar-footer .nav-item > *:not(.material-icons-outlined) { display: none; }
-    .sidebar.collapsed .sidebar-header { justify-content: center; padding: 12px 0; }
+    /* font-size:0 kills raw text nodes; restore size only for the icon */
+    .sidebar.collapsed .nav-item {
+      font-size: 0;
+      justify-content: center;
+      padding: 10px 0;
+      gap: 0;
+    }
+    .sidebar.collapsed .nav-item .material-icons-outlined {
+      font-size: 22px;
+      margin: 0;
+    }
+    .sidebar.collapsed .sidebar-header {
+      justify-content: center;
+      padding: 12px 8px;
+      gap: 0;
+    }
     .sidebar.collapsed .sidebar-logo { flex-shrink: 0; }
-    .sidebar.collapsed .collapse-btn { margin: 0; }
-    .sidebar.collapsed .collapse-btn .material-icons-outlined { transform: rotate(180deg); }
+    .sidebar.collapsed .collapse-btn { margin: 0; padding: 4px; }
+    .sidebar.collapsed .collapse-btn .material-icons-outlined {
+      font-size: 18px;
+      transform: rotate(180deg);
+    }
 
     /* Project selector */
     .project-selector {
