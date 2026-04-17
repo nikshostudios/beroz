@@ -670,7 +670,15 @@ def run_search(payload: dict, market: str | None) -> dict:
 
 def list_requirements(market: str | None, status: str = "open",
                       created_after: str | None = None,
-                      project_id: str | None = None) -> dict:
+                      project_id: str | None = None,
+                      assigned_to: str | None = None) -> dict:
+    """List requirements, optionally scoped to one recruiter's assignments.
+
+    assigned_to: when set, filter to requirements whose assigned_recruiters
+    array contains this email. Used for the recruiter's default 'My Requirements'
+    view. TL-only requirements (created with empty assigned_recruiters) are
+    excluded from every recruiter's view.
+    """
     if market == "all":
         market = None
     if status == "open":
@@ -688,7 +696,229 @@ def list_requirements(market: str | None, status: str = "open",
         if project_id:
             q = q.eq("project_id", project_id)
         reqs = q.execute().data
+    if assigned_to:
+        reqs = [r for r in reqs
+                if assigned_to in (r.get("assigned_recruiters") or [])]
+    # Annotate each requirement with how many candidates are above threshold
+    if reqs:
+        req_ids = [r["id"] for r in reqs]
+        try:
+            rows = (db.get_client().table("match_scores")
+                    .select("requirement_id, score")
+                    .in_("requirement_id", req_ids)
+                    .gte("score", MATCH_MIN_SCORE)
+                    .execute().data)
+            counts: dict[str, int] = {}
+            for row in rows:
+                rid = row["requirement_id"]
+                counts[rid] = counts.get(rid, 0) + 1
+            for r in reqs:
+                raw = counts.get(r["id"], 0)
+                r["matched_count"] = min(raw, DEFAULT_SOURCE_CAP_PER_REQ)
+        except Exception:
+            for r in reqs:
+                r["matched_count"] = 0
     return {"requirements": reqs, "count": len(reqs)}
+
+
+def close_requirement(req_id: str, user_role: str, user_email: str) -> dict:
+    """Mark a requirement as closed. TL only."""
+    _require_role(user_role, ["tl"])
+    existing = db.get_requirement_by_id(req_id)
+    if not existing:
+        raise CoreError(404, "Requirement not found")
+    db.get_client().table("requirements").update(
+        {"status": "closed"}).eq("id", req_id).execute()
+    return {"status": "ok", "requirement_id": req_id}
+
+
+DEFAULT_SOURCE_CAP_PER_REQ = 5
+
+
+async def _source_and_score_capped(req_id: str, cap: int) -> dict:
+    """Source candidates for one requirement, score the just-sourced batch,
+    persist match_scores, and report how many ended up above threshold."""
+    requirement = db.get_requirement_by_id(req_id)
+    if not requirement:
+        return {"requirement_id": req_id, "error": "not_found",
+                "sourced": 0, "top_count": 0}
+    try:
+        source_results = await sourcing.run_all_sources(requirement)
+    except Exception as e:
+        log.exception("run_all_sources failed for %s", req_id)
+        return {"requirement_id": req_id, "error": f"sourcing: {e}",
+                "sourced": 0, "top_count": 0}
+    just_sourced = source_results.pop("upserted_candidates", [])
+    if just_sourced:
+        new_scores: list[dict] = []
+        for i in range(0, len(just_sourced), MATCH_BATCH_SIZE):
+            batch = just_sourced[i:i + MATCH_BATCH_SIZE]
+            new_scores.extend(_score_candidate_batch(batch, requirement))
+        if new_scores:
+            try:
+                db.upsert_match_scores(req_id, new_scores)
+            except Exception:
+                log.exception("upsert_match_scores failed for %s", req_id)
+    try:
+        top = db.get_match_scores_above(req_id, min_score=MATCH_MIN_SCORE)
+    except Exception:
+        top = []
+    return {
+        "requirement_id": req_id,
+        "sourced": source_results.get("total_unique", 0),
+        "top_count": min(len(top), cap),
+    }
+
+
+def source_requirements_batch(payload: Any, user_role: str,
+                              user_email: str) -> dict:
+    """Run Source Now on multiple requirements in parallel with a per-req cap."""
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    req_ids = payload.get("requirement_ids")
+    if not isinstance(req_ids, list) or not req_ids:
+        raise CoreError(422, "requirement_ids must be a non-empty list")
+    if not all(isinstance(r, str) for r in req_ids):
+        raise CoreError(422, "requirement_ids must be strings")
+    cap = payload.get("per_req_cap", DEFAULT_SOURCE_CAP_PER_REQ)
+    try:
+        cap = max(1, int(cap))
+    except (TypeError, ValueError):
+        cap = DEFAULT_SOURCE_CAP_PER_REQ
+
+    async def _all():
+        return await asyncio.gather(
+            *[_source_and_score_capped(r, cap) for r in req_ids])
+
+    results = _run_async(_all())
+    return {"status": "ok", "per_req_cap": cap, "results": results}
+
+
+# ── Candidate detail + Shortlist + Notes (Phase 3) ─────────
+
+def get_candidate_detail(candidate_id: str, user_role: str,
+                         user_email: str) -> dict:
+    """Full candidate view for the slide-over: base row + any existing
+    candidate_details + notes + shortlist status for the logged-in user."""
+    _require_role(user_role, ["recruiter", "tl"])
+    cand = db.get_candidate_by_id(candidate_id)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+    try:
+        notes = db.list_candidate_notes(candidate_id)
+    except Exception:
+        notes = []
+    try:
+        shortlisted = db.is_shortlisted(candidate_id, user_email)
+    except Exception:
+        shortlisted = False
+    try:
+        detail_rows = (db.get_client().table("candidate_details")
+                       .select("*").eq("candidate_id", candidate_id)
+                       .execute().data)
+    except Exception:
+        detail_rows = []
+    return {
+        "candidate": cand,
+        "details": detail_rows,
+        "notes": notes,
+        "shortlisted": shortlisted,
+    }
+
+
+def toggle_shortlist_candidate(candidate_id: str, payload: Any,
+                               user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    cand = db.get_candidate_by_id(candidate_id)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+    note = None
+    if isinstance(payload, dict):
+        raw = payload.get("note")
+        if isinstance(raw, str) and raw.strip():
+            note = raw.strip()
+    result = db.toggle_shortlist(candidate_id, user_email, note=note)
+    return {"status": "ok", **result}
+
+
+def add_note_to_candidate(candidate_id: str, payload: Any,
+                          user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be JSON object")
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise CoreError(422, "content (non-empty string) required")
+    cand = db.get_candidate_by_id(candidate_id)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+    row = db.add_candidate_note(candidate_id, user_email, content.strip())
+    return {"status": "ok", "note": row}
+
+
+def list_user_shortlists(user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    rows = db.list_shortlists_for_user(user_email)
+    # Flatten the joined 'candidates' sub-object
+    out = []
+    for r in rows:
+        cand = r.get("candidates") or {}
+        out.append({
+            "shortlist_id": r["id"],
+            "shortlisted_at": r.get("created_at"),
+            "note": r.get("note"),
+            "id": cand.get("id"),
+            "name": cand.get("name"),
+            "email": cand.get("email"),
+            "phone": cand.get("phone"),
+            "skills": cand.get("skills") or [],
+            "current_job_title": cand.get("current_job_title"),
+            "current_employer": cand.get("current_employer"),
+            "current_location": cand.get("current_location"),
+            "total_experience": cand.get("total_experience"),
+            "linkedin_url": cand.get("linkedin_url"),
+            "market": cand.get("market"),
+        })
+    return {"shortlists": out, "count": len(out)}
+
+
+def get_requirement_candidates(req_id: str, user_role: str,
+                               user_email: str) -> dict:
+    """Return top matched candidates for a requirement (uses match_scores cache)."""
+    _require_role(user_role, ["recruiter", "tl"])
+    requirement = db.get_requirement_by_id(req_id)
+    if not requirement:
+        raise CoreError(404, "Requirement not found")
+    match_rows = db.get_match_scores_above(req_id, min_score=MATCH_MIN_SCORE)
+    if not match_rows:
+        return {"requirement": requirement, "candidates": [],
+                "cap": DEFAULT_SOURCE_CAP_PER_REQ}
+    cand_ids = [m["candidate_id"] for m in match_rows[:DEFAULT_SOURCE_CAP_PER_REQ]]
+    cands = (db.get_client().table("candidates").select("*")
+             .in_("id", cand_ids).execute().data)
+    cand_by_id = {c["id"]: c for c in cands}
+    results = []
+    for m in match_rows[:DEFAULT_SOURCE_CAP_PER_REQ]:
+        c = cand_by_id.get(m["candidate_id"])
+        if not c:
+            continue
+        results.append({
+            "id": c["id"],
+            "name": c.get("name"),
+            "email": c.get("email"),
+            "skills": c.get("skills") or [],
+            "current_location": c.get("current_location"),
+            "current_job_title": c.get("current_job_title"),
+            "current_employer": c.get("current_employer"),
+            "total_experience": c.get("total_experience"),
+            "highest_education": c.get("highest_education"),
+            "linkedin_url": c.get("linkedin_url"),
+            "score": m["score"],
+            "reasoning": m.get("reasoning", ""),
+        })
+    return {"requirement": requirement, "candidates": results,
+            "cap": DEFAULT_SOURCE_CAP_PER_REQ}
 
 
 def _validate_requirement_create(payload: Any) -> dict:
@@ -749,6 +979,16 @@ def _validate_requirement_create(payload: Any) -> dict:
         if val is not None:
             data[key] = val
 
+    # assigned_recruiters: list[str] of recruiter emails (default []). Empty
+    # list = TL-only (no recruiter sees it in their own list).
+    assigned = payload.get("assigned_recruiters", [])
+    if assigned is None:
+        assigned = []
+    if not isinstance(assigned, list) or not all(isinstance(s, str) for s in assigned):
+        errors.append("assigned_recruiters must be a list of strings")
+        assigned = []
+    data["assigned_recruiters"] = [s.strip() for s in assigned if s.strip()]
+
     if errors:
         raise CoreError(422, "; ".join(errors))
 
@@ -808,8 +1048,7 @@ def create_requirement(payload: Any, user_role: str, user_email: str) -> dict:
                     data["skills_required"] = skills
 
     req = db.insert_requirement(data)
-    _run_in_background(_run_source_and_screen, req["id"])
-    return {"requirement_id": req["id"], "sourcing_started": True,
+    return {"requirement_id": req["id"], "sourcing_started": False,
             "jd_parsed": jd_parsed}
 
 
@@ -870,6 +1109,177 @@ def prepare_outreach(payload: Any, user_role: str, user_email: str) -> dict:
                  "body": result}
     return {"draft_subject": draft.get("subject", ""),
             "draft_body": draft.get("body", "")}
+
+
+# ── Sequences (Phase 4) — batch AI template + preview + send ───
+
+SEQUENCE_DRAFT_SYSTEM = """\
+You are an expert IT recruiter drafting a first-touch outreach email to a \
+passive candidate about a specific role. Keep it warm, short (under 150 \
+words), and concrete. Don't over-promise. Don't use marketing fluff.
+
+Return ONLY valid JSON with this shape — no explanation, no backticks:
+{
+  "subject": "<concise subject line>",
+  "body": "<full email body, plain text; use {FIRST_NAME} placeholder \
+where the candidate's first name should go>"
+}
+"""
+
+
+def _first_name(full_name: str | None) -> str:
+    if not full_name:
+        return "there"
+    return full_name.split()[0] if full_name.split() else "there"
+
+
+def draft_sequence(payload: Any, user_role: str, user_email: str) -> dict:
+    """Generate one AI-drafted template + personalized previews for each candidate.
+
+    Input: {requirement_id, candidate_ids: [...]}
+    Output: {template: {subject, body}, emails: [{candidate_id, to_email,
+             to_name, subject, body, sendable}]}
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    req_id = payload.get("requirement_id")
+    cand_ids = payload.get("candidate_ids")
+    if not req_id or not isinstance(req_id, str):
+        raise CoreError(422, "requirement_id required")
+    if not isinstance(cand_ids, list) or not cand_ids:
+        raise CoreError(422, "candidate_ids must be a non-empty list")
+
+    requirement = db.get_requirement_by_id(req_id)
+    if not requirement:
+        raise CoreError(404, "Requirement not found")
+
+    cands = (db.get_client().table("candidates").select(
+        "id, name, email, current_job_title, current_employer, "
+        "current_location, skills").in_("id", cand_ids).execute().data)
+    if not cands:
+        raise CoreError(404, "No candidates found for those ids")
+
+    # Lookup recruiter display name for the signature
+    recruiter_name = payload.get("recruiter_name") or user_email.split("@")[0].title()
+
+    # Compose the prompt context
+    req_context = (
+        f"Role: {requirement.get('role_title', '—')}\n"
+        f"Client: {requirement.get('client_name', '—')}\n"
+        f"Location: {requirement.get('location', '—')}\n"
+        f"Market: {requirement.get('market', '—')}\n"
+        f"Skills: {', '.join(requirement.get('skills_required', []) or [])}\n"
+        f"Experience min: {requirement.get('experience_min', '—')}\n"
+        f"Salary: {requirement.get('salary_budget', '—')}\n"
+        f"Contract type: {requirement.get('contract_type', '—')}\n"
+    )
+    recruiter_sig = f"From the desk of {recruiter_name} ({user_email})."
+
+    try:
+        raw = _call_claude(
+            "claude-haiku-4-5-20251001",
+            SEQUENCE_DRAFT_SYSTEM,
+            f"REQUIREMENT:\n{req_context}\n\nRECRUITER SIGNATURE:\n{recruiter_sig}\n\n"
+            "Draft the template now. Remember: under 150 words, warm but \
+not salesy, plain text.",
+            max_tokens=1024,
+            endpoint="/sequences/draft",
+        )
+        template = _parse_llm_json(raw)
+    except Exception:
+        log.exception("sequence draft generation failed")
+        template = None
+
+    if not isinstance(template, dict) or not template.get("body"):
+        # Fallback template
+        template = {
+            "subject": f"Opportunity: {requirement.get('role_title', 'New role')} at {requirement.get('client_name', '')}",
+            "body": (
+                "Hi {FIRST_NAME},\n\n"
+                f"I'm reaching out about a {requirement.get('role_title', 'role')} "
+                f"opportunity with {requirement.get('client_name', 'our client')} "
+                f"in {requirement.get('location', '')}. "
+                "Your background looks like a strong match — would you be open to a short chat this week?\n\n"
+                "Best,\n"
+                f"{recruiter_name}"
+            ),
+        }
+
+    # Personalize per candidate by substituting the first-name placeholder
+    emails = []
+    for c in cands:
+        first = _first_name(c.get("name"))
+        body = (template.get("body") or "").replace("{FIRST_NAME}", first)
+        subj = (template.get("subject") or "").replace("{FIRST_NAME}", first)
+        emails.append({
+            "candidate_id": c["id"],
+            "to_email": c.get("email"),
+            "to_name": c.get("name"),
+            "subject": subj,
+            "body": body,
+            "sendable": bool(c.get("email")),
+        })
+    return {
+        "status": "ok",
+        "template": template,
+        "emails": emails,
+        "requirement": {
+            "id": req_id,
+            "role_title": requirement.get("role_title"),
+            "client_name": requirement.get("client_name"),
+        },
+    }
+
+
+def send_sequence(payload: Any, user_role: str, user_email: str) -> dict:
+    """Send each personalized email via Graph API as the logged-in user's mailbox.
+
+    Input: {requirement_id, emails: [{candidate_id, to_email, subject, body}, ...]}
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    req_id = payload.get("requirement_id")
+    emails = payload.get("emails")
+    if not req_id or not isinstance(emails, list) or not emails:
+        raise CoreError(422, "requirement_id and non-empty emails list required")
+
+    results = []
+    for em in emails:
+        cid = em.get("candidate_id")
+        to_email = em.get("to_email")
+        subject = em.get("subject")
+        body = em.get("body")
+        if not (cid and to_email and subject and body):
+            results.append({"candidate_id": cid, "sent": False,
+                            "error": "missing to_email/subject/body"})
+            continue
+        try:
+            sent = outlook.send_email(
+                from_email=user_email,
+                to_email=to_email,
+                subject=subject,
+                body=body,
+            )
+            log_row = db.insert_outreach_log({
+                "candidate_id": cid,
+                "requirement_id": req_id,
+                "recruiter_email": user_email,
+                "outlook_message_id": sent.get("message_id"),
+                "outlook_thread_id": sent.get("thread_id"),
+                "email_subject": subject,
+                "sent_at": sent.get("sent_at"),
+            })
+            results.append({"candidate_id": cid, "sent": True,
+                            "outreach_log_id": log_row["id"],
+                            "sent_at": sent.get("sent_at")})
+        except Exception as e:
+            log.exception("sequence send failed for candidate %s", cid)
+            results.append({"candidate_id": cid, "sent": False,
+                            "error": str(e)})
+    total_sent = sum(1 for r in results if r.get("sent"))
+    return {"status": "ok", "total_sent": total_sent, "results": results}
 
 
 def send_outreach(payload: Any, user_role: str, user_email: str) -> dict:

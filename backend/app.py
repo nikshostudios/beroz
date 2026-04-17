@@ -3114,12 +3114,19 @@ def api_requirements():
     status = request.args.get("status", "open")
     created_after = request.args.get("created_after")
     project_id = request.args.get("project_id") or None
+    # scope: 'mine' (recruiter's assigned reqs; default for recruiters) or 'all'
+    scope = request.args.get("scope")
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    if scope is None:
+        scope = "all" if role == "tl" else "mine"
+    assigned_to = email if scope == "mine" else None
     # Default: only show requirements from the last 30 days to reduce clutter
     if not created_after and status == "open":
         from datetime import datetime, timedelta
         created_after = (datetime.utcnow() - timedelta(days=30)).isoformat()
     return _ai_core_call(ai_core.list_requirements, market, status,
-                         created_after, project_id)
+                         created_after, project_id, assigned_to)
 
 
 @app.route("/api/requirements/create", methods=["POST"])
@@ -3132,6 +3139,15 @@ def api_create_requirement():
                          request.get_json(silent=True), role, email)
 
 
+@app.route("/api/requirements/<req_id>/close", methods=["POST"])
+def api_close_requirement(req_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.close_requirement, req_id, role, email)
+
+
 @app.route("/api/requirements/<req_id>/source", methods=["POST"])
 def api_source_requirement(req_id):
     if not is_logged_in():
@@ -3139,6 +3155,97 @@ def api_source_requirement(req_id):
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
     return _ai_core_call(ai_core.source_requirement, req_id, role, email)
+
+
+@app.route("/api/requirements/source-batch", methods=["POST"])
+def api_source_batch():
+    """Run Source Now on multiple requirements, capped per requirement."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.source_requirements_batch,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/api/requirements/<req_id>/candidates", methods=["GET"])
+def api_requirement_candidates(req_id):
+    """Return top matched candidates for a requirement (match_scores backed)."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_requirement_candidates,
+                         req_id, role, email)
+
+
+# ── Candidate detail / shortlist / notes (Phase 3) ──
+
+@app.route("/api/candidates/<candidate_id>/detail", methods=["GET"])
+def api_candidate_detail(candidate_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_candidate_detail,
+                         candidate_id, role, email)
+
+
+@app.route("/api/candidates/<candidate_id>/shortlist", methods=["POST"])
+def api_candidate_shortlist(candidate_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.toggle_shortlist_candidate,
+                         candidate_id, request.get_json(silent=True),
+                         role, email)
+
+
+@app.route("/api/candidates/<candidate_id>/notes", methods=["POST"])
+def api_candidate_add_note(candidate_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.add_note_to_candidate,
+                         candidate_id, request.get_json(silent=True),
+                         role, email)
+
+
+@app.route("/api/shortlists", methods=["GET"])
+def api_list_shortlists():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.list_user_shortlists, role, email)
+
+
+# ── Sequences (Phase 4) ──
+
+@app.route("/api/sequences/draft", methods=["POST"])
+def api_sequence_draft():
+    """Generate a template + personalized previews for a batch of candidates."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+    # Inject recruiter display name so the AI can sign the email
+    payload.setdefault("recruiter_name", session.get("recruiter_name", ""))
+    return _ai_core_call(ai_core.draft_sequence, payload, role, email)
+
+
+@app.route("/api/sequences/send", methods=["POST"])
+def api_sequence_send():
+    """Send each email via Graph API as the logged-in user's mailbox."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.send_sequence,
+                         request.get_json(silent=True), role, email)
 
 
 @app.route("/api/requirements/<req_id>/linkedin")

@@ -957,6 +957,444 @@
       margin-left: 6px;
     }
 
+    /* Scope toggle tabs on Requirements page */
+    .scope-tabs {
+      display: inline-flex;
+      background: #f3f0ff;
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .scope-tab {
+      background: transparent;
+      border: none;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, color 0.15s;
+    }
+    .scope-tab:hover { color: var(--text-primary); }
+    .scope-tab.active {
+      background: #fff;
+      color: #7c3aed;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    /* Requirement card: multi-select checkbox + sourced badge */
+    .req-card { position: relative; }
+    .req-card.selected {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    .req-card-check {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #7c3aed;
+    }
+    .req-card-header { padding-left: 28px; }
+    .req-card-sourced {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .req-card-sourced:hover { background: #d1fae5; }
+    .req-card-sourced .material-icons-outlined { font-size: 14px; }
+
+    /* Floating batch-source action bar */
+    .batch-action-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111;
+      color: #fff;
+      padding: 10px 12px 10px 20px;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 500;
+      font-size: 13px;
+      transition: opacity 0.15s, transform 0.2s;
+    }
+    .batch-action-bar.hidden { display: none; }
+    .batch-action-bar .batch-count { font-weight: 600; }
+    .batch-action-bar .batch-go {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .batch-action-bar .batch-go:disabled { opacity: 0.6; cursor: not-allowed; }
+    .batch-action-bar .batch-clear {
+      background: transparent;
+      color: #ccc;
+      border: none;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .batch-action-bar .batch-clear:hover { color: #fff; }
+
+    /* Sequences action bar (Phase 4) — same shape as the requirements batch bar */
+    .seq-action-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px 8px 16px;
+      background: #111;
+      color: #fff;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .seq-action-bar.hidden { display: none; }
+    .seq-action-bar .seq-go {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .seq-action-bar .seq-go:disabled { opacity: 0.6; cursor: not-allowed; }
+    .seq-action-bar .seq-clear {
+      background: transparent;
+      color: #ccc;
+      border: none;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .seq-action-bar .seq-clear:hover { color: #fff; }
+
+    /* Sequence email preview cards */
+    .seq-email-card {
+      background: #fff;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .seq-email-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .seq-email-to {
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .seq-email-to-meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .seq-email-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .seq-email-status.pending { background: #f3f0ff; color: #6d28d9; }
+    .seq-email-status.sent { background: #d1fae5; color: #047857; }
+    .seq-email-status.failed { background: #fee2e2; color: #b91c1c; }
+    .seq-email-status.skipped { background: #f3f4f6; color: #4b5563; }
+    .seq-email-field-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .seq-email-subject-input {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-family: inherit;
+      margin-bottom: 10px;
+    }
+    .seq-email-body-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 140px;
+    }
+
+    /* Candidate detail slide-over (Phase 3) */
+    .cand-slide-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.25);
+      z-index: 700;
+      display: flex;
+      justify-content: flex-end;
+      animation: candFadeIn 0.18s ease-out;
+    }
+    .cand-slide-overlay.hidden { display: none; }
+    @keyframes candFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .cand-slide {
+      width: min(1280px, 95vw);
+      height: 100vh;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      animation: candSlideIn 0.22s ease-out;
+      box-shadow: -4px 0 30px rgba(0,0,0,0.1);
+    }
+    @keyframes candSlideIn { from { transform: translateX(40px); } to { transform: translateX(0); } }
+    .cand-slide-header {
+      display: flex;
+      align-items: center;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border-color);
+      gap: 16px;
+    }
+    .cand-slide-back, .cand-slide-x {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 6px;
+      border-radius: 6px;
+    }
+    .cand-slide-back:hover, .cand-slide-x:hover { background: #f3f0ff; color: var(--text-primary); }
+    .cand-slide-title { flex: 1; font-weight: 600; font-size: 14px; }
+    .cand-slide-body { display: flex; flex: 1; min-height: 0; }
+    .cand-slide-left {
+      flex: 1 1 60%;
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      padding: 24px 28px;
+    }
+    .cand-slide-right {
+      flex: 0 0 40%;
+      display: flex;
+      flex-direction: column;
+      background: #fafafa;
+    }
+    .cand-slide-hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .cand-slide-name { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .cand-slide-loc { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+    .cand-slide-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cand-slide-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #f3f0ff;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #6d28d9;
+    }
+    .cand-slide-actions-top { display: flex; align-items: flex-start; gap: 8px; }
+    .cand-shortlist-btn.is-shortlisted {
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fcd34d;
+    }
+    .cand-shortlist-btn.is-shortlisted .material-icons-outlined { color: #f59e0b; }
+
+    .cand-tabs {
+      display: flex;
+      gap: 24px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 20px;
+    }
+    .cand-tab {
+      background: transparent;
+      border: none;
+      padding: 10px 0;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .cand-tab:hover { color: var(--text-primary); }
+    .cand-tab.active { color: #7c3aed; border-bottom-color: #7c3aed; }
+
+    .cand-tab-panel { display: none; }
+    .cand-tab-panel.active { display: block; }
+    .cand-section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .cand-exp-card {
+      padding: 14px 16px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    .cand-exp-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+    .cand-exp-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+
+    .cand-right-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      background: #fff;
+      overflow-x: auto;
+    }
+    .cand-right-tab {
+      background: transparent;
+      border: none;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .cand-right-tab:hover:not(:disabled) { background: #f3f0ff; color: var(--text-primary); }
+    .cand-right-tab.active {
+      background: #ede4ff;
+      color: #7c3aed;
+    }
+    .cand-right-tab.cand-tab-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .cand-right-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .cand-right-panel { display: none; }
+    .cand-right-panel.active { display: block; }
+    .cand-note-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+      background: #fff;
+    }
+    .cand-note-actions { display: flex; justify-content: flex-end; margin-top: 8px; margin-bottom: 16px; }
+    .cand-notes-empty {
+      text-align: center;
+      padding: 30px 20px;
+      border: 1px dashed var(--border-color);
+      border-radius: 10px;
+    }
+    .cand-notes-empty.hidden { display: none; }
+    .cand-notes-list { display: flex; flex-direction: column; gap: 10px; }
+    .cand-note-card {
+      background: #fff;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .cand-note-meta { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+
+    /* Searches page: requirement context banner */
+    .search-req-context {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .search-req-context.hidden { display: none; }
+    .search-req-context-close {
+      background: transparent;
+      border: none;
+      color: #7c3aed;
+      cursor: pointer;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Assigned-to footer on requirement cards */
+    .req-card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .req-card-assigned {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .req-card-assigned strong { color: var(--text-primary); font-weight: 500; }
+    .req-card-close {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .req-card-close:hover { border-color: #ef4444; color: #ef4444; }
+
     /* Result score chip */
     .person-score {
       display: inline-block;
@@ -1253,7 +1691,13 @@
         <!-- REQUIREMENTS -->
         <div class="page" id="page-requirements">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h3 style="font-size:16px;font-weight:600">Requirements Board</h3>
+            <div style="display:flex;align-items:center;gap:12px">
+              <h3 style="font-size:16px;font-weight:600;margin:0">Requirements Board</h3>
+              <div class="scope-tabs" id="req-scope-tabs">
+                <button class="scope-tab active" data-scope="mine" type="button">My Requirements</button>
+                <button class="scope-tab" data-scope="all" type="button">All Open</button>
+              </div>
+            </div>
             <div style="display:flex;gap:8px">
               <div class="market-tabs">
                 <div class="market-tab active" data-market="">All</div>
@@ -1269,6 +1713,15 @@
             <div class="loading-spinner"></div> Loading requirements...
           </div>
           <div id="requirements-list"></div>
+          <div class="batch-action-bar hidden" id="batch-action-bar">
+            <span class="material-icons-outlined" style="font-size:16px">check_circle</span>
+            <span><span class="batch-count" id="batch-count">0</span> requirements selected</span>
+            <button type="button" class="batch-go" id="batch-source-btn">
+              <span class="material-icons-outlined" style="font-size:14px">person_search</span>
+              Source Now
+            </button>
+            <button type="button" class="batch-clear" id="batch-clear-btn">Clear</button>
+          </div>
         </div>
 
         <!-- SHORTLIST -->
@@ -1310,7 +1763,7 @@
                   <th>Skills</th>
                   <th>Experience</th>
                   <th>Location</th>
-                  <th>Source</th>
+                  <th>Email</th>
                   <th>Market</th>
                 </tr>
               </thead>
@@ -1509,6 +1962,29 @@
           <div class="project-context-strip" id="search-context">
             <span class="material-icons-outlined">folder_open</span>
             In: <strong id="search-context-label">All projects</strong>
+          </div>
+
+          <div class="search-req-context hidden" id="search-req-context">
+            <div>
+              <span class="material-icons-outlined" style="font-size:16px;vertical-align:middle;color:#7c3aed">assignment</span>
+              Showing candidates sourced for
+              <strong id="search-req-role">—</strong>
+              at
+              <span id="search-req-client">—</span>
+            </div>
+            <button type="button" class="search-req-context-close" id="search-req-clear-btn">
+              <span class="material-icons-outlined" style="font-size:14px">close</span> Clear
+            </button>
+          </div>
+
+          <div class="seq-action-bar hidden" id="seq-action-bar">
+            <span class="material-icons-outlined" style="font-size:16px">check_circle</span>
+            <span><span id="seq-count">0</span> candidates selected</span>
+            <button type="button" class="seq-go" id="seq-add-btn">
+              <span class="material-icons-outlined" style="font-size:14px">mail_outline</span>
+              Add to Sequence
+            </button>
+            <button type="button" class="seq-clear" id="seq-clear-btn">Clear</button>
           </div>
 
           <div class="search-hero" id="search-hero">
@@ -1849,10 +2325,15 @@
           <label>Job Description (paste JD text)</label>
           <textarea id="req-jd" rows="5" placeholder="Paste the full job description here..."></textarea>
         </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Assign to Recruiters <span style="color:var(--text-muted);font-weight:400;font-size:11px">(leave empty to keep for yourself)</span></label>
+          <select id="req-assigned" multiple size="5" style="min-height:96px"></select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Hold ⌘/Ctrl to pick multiple. Selecting everyone shows as "Everyone".</div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" onclick="document.getElementById('modal-create-req').classList.add('hidden')">Cancel</button>
           <button type="submit" class="btn-primary" id="btn-submit-req">
-            <span class="material-icons-outlined" style="font-size:16px">add</span> Create & Source
+            <span class="material-icons-outlined" style="font-size:16px">add</span> Create
           </button>
         </div>
       </form>
@@ -1887,6 +2368,107 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Sequences: AI draft + personalized preview modal -->
+  <div class="modal-overlay hidden" id="modal-sequence">
+    <div class="modal" style="max-width:860px;width:95vw;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <h3 style="margin:0 0 4px">Review &amp; Send Outreach</h3>
+          <div id="seq-modal-sub" style="font-size:13px;color:var(--text-secondary)">—</div>
+        </div>
+        <button type="button" onclick="document.getElementById('modal-sequence').classList.add('hidden')"
+          style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px">
+          <span class="material-icons-outlined" style="font-size:20px">close</span>
+        </button>
+      </div>
+      <div id="seq-loading" class="loading-state">
+        <div class="loading-spinner"></div> Drafting personalized emails with AI…
+      </div>
+      <div id="seq-error" class="hidden" style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#b91c1c;font-size:13px;margin-bottom:16px"></div>
+      <div id="seq-template-card" class="hidden" style="padding:12px 14px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;margin-bottom:16px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7c3aed;font-weight:600;margin-bottom:6px">AI-drafted template</div>
+        <div id="seq-template-subj" style="font-weight:500;font-size:13px;margin-bottom:6px"></div>
+        <div id="seq-template-body" style="white-space:pre-wrap;font-size:12px;color:var(--text-secondary);line-height:1.5"></div>
+      </div>
+      <div id="seq-emails" class="hidden"></div>
+      <div class="modal-actions" id="seq-actions" style="display:none">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-sequence').classList.add('hidden')">Cancel</button>
+        <button type="button" class="btn-primary" id="seq-send-btn">
+          <span class="material-icons-outlined" style="font-size:16px">send</span> Send All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Candidate Detail Slide-over -->
+  <div class="cand-slide-overlay hidden" id="cand-slide">
+    <div class="cand-slide">
+      <div class="cand-slide-header">
+        <button type="button" class="cand-slide-back" id="cand-slide-close-top" aria-label="Close">
+          <span class="material-icons-outlined" style="font-size:20px">arrow_back</span>
+        </button>
+        <div class="cand-slide-title" id="cand-slide-title">Candidate</div>
+        <button type="button" class="cand-slide-x" id="cand-slide-close-x" aria-label="Close">
+          <span class="material-icons-outlined" style="font-size:20px">close</span>
+        </button>
+      </div>
+      <div class="cand-slide-body">
+        <div class="cand-slide-left">
+          <div class="cand-slide-hero">
+            <div>
+              <div class="cand-slide-name" id="cand-slide-name">—</div>
+              <div class="cand-slide-loc" id="cand-slide-loc">—</div>
+              <div class="cand-slide-chips" id="cand-slide-chips"></div>
+            </div>
+            <div class="cand-slide-actions-top">
+              <button class="btn-secondary cand-shortlist-btn" id="cand-shortlist-btn" type="button">
+                <span class="material-icons-outlined" style="font-size:16px">star_outline</span>
+                <span id="cand-shortlist-label">Shortlist</span>
+              </button>
+            </div>
+          </div>
+          <div class="cand-tabs" id="cand-tabs">
+            <button class="cand-tab active" data-cand-tab="overview" type="button">Overview</button>
+            <button class="cand-tab" data-cand-tab="experience" type="button">Experience</button>
+            <button class="cand-tab" data-cand-tab="education" type="button">Education</button>
+            <button class="cand-tab" data-cand-tab="skills" type="button">Skills</button>
+          </div>
+          <div class="cand-tab-content">
+            <div class="cand-tab-panel active" data-cand-tab="overview" id="cand-panel-overview"></div>
+            <div class="cand-tab-panel" data-cand-tab="experience" id="cand-panel-experience"></div>
+            <div class="cand-tab-panel" data-cand-tab="education" id="cand-panel-education"></div>
+            <div class="cand-tab-panel" data-cand-tab="skills" id="cand-panel-skills"></div>
+          </div>
+        </div>
+        <div class="cand-slide-right">
+          <div class="cand-right-tabs" id="cand-right-tabs">
+            <button class="cand-right-tab active" data-right-tab="notes" type="button">Notes</button>
+            <button class="cand-right-tab" data-right-tab="sequences" type="button">Sequences</button>
+            <button class="cand-right-tab cand-tab-disabled" data-right-tab="activity" type="button" disabled>Activity</button>
+            <button class="cand-right-tab cand-tab-disabled" data-right-tab="projects" type="button" disabled>Projects</button>
+            <button class="cand-right-tab cand-tab-disabled" data-right-tab="tasks" type="button" disabled>Tasks</button>
+          </div>
+          <div class="cand-right-content">
+            <div class="cand-right-panel active" data-right-tab="notes">
+              <textarea class="cand-note-input" id="cand-note-input" placeholder="Type your note here..."></textarea>
+              <div class="cand-note-actions">
+                <button type="button" class="btn-primary" id="cand-add-note-btn">Add note</button>
+              </div>
+              <div class="cand-notes-empty" id="cand-notes-empty">
+                <span class="material-icons-outlined" style="font-size:32px;color:var(--text-muted)">edit_note</span>
+                <div style="color:var(--text-secondary);font-size:13px;margin-top:8px">No notes added yet</div>
+              </div>
+              <div class="cand-notes-list" id="cand-notes-list"></div>
+            </div>
+            <div class="cand-right-panel" data-right-tab="sequences" id="cand-sequences-panel">
+              <div class="empty-state"><p style="color:var(--text-secondary);font-size:13px">No active sequences — Phase 4 will wire this up.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2024,6 +2606,13 @@
       activeProject: null,   // null = "All projects" view; otherwise the project id
       // Search
       searchMode: 'natural',
+      // Requirements scope: 'mine' (recruiter default) or 'all' (transparency toggle / TL default)
+      requirementsScope: 'mine',
+      // Set of selected requirement ids for batch Source Now
+      selectedRequirements: new Set(),
+      // When user clicks 'View candidates' on a sourced requirement, Searches
+      // page enters this mode and fetches /api/requirements/<id>/candidates.
+      searchRequirementContext: null,
     };
 
     // ── API Helper ──
@@ -2205,6 +2794,17 @@
     // ── Requirements ──
     // ══════════════════════════════════
 
+    function assignedToLabel(req) {
+      const assigned = req.assigned_recruiters || [];
+      if (!assigned.length) return 'TL only';
+      const teamEmails = (state.team || []).map(t => t.email);
+      if (teamEmails.length && assigned.length >= teamEmails.length) {
+        return 'Everyone';
+      }
+      const byEmail = new Map((state.team || []).map(t => [t.email, t.name]));
+      return assigned.map(e => byEmail.get(e) || e.split('@')[0]).join(', ');
+    }
+
     async function loadRequirements() {
       const listEl = document.getElementById('requirements-list');
       const loadingEl = document.getElementById('requirements-loading');
@@ -2213,26 +2813,38 @@
 
       try {
         // Requirements is global (TL-owned pool); do NOT scope by project_id.
-        const params = state.currentMarket ? `?market=${state.currentMarket}` : '';
-        const data = await api(`/api/requirements${params}`);
+        const qs = new URLSearchParams();
+        if (state.currentMarket) qs.set('market', state.currentMarket);
+        qs.set('scope', state.requirementsScope || 'mine');
+        const data = await api(`/api/requirements?${qs}`);
         loadingEl.style.display = 'none';
 
         const reqs = data?.requirements || [];
         state.requirements = reqs;
 
         if (reqs.length === 0) {
-          listEl.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">assignment</span><p>No open requirements found. Create one to get started.</p></div>';
+          const msg = (state.requirementsScope === 'mine')
+            ? 'No requirements assigned to you yet. Switch to "All Open" to see what the team is working on.'
+            : 'No open requirements. Create one to get started.';
+          listEl.innerHTML = `<div class="empty-state"><span class="material-icons-outlined">assignment</span><p>${esc(msg)}</p></div>`;
           return;
         }
+
+        const isTL = state.user?.role === 'tl';
 
         reqs.forEach(req => {
           const market = req.market || '';
           const marketTag = market === 'IN' ? '<span class="tag tag-india">India</span>' : market === 'SG' ? '<span class="tag tag-singapore">Singapore</span>' : '';
           const statusTag = req.status === 'open' ? '<span class="tag tag-open"><span class="status-dot green"></span>Open</span>' : '<span class="tag tag-draft"><span class="status-dot gray"></span>' + (req.status || 'Unknown') + '</span>';
           const skills = (req.skills_required || []).slice(0, 3).join(', ');
+          const assignedLabel = assignedToLabel(req);
+          const matchedCount = req.matched_count || 0;
+          const isSelected = state.selectedRequirements.has(req.id);
           const card = document.createElement('div');
-          card.className = 'req-card';
+          card.className = 'req-card' + (isSelected ? ' selected' : '');
+          card.dataset.reqId = req.id;
           card.innerHTML = `
+            <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
             <div class="req-card-header">
               <div>
                 <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
@@ -2247,21 +2859,554 @@
               ${req.salary_budget ? `<span><span class="material-icons-outlined">payments</span> ${esc(req.salary_budget)}</span>` : ''}
             </div>
             <div class="req-card-actions">
-              <button class="btn-primary" onclick="sourceRequirement('${req.id}')">
-                <span class="material-icons-outlined" style="font-size:16px">person_search</span> Source Now
-              </button>
+              ${matchedCount > 0 ? `
+                <a href="#" class="req-card-sourced" onclick="event.preventDefault();viewSourcedCandidates('${req.id}')">
+                  <span class="material-icons-outlined">group</span>
+                  Found ${matchedCount} candidate${matchedCount === 1 ? '' : 's'}
+                  <span class="material-icons-outlined" style="font-size:12px">arrow_forward</span>
+                </a>` : ''}
               <button class="btn-secondary" onclick="viewRequirement('${req.id}')">
-                <span class="material-icons-outlined" style="font-size:16px">visibility</span> View
+                <span class="material-icons-outlined" style="font-size:16px">visibility</span> Details
               </button>
+            </div>
+            <div class="req-card-footer">
+              <span class="req-card-assigned">
+                <span class="material-icons-outlined" style="font-size:14px">group</span>
+                Assigned to: <strong>${esc(assignedLabel)}</strong>
+              </span>
+              ${isTL ? `<button class="req-card-close" onclick="closeRequirement('${req.id}', this)">
+                <span class="material-icons-outlined" style="font-size:12px">archive</span> Close
+              </button>` : ''}
             </div>
           `;
           listEl.appendChild(card);
         });
+
+        // Bind checkbox changes after rendering
+        listEl.querySelectorAll('.req-card-check').forEach(cb => {
+          cb.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const id = cb.dataset.reqId;
+            if (cb.checked) state.selectedRequirements.add(id);
+            else state.selectedRequirements.delete(id);
+            cb.closest('.req-card')?.classList.toggle('selected', cb.checked);
+            updateBatchActionBar();
+          });
+        });
+        updateBatchActionBar();
       } catch (err) {
         loadingEl.style.display = 'none';
         listEl.innerHTML = `<div class="empty-state"><p>Error loading requirements: ${esc(err.message)}</p></div>`;
       }
     }
+
+    async function closeRequirement(reqId, btn) {
+      if (!confirm('Close this requirement? It will no longer show in the open list.')) return;
+      if (btn) { btn.disabled = true; btn.textContent = 'Closing…'; }
+      try {
+        await api(`/api/requirements/${reqId}/close`, { method: 'POST' });
+        loadRequirements();
+      } catch (err) {
+        alert('Failed to close: ' + err.message);
+        if (btn) { btn.disabled = false; }
+      }
+    }
+
+    // Scope toggle wiring
+    document.querySelectorAll('#req-scope-tabs .scope-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('#req-scope-tabs .scope-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        state.requirementsScope = tab.dataset.scope;
+        state.selectedRequirements.clear();
+        loadRequirements();
+      });
+    });
+
+    // ── Batch Source Now ──
+    function updateBatchActionBar() {
+      const bar = document.getElementById('batch-action-bar');
+      const count = state.selectedRequirements.size;
+      if (count === 0) {
+        bar.classList.add('hidden');
+        return;
+      }
+      bar.classList.remove('hidden');
+      document.getElementById('batch-count').textContent = count;
+    }
+
+    document.getElementById('batch-clear-btn')?.addEventListener('click', () => {
+      state.selectedRequirements.clear();
+      document.querySelectorAll('.req-card-check:checked').forEach(cb => { cb.checked = false; });
+      document.querySelectorAll('.req-card.selected').forEach(c => c.classList.remove('selected'));
+      updateBatchActionBar();
+    });
+
+    document.getElementById('batch-source-btn')?.addEventListener('click', async () => {
+      const ids = Array.from(state.selectedRequirements);
+      if (!ids.length) return;
+      const btn = document.getElementById('batch-source-btn');
+      btn.disabled = true;
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<div class="loading-spinner" style="width:12px;height:12px;border-width:2px"></div> Sourcing ' + ids.length + '…';
+      // Mark selected cards as in-progress
+      ids.forEach(id => {
+        const card = document.querySelector(`.req-card[data-req-id="${id}"]`);
+        if (card) {
+          const actions = card.querySelector('.req-card-actions');
+          if (actions) actions.insertAdjacentHTML('afterbegin',
+            '<span class="req-card-sourced" data-sourcing="1" style="background:#fef3c7;color:#92400e;border-color:#fcd34d"><div class="loading-spinner" style="width:10px;height:10px;border-width:2px"></div> Sourcing…</span>');
+        }
+      });
+      try {
+        const data = await api('/api/requirements/source-batch', {
+          method: 'POST',
+          body: { requirement_ids: ids, per_req_cap: 5 }
+        });
+        // Clear selection + reload (will show "Found N candidates" via matched_count)
+        state.selectedRequirements.clear();
+        await loadRequirements();
+        const totalFound = (data?.results || []).reduce((s, r) => s + (r.top_count || 0), 0);
+        alert(`Sourced ${ids.length} requirement${ids.length === 1 ? '' : 's'}. ${totalFound} candidate${totalFound === 1 ? '' : 's'} found above match threshold.`);
+      } catch (err) {
+        alert('Batch source failed: ' + err.message);
+        document.querySelectorAll('[data-sourcing="1"]').forEach(el => el.remove());
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+      }
+    });
+
+    // Navigate to Searches page scoped to a requirement's sourced candidates
+    function viewSourcedCandidates(reqId) {
+      const req = state.requirements.find(r => r.id === reqId);
+      if (!req) return;
+      state.searchRequirementContext = {
+        id: req.id,
+        role_title: req.role_title,
+        client_name: req.client_name,
+      };
+      switchPage('search');
+      renderSearchRequirementContext();
+    }
+
+    function renderSearchRequirementContext() {
+      const banner = document.getElementById('search-req-context');
+      const ctx = state.searchRequirementContext;
+      const hero = document.getElementById('search-hero');
+      const results = document.getElementById('search-results');
+      if (!ctx) {
+        banner?.classList.add('hidden');
+        if (hero) hero.style.display = '';
+        return;
+      }
+      banner.classList.remove('hidden');
+      document.getElementById('search-req-role').textContent = ctx.role_title || 'Untitled';
+      document.getElementById('search-req-client').textContent = ctx.client_name || '';
+      if (hero) hero.style.display = 'none';
+      results.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div> Loading sourced candidates…</div>';
+
+      state.selectedSequenceCandidates = new Set();
+      updateSeqActionBar();
+
+      api(`/api/requirements/${ctx.id}/candidates`).then(data => {
+        const cands = data?.candidates || [];
+        state.sourcedCandidates = cands;
+        results.innerHTML = renderSourcedCandidateCards(cands);
+        // Wire checkboxes
+        results.querySelectorAll('.seq-cand-check').forEach(cb => {
+          cb.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const id = cb.dataset.candId;
+            if (cb.checked) state.selectedSequenceCandidates.add(id);
+            else state.selectedSequenceCandidates.delete(id);
+            cb.closest('.person-card')?.classList.toggle('selected', cb.checked);
+            updateSeqActionBar();
+          });
+        });
+      }).catch(err => {
+        results.innerHTML = `<div class="empty-state"><p>Error loading candidates: ${esc(err.message)}</p></div>`;
+      });
+    }
+
+    function renderSourcedCandidateCards(candidates) {
+      if (!candidates?.length) {
+        return '<div class="empty-state"><p>No candidates scored above the threshold. Run Source Now again to re-score the pool.</p></div>';
+      }
+      let html = `<div class="card"><div class="card-title">Sourced candidates (${candidates.length})</div>`;
+      html += '<div class="shortlist-grid">';
+      candidates.forEach(c => {
+        const initials = getInitials(c.name || 'Unknown');
+        const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
+        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer;position:relative">
+          <input type="checkbox" class="seq-cand-check req-card-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()">
+          <div class="person-card-header" style="padding-left:28px">
+            <div class="person-avatar">${initials}</div>
+            <div style="flex:1;min-width:0">
+              <div class="person-name">${esc(c.name || 'Unknown')}</div>
+              <div class="person-role">${esc(primary)}</div>
+            </div>
+            ${typeof c.score === 'number' ? `<span class="person-score">${c.score}</span>` : ''}
+          </div>
+          ${c.current_employer ? `<div class="person-card-detail"><span class="material-icons-outlined">business</span> ${esc(c.current_employer)}</div>` : ''}
+          ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
+          ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
+          ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
+          ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
+        </div>`;
+      });
+      return html + '</div></div>';
+    }
+
+    function updateSeqActionBar() {
+      const bar = document.getElementById('seq-action-bar');
+      const count = state.selectedSequenceCandidates?.size || 0;
+      if (count === 0) { bar.classList.add('hidden'); return; }
+      bar.classList.remove('hidden');
+      document.getElementById('seq-count').textContent = count;
+    }
+
+    document.getElementById('seq-clear-btn')?.addEventListener('click', () => {
+      state.selectedSequenceCandidates?.clear();
+      document.querySelectorAll('.seq-cand-check:checked').forEach(cb => { cb.checked = false; });
+      document.querySelectorAll('.person-card.selected').forEach(c => c.classList.remove('selected'));
+      updateSeqActionBar();
+    });
+
+    document.getElementById('seq-add-btn')?.addEventListener('click', async () => {
+      const ctx = state.searchRequirementContext;
+      if (!ctx) { alert('Select a requirement first.'); return; }
+      const ids = Array.from(state.selectedSequenceCandidates || []);
+      if (!ids.length) return;
+      openSequenceModal(ctx, ids);
+    });
+
+    // ── Sequences modal (Phase 4) ──
+    let currentSequenceEmails = [];
+    let currentSequenceRequirementId = null;
+
+    async function openSequenceModal(ctx, candidateIds) {
+      currentSequenceRequirementId = ctx.id;
+      const modal = document.getElementById('modal-sequence');
+      modal.classList.remove('hidden');
+      document.getElementById('seq-modal-sub').textContent =
+        `${ctx.role_title || 'Role'} at ${ctx.client_name || ''} · ${candidateIds.length} candidate${candidateIds.length === 1 ? '' : 's'}`;
+      document.getElementById('seq-loading').style.display = '';
+      document.getElementById('seq-error').classList.add('hidden');
+      document.getElementById('seq-template-card').classList.add('hidden');
+      document.getElementById('seq-emails').classList.add('hidden');
+      document.getElementById('seq-emails').innerHTML = '';
+      document.getElementById('seq-actions').style.display = 'none';
+
+      try {
+        const data = await api('/api/sequences/draft', {
+          method: 'POST',
+          body: { requirement_id: ctx.id, candidate_ids: candidateIds }
+        });
+        document.getElementById('seq-loading').style.display = 'none';
+
+        // Show template card
+        document.getElementById('seq-template-card').classList.remove('hidden');
+        document.getElementById('seq-template-subj').textContent = `Subject: ${data.template?.subject || ''}`;
+        document.getElementById('seq-template-body').textContent = data.template?.body || '';
+
+        // Render per-candidate editable cards
+        currentSequenceEmails = data.emails || [];
+        const container = document.getElementById('seq-emails');
+        container.classList.remove('hidden');
+        container.innerHTML = currentSequenceEmails.map((em, i) => {
+          const status = em.sendable ? 'pending' : 'skipped';
+          const statusLabel = em.sendable ? 'Ready' : 'No email on file';
+          return `
+            <div class="seq-email-card" data-idx="${i}">
+              <div class="seq-email-header">
+                <div>
+                  <div class="seq-email-to">${esc(em.to_name || 'Unknown')}</div>
+                  <div class="seq-email-to-meta">${em.to_email ? esc(em.to_email) : '(no email address — will be skipped)'}</div>
+                </div>
+                <span class="seq-email-status ${status}" data-status-for="${i}">${statusLabel}</span>
+              </div>
+              <div class="seq-email-field-label">Subject</div>
+              <input type="text" class="seq-email-subject-input" data-email-field="subject" data-idx="${i}" value="${esc(em.subject || '')}">
+              <div class="seq-email-field-label">Body</div>
+              <textarea class="seq-email-body-input" data-email-field="body" data-idx="${i}">${esc(em.body || '')}</textarea>
+            </div>`;
+        }).join('');
+
+        // Sync edits back into state
+        container.querySelectorAll('[data-email-field]').forEach(el => {
+          el.addEventListener('input', () => {
+            const i = parseInt(el.dataset.idx, 10);
+            if (currentSequenceEmails[i]) {
+              currentSequenceEmails[i][el.dataset.emailField] = el.value;
+            }
+          });
+        });
+
+        document.getElementById('seq-actions').style.display = '';
+      } catch (err) {
+        document.getElementById('seq-loading').style.display = 'none';
+        const errBox = document.getElementById('seq-error');
+        errBox.classList.remove('hidden');
+        errBox.textContent = 'Could not draft sequence: ' + err.message;
+      }
+    }
+
+    document.getElementById('seq-send-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('seq-send-btn');
+      const sendable = currentSequenceEmails.filter(e => e.to_email);
+      if (!sendable.length) { alert('No candidates with email addresses to send to.'); return; }
+      if (!confirm(`Send ${sendable.length} email${sendable.length === 1 ? '' : 's'} from your mailbox now?`)) return;
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner" style="width:12px;height:12px;border-width:2px"></div> Sending…';
+      try {
+        const data = await api('/api/sequences/send', {
+          method: 'POST',
+          body: {
+            requirement_id: currentSequenceRequirementId,
+            emails: sendable.map(e => ({
+              candidate_id: e.candidate_id,
+              to_email: e.to_email,
+              subject: e.subject,
+              body: e.body,
+            })),
+          }
+        });
+        // Reflect send status back on each card
+        (data.results || []).forEach(r => {
+          const idx = currentSequenceEmails.findIndex(e => e.candidate_id === r.candidate_id);
+          if (idx < 0) return;
+          const el = document.querySelector(`[data-status-for="${idx}"]`);
+          if (!el) return;
+          if (r.sent) { el.className = 'seq-email-status sent'; el.textContent = 'Sent'; }
+          else { el.className = 'seq-email-status failed'; el.textContent = 'Failed'; el.title = r.error || ''; }
+        });
+        btn.innerHTML = `<span class="material-icons-outlined" style="font-size:16px">check</span> ${data.total_sent || 0} sent`;
+        state.selectedSequenceCandidates?.clear();
+        updateSeqActionBar();
+      } catch (err) {
+        alert('Send failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">send</span> Send All';
+      }
+    });
+
+    document.getElementById('search-req-clear-btn')?.addEventListener('click', () => {
+      state.searchRequirementContext = null;
+      renderSearchRequirementContext();
+      document.getElementById('search-results').innerHTML = '';
+    });
+
+    // ══════════════════════════════════
+    // ── Candidate Detail Slide-over (Phase 3) ──
+    // ══════════════════════════════════
+
+    let currentCandidateId = null;
+
+    function openCandidateDetail(candidateId) {
+      if (!candidateId) return;
+      currentCandidateId = candidateId;
+      const overlay = document.getElementById('cand-slide');
+      overlay.classList.remove('hidden');
+      // Reset to Overview tab
+      document.querySelectorAll('.cand-tab').forEach(t => t.classList.toggle('active', t.dataset.candTab === 'overview'));
+      document.querySelectorAll('.cand-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.candTab === 'overview'));
+      document.querySelectorAll('.cand-right-tab').forEach(t => t.classList.toggle('active', t.dataset.rightTab === 'notes'));
+      document.querySelectorAll('.cand-right-panel').forEach(p => p.classList.toggle('active', p.dataset.rightTab === 'notes'));
+      // Placeholder while loading
+      ['overview','experience','education','skills'].forEach(tab => {
+        document.getElementById('cand-panel-' + tab).innerHTML =
+          '<div class="loading-state"><div class="loading-spinner"></div> Loading…</div>';
+      });
+      document.getElementById('cand-notes-list').innerHTML = '';
+      document.getElementById('cand-notes-empty').classList.remove('hidden');
+
+      api(`/api/candidates/${candidateId}/detail`).then(renderCandidateDetail).catch(err => {
+        document.getElementById('cand-panel-overview').innerHTML =
+          `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
+      });
+    }
+
+    function closeCandidateDetail() {
+      document.getElementById('cand-slide').classList.add('hidden');
+      currentCandidateId = null;
+    }
+
+    document.getElementById('cand-slide-close-top')?.addEventListener('click', closeCandidateDetail);
+    document.getElementById('cand-slide-close-x')?.addEventListener('click', closeCandidateDetail);
+    document.getElementById('cand-slide')?.addEventListener('click', (e) => {
+      if (e.target.id === 'cand-slide') closeCandidateDetail();
+    });
+
+    // Left-side tab switching
+    document.querySelectorAll('.cand-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const k = tab.dataset.candTab;
+        document.querySelectorAll('.cand-tab').forEach(t => t.classList.toggle('active', t.dataset.candTab === k));
+        document.querySelectorAll('.cand-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.candTab === k));
+      });
+    });
+
+    // Right-side tab switching (disabled tabs ignored)
+    document.querySelectorAll('.cand-right-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.disabled) return;
+        const k = tab.dataset.rightTab;
+        document.querySelectorAll('.cand-right-tab').forEach(t => t.classList.toggle('active', t.dataset.rightTab === k));
+        document.querySelectorAll('.cand-right-panel').forEach(p => p.classList.toggle('active', p.dataset.rightTab === k));
+      });
+    });
+
+    function renderCandidateDetail(data) {
+      const c = data?.candidate || {};
+      const details = (data?.details || [])[0] || {};
+      const notes = data?.notes || [];
+      const shortlisted = !!data?.shortlisted;
+
+      document.getElementById('cand-slide-title').textContent = c.name || 'Candidate';
+      document.getElementById('cand-slide-name').textContent = c.name || '—';
+      document.getElementById('cand-slide-loc').textContent = c.current_location || '—';
+
+      const chipsEl = document.getElementById('cand-slide-chips');
+      chipsEl.innerHTML = '';
+      if (c.current_employer) chipsEl.insertAdjacentHTML('beforeend',
+        `<span class="cand-slide-chip"><span class="material-icons-outlined" style="font-size:12px">business</span> ${esc(c.current_employer)}</span>`);
+      if (c.highest_education) chipsEl.insertAdjacentHTML('beforeend',
+        `<span class="cand-slide-chip"><span class="material-icons-outlined" style="font-size:12px">school</span> ${esc(c.highest_education)}</span>`);
+
+      // Shortlist button state
+      const slBtn = document.getElementById('cand-shortlist-btn');
+      const slLabel = document.getElementById('cand-shortlist-label');
+      slBtn.classList.toggle('is-shortlisted', shortlisted);
+      slLabel.textContent = shortlisted ? 'Shortlisted' : 'Shortlist';
+      slBtn.querySelector('.material-icons-outlined').textContent = shortlisted ? 'star' : 'star_outline';
+
+      // Overview
+      const ov = document.getElementById('cand-panel-overview');
+      const skills = (c.skills || []).join(', ') || '—';
+      ov.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+          <div><div class="cand-section-label">Current Role</div><div>${esc(c.current_job_title || '—')}</div></div>
+          <div><div class="cand-section-label">Current Employer</div><div>${esc(c.current_employer || '—')}</div></div>
+          <div><div class="cand-section-label">Total Experience</div><div>${esc(c.total_experience || '—')}</div></div>
+          <div><div class="cand-section-label">Location</div><div>${esc(c.current_location || '—')}</div></div>
+          <div><div class="cand-section-label">Expected CTC</div><div>${esc(c.expected_ctc || '—')}</div></div>
+          <div><div class="cand-section-label">Current CTC</div><div>${esc(c.current_ctc || '—')}</div></div>
+          <div><div class="cand-section-label">Notice Period</div><div>${esc(c.notice_period || '—')}</div></div>
+          <div><div class="cand-section-label">Source</div><div>${esc(c.source || '—')}</div></div>
+        </div>
+        <div class="cand-section-label">Contact</div>
+        <div style="display:flex;gap:16px;margin-bottom:20px;font-size:13px">
+          ${c.email ? `<span><span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">email</span> ${esc(c.email)}</span>` : ''}
+          ${c.phone ? `<span><span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">phone</span> ${esc(c.phone)}</span>` : ''}
+          ${c.linkedin_url ? `<a href="${esc(c.linkedin_url)}" target="_blank" rel="noopener" style="color:#0a66c2;text-decoration:none"><span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">link</span> LinkedIn</a>` : ''}
+        </div>
+      `;
+
+      // Experience
+      const exp = document.getElementById('cand-panel-experience');
+      const workArr = details.work_experience || [];
+      if (workArr.length) {
+        exp.innerHTML = workArr.map(w => `
+          <div class="cand-exp-card">
+            <div class="cand-exp-title">${esc(w.title || w.role || 'Role')}</div>
+            <div class="cand-exp-meta">${esc(w.company || '')} · ${esc(w.duration || w.dates || '')}</div>
+            ${w.description ? `<div style="font-size:13px;line-height:1.5">${esc(w.description)}</div>` : ''}
+          </div>
+        `).join('');
+      } else {
+        exp.innerHTML = `
+          <div class="cand-exp-card">
+            <div class="cand-exp-title">${esc(c.current_job_title || 'Current role')}</div>
+            <div class="cand-exp-meta">${esc(c.current_employer || '—')} · ${esc(c.total_experience || '')}</div>
+          </div>
+          <div style="font-size:13px;color:var(--text-secondary);padding:8px 2px">Detailed work history will appear once Candidate Details are collected.</div>
+        `;
+      }
+
+      // Education
+      const ed = document.getElementById('cand-panel-education');
+      const certs = c.certifications || [];
+      ed.innerHTML = `
+        <div class="cand-exp-card">
+          <div class="cand-exp-title">${esc(c.highest_education || 'Highest Education')}</div>
+          ${c.nationality ? `<div class="cand-exp-meta">Nationality: ${esc(c.nationality)}</div>` : ''}
+        </div>
+        ${certs.length ? `<div class="cand-section-label" style="margin-top:16px">Certifications</div><div style="display:flex;flex-wrap:wrap;gap:6px">${certs.map(t => `<span class="cand-slide-chip">${esc(t)}</span>`).join('')}</div>` : ''}
+      `;
+
+      // Skills
+      const sk = document.getElementById('cand-panel-skills');
+      if ((c.skills || []).length) {
+        sk.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px">${(c.skills || []).map(s => `<span class="cand-slide-chip" style="font-size:12px;padding:5px 10px">${esc(s)}</span>`).join('')}</div>`;
+      } else {
+        sk.innerHTML = '<div style="color:var(--text-secondary);font-size:13px">No skills captured.</div>';
+      }
+
+      // Notes
+      renderNotes(notes);
+    }
+
+    function renderNotes(notes) {
+      const list = document.getElementById('cand-notes-list');
+      const empty = document.getElementById('cand-notes-empty');
+      list.innerHTML = '';
+      if (!notes?.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      notes.forEach(n => {
+        const when = n.created_at ? new Date(n.created_at).toLocaleString() : '';
+        list.insertAdjacentHTML('beforeend', `
+          <div class="cand-note-card">
+            <div>${esc(n.content || '')}</div>
+            <div class="cand-note-meta">${esc(n.user_email || '')} · ${esc(when)}</div>
+          </div>
+        `);
+      });
+    }
+
+    document.getElementById('cand-shortlist-btn')?.addEventListener('click', async () => {
+      if (!currentCandidateId) return;
+      try {
+        const res = await api(`/api/candidates/${currentCandidateId}/shortlist`, { method: 'POST', body: {} });
+        const slBtn = document.getElementById('cand-shortlist-btn');
+        const slLabel = document.getElementById('cand-shortlist-label');
+        const nowShortlisted = res.status === 'added';
+        slBtn.classList.toggle('is-shortlisted', nowShortlisted);
+        slLabel.textContent = nowShortlisted ? 'Shortlisted' : 'Shortlist';
+        slBtn.querySelector('.material-icons-outlined').textContent = nowShortlisted ? 'star' : 'star_outline';
+        // Refresh Shortlist page if user lands there next
+        state._shortlistDirty = true;
+      } catch (err) {
+        alert('Could not update shortlist: ' + err.message);
+      }
+    });
+
+    document.getElementById('cand-add-note-btn')?.addEventListener('click', async () => {
+      if (!currentCandidateId) return;
+      const ta = document.getElementById('cand-note-input');
+      const content = (ta.value || '').trim();
+      if (!content) { ta.focus(); return; }
+      try {
+        await api(`/api/candidates/${currentCandidateId}/notes`, { method: 'POST', body: { content } });
+        ta.value = '';
+        // Re-fetch detail to get the updated notes list
+        const data = await api(`/api/candidates/${currentCandidateId}/detail`);
+        renderNotes(data?.notes || []);
+      } catch (err) {
+        alert('Could not add note: ' + err.message);
+      }
+    });
+
+    // Make candidate cards in any view open the detail slide-over when clicked
+    document.addEventListener('click', (e) => {
+      const card = e.target.closest('.person-card[data-candidate-id]');
+      if (!card) return;
+      if (e.target.closest('button, a, input')) return;
+      openCandidateDetail(card.dataset.candidateId);
+    });
 
     // Market tab filtering
     document.querySelectorAll('.market-tab').forEach(tab => {
@@ -2430,7 +3575,20 @@
     }
 
     // Create Requirement
+    function populateReqAssignedSelect() {
+      const sel = document.getElementById('req-assigned');
+      if (!sel) return;
+      sel.innerHTML = '';
+      (state.team || []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.email;
+        opt.textContent = `${t.name} (${t.role || 'recruiter'})`;
+        sel.appendChild(opt);
+      });
+    }
+
     document.getElementById('btn-create-req')?.addEventListener('click', () => {
+      populateReqAssignedSelect();
       document.getElementById('modal-create-req').classList.remove('hidden');
     });
 
@@ -2439,6 +3597,9 @@
       const btn = document.getElementById('btn-submit-req');
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner"></div> Creating...';
+
+      const assignedSel = document.getElementById('req-assigned');
+      const assigned = Array.from(assignedSel?.selectedOptions || []).map(o => o.value);
 
       const body = {
         client_name: document.getElementById('req-client').value,
@@ -2449,18 +3610,19 @@
         salary_budget: document.getElementById('req-salary').value,
         location: document.getElementById('req-location').value,
         jd_text: document.getElementById('req-jd').value,
+        assigned_recruiters: assigned,
       };
 
       try {
         await api('/api/requirements/create', { method: 'POST', body });
         btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">add</span> Create & Source';
+        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">add</span> Create';
         document.getElementById('modal-create-req').classList.add('hidden');
         document.getElementById('form-create-req').reset();
         loadRequirements();
       } catch (err) {
         btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">add</span> Create & Source';
+        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">add</span> Create';
         alert('Error creating requirement: ' + err.message);
       }
     });
@@ -2476,54 +3638,37 @@
       grid.innerHTML = '';
 
       try {
-        const pp = state.activeProject ? `?project_id=${state.activeProject}` : '';
-        const data = await api(`/api/pipeline${pp}`);
+        const data = await api('/api/shortlists');
         loading.style.display = 'none';
 
-        const pipeline = data?.pipeline || [];
-        let allCandidates = [];
+        const rows = data?.shortlists || [];
+        document.getElementById('shortlist-title').textContent = `Shortlisted Candidates (${rows.length})`;
 
-        pipeline.forEach(p => {
-          if (p.candidates) {
-            p.candidates.forEach(c => {
-              c._requirement = p.role_title;
-              c._client = p.client_name;
-            });
-            allCandidates = allCandidates.concat(p.candidates);
-          }
-        });
-
-        // Sort by score descending
-        allCandidates.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-        // Filter to shortlisted (score >= 7)
-        const shortlisted = allCandidates.filter(c => (c.score || 0) >= 7);
-        document.getElementById('shortlist-title').textContent = `Shortlisted Candidates (${shortlisted.length})`;
-
-        if (shortlisted.length === 0) {
-          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="material-icons-outlined">star_outline</span><p>No shortlisted candidates yet. Source requirements to find candidates.</p></div>';
+        if (rows.length === 0) {
+          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="material-icons-outlined">star_outline</span><p>You haven\'t shortlisted anyone yet. Open a candidate and click Shortlist to add them here (they\'ll also appear in Contacts).</p></div>';
           return;
         }
 
-        shortlisted.forEach(c => {
+        rows.forEach(c => {
           const initials = getInitials(c.name || 'Unknown');
-          const scoreClass = (c.score || 0) >= 8 ? 'score-high' : (c.score || 0) >= 6 ? 'score-mid' : 'score-low';
           const card = document.createElement('div');
           card.className = 'person-card';
+          card.dataset.candidateId = c.id || '';
+          card.style.cursor = 'pointer';
           card.innerHTML = `
             <div class="person-card-header">
               <div class="person-avatar">${initials}</div>
-              <div style="flex:1">
+              <div style="flex:1;min-width:0">
                 <div class="person-name">${esc(c.name || 'Unknown')}</div>
-                <div class="person-role">${esc((c.skills || []).slice(0, 2).join(', ') || c.current_role || '')}</div>
+                <div class="person-role">${esc(c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—')}</div>
               </div>
-              <span class="score-badge ${scoreClass}">${c.score || 0}/10</span>
+              <span class="material-icons-outlined" style="color:#f59e0b">star</span>
             </div>
-            ${c._requirement ? `<div class="person-card-detail"><span class="material-icons-outlined">assignment</span> ${esc(c._requirement)}</div>` : ''}
-            ${c._client ? `<div class="person-card-detail"><span class="material-icons-outlined">business</span> ${esc(c._client)}</div>` : ''}
+            ${c.current_employer ? `<div class="person-card-detail"><span class="material-icons-outlined">business</span> ${esc(c.current_employer)}</div>` : ''}
             ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
-            ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">work</span> ${c.total_experience} years experience</div>` : ''}
+            ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
             ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
+            ${c.note ? `<div class="person-reasoning">${esc(c.note)}</div>` : ''}
           `;
           grid.appendChild(card);
         });
@@ -2548,43 +3693,34 @@
       tbody.innerHTML = '';
 
       try {
-        const data = await api('/api/pipeline');
+        const data = await api('/api/shortlists');
         loading.style.display = 'none';
 
-        const pipeline = data?.pipeline || [];
-        let allCandidates = [];
-        pipeline.forEach(p => {
-          if (p.candidates) {
-            allCandidates = allCandidates.concat(p.candidates);
-          }
-        });
+        const rows = data?.shortlists || [];
+        document.getElementById('contacts-title').textContent = `All Contacts (${rows.length})`;
 
-        // Deduplicate by email
-        const seen = new Set();
-        const unique = [];
-        allCandidates.forEach(c => {
-          const key = c.email || c.name;
-          if (!seen.has(key)) { seen.add(key); unique.push(c); }
-        });
-
-        document.getElementById('contacts-title').textContent = `All Contacts (${unique.length})`;
-
-        if (unique.length === 0) {
-          loading.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">person_outline</span><p>No contacts yet. Source requirements to build your candidate database.</p></div>';
+        if (rows.length === 0) {
+          loading.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">person_outline</span><p>No contacts yet. Shortlisted candidates appear here automatically.</p></div>';
+          loading.style.display = '';
           return;
         }
 
         table.style.display = '';
-        unique.forEach(c => {
+        rows.forEach(c => {
           const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.dataset.candidateId = c.id || '';
+          tr.addEventListener('click', (e) => {
+            if (e.target.closest('a, button')) return;
+            if (c.id) openCandidateDetail(c.id);
+          });
           const marketTag = c.market === 'IN' ? '<span class="tag tag-india">IN</span>' : c.market === 'SG' ? '<span class="tag tag-singapore">SG</span>' : '';
-          const sourceTag = c.source ? `<span class="tag tag-draft">${esc(c.source)}</span>` : '';
           tr.innerHTML = `
             <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
             <td>${esc((c.skills || []).slice(0, 3).join(', '))}</td>
-            <td>${c.total_experience ? c.total_experience + ' yrs' : '--'}</td>
-            <td>${esc(c.current_location || '--')}</td>
-            <td>${sourceTag}</td>
+            <td>${c.total_experience ? esc(c.total_experience) : '—'}</td>
+            <td>${esc(c.current_location || '—')}</td>
+            <td>${c.email ? esc(c.email) : '—'}</td>
             <td>${marketTag}</td>
           `;
           tbody.appendChild(tr);
@@ -2922,7 +4058,7 @@
       candidates.forEach(c => {
         const initials = getInitials(c.name || 'Unknown');
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
-        html += `<div class="person-card">
+        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer">
           <div class="person-card-header">
             <div class="person-avatar">${initials}</div>
             <div style="flex:1;min-width:0">

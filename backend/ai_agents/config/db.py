@@ -243,6 +243,69 @@ def get_candidate_details(candidate_id: str,
     return rows[0] if rows else None
 
 
+# ── Shortlists + Notes (Phase 3) ────────────────────────────
+
+def toggle_shortlist(candidate_id: str, user_email: str,
+                     note: str | None = None) -> dict:
+    """Add or remove a candidate from a user's shortlist.
+
+    Returns {status: 'added' | 'removed', row: <dict>}.
+    """
+    client = get_client()
+    existing = (client.table("candidate_shortlists")
+                .select("id")
+                .eq("candidate_id", candidate_id)
+                .eq("user_email", user_email)
+                .execute().data)
+    if existing:
+        client.table("candidate_shortlists").delete().eq("id", existing[0]["id"]).execute()
+        return {"status": "removed", "id": existing[0]["id"]}
+    payload = {"candidate_id": candidate_id, "user_email": user_email}
+    if note:
+        payload["note"] = note
+    row = (client.table("candidate_shortlists")
+           .insert(payload).execute().data[0])
+    return {"status": "added", "row": row}
+
+
+def is_shortlisted(candidate_id: str, user_email: str) -> bool:
+    rows = (get_client().table("candidate_shortlists")
+            .select("id")
+            .eq("candidate_id", candidate_id)
+            .eq("user_email", user_email)
+            .execute().data)
+    return bool(rows)
+
+
+def list_shortlists_for_user(user_email: str) -> list[dict]:
+    """Return shortlist rows with joined candidate columns."""
+    rows = (get_client().table("candidate_shortlists")
+            .select("id, candidate_id, note, created_at, "
+                    "candidates(id, name, email, phone, skills, "
+                    "total_experience, current_location, current_job_title, "
+                    "current_employer, market, linkedin_url)")
+            .eq("user_email", user_email)
+            .order("created_at", desc=True)
+            .execute().data)
+    return rows
+
+
+def add_candidate_note(candidate_id: str, user_email: str, content: str) -> dict:
+    return (get_client().table("candidate_notes")
+            .insert({"candidate_id": candidate_id,
+                     "user_email": user_email,
+                     "content": content})
+            .execute().data[0])
+
+
+def list_candidate_notes(candidate_id: str) -> list[dict]:
+    return (get_client().table("candidate_notes")
+            .select("id, user_email, content, created_at")
+            .eq("candidate_id", candidate_id)
+            .order("created_at", desc=True)
+            .execute().data)
+
+
 # ── Outreach ────────────────────────────────────────────────
 
 def insert_outreach_log(data: dict) -> dict:
