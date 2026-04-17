@@ -3223,6 +3223,18 @@ def api_candidate_add_note(candidate_id):
                          role, email)
 
 
+@app.route("/api/candidates/<candidate_id>/submit-to-tl", methods=["POST"])
+def api_candidate_submit_to_tl(candidate_id):
+    """Recruiter pushes a shortlisted candidate into the TL submission queue."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.submit_to_tl,
+                         candidate_id, request.get_json(silent=True),
+                         role, email)
+
+
 @app.route("/api/shortlists", methods=["GET"])
 def api_list_shortlists():
     if not is_logged_in():

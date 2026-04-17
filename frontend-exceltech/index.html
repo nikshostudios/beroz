@@ -2431,6 +2431,10 @@
                 <span class="material-icons-outlined" style="font-size:16px">star_outline</span>
                 <span id="cand-shortlist-label">Shortlist</span>
               </button>
+              <button class="btn-primary cand-submit-tl-btn" id="cand-submit-tl-btn" type="button" style="display:none">
+                <span class="material-icons-outlined" style="font-size:16px">outbox</span>
+                <span id="cand-submit-tl-label">Submit to TL</span>
+              </button>
             </div>
           </div>
           <div class="cand-tabs" id="cand-tabs">
@@ -2472,6 +2476,36 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Submit to TL Modal -->
+  <div class="modal-overlay hidden" id="modal-submit-tl">
+    <div class="modal">
+      <h3>Submit candidate to TL</h3>
+      <div id="submit-tl-summary" style="font-size:13px;color:var(--text-secondary);margin-bottom:14px"></div>
+      <form id="form-submit-tl" style="display:flex;flex-direction:column;gap:12px">
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Placement Type</label>
+          <select id="stl-placement" style="width:100%;padding:8px;border:1px solid var(--border-color);border-radius:6px">
+            <option value="">— Not specified —</option>
+            <option value="FTE">FTE (Full-time employee)</option>
+            <option value="TP">TP (Third-party)</option>
+            <option value="C2H">C2H (Contract-to-hire)</option>
+          </select>
+        </div>
+        <div class="settings-field" style="margin-bottom:0">
+          <label>Notes for TL (optional)</label>
+          <textarea id="stl-remarks" rows="3" placeholder="Why this candidate is a strong fit, what the TL should know…" style="width:100%;padding:8px;border:1px solid var(--border-color);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+        </div>
+        <div id="stl-error" style="color:var(--brand-red);font-size:12px;display:none"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-submit-tl').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn-primary" id="btn-submit-tl-confirm">
+            <span class="material-icons-outlined" style="font-size:16px">send</span> Submit
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -3093,12 +3127,13 @@
       if (!candidates?.length) {
         return '<div class="empty-state"><p>No candidates scored above the threshold. Run Source Now again to re-score the pool.</p></div>';
       }
+      const reqId = state.searchRequirementContext?.id || '';
       let html = `<div class="card"><div class="card-title">Sourced candidates (${candidates.length})</div>`;
       html += '<div class="shortlist-grid">';
       candidates.forEach(c => {
         const initials = getInitials(c.name || 'Unknown');
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
-        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer;position:relative">
+        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" ${reqId ? `data-requirement-id="${esc(reqId)}"` : ''} style="cursor:pointer;position:relative">
           <input type="checkbox" class="seq-cand-check req-card-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()">
           <div class="person-card-header" style="padding-left:28px">
             <div class="person-avatar">${initials}</div>
@@ -3262,10 +3297,18 @@
     // ══════════════════════════════════
 
     let currentCandidateId = null;
+    let currentCandidateReqId = null;   // requirement context when opened from a req
+    let currentCandidateName = '';
+    let currentCandidateSubmissions = [];
 
-    function openCandidateDetail(candidateId) {
+    function openCandidateDetail(candidateId, opts) {
       if (!candidateId) return;
       currentCandidateId = candidateId;
+      // Requirement context: explicit arg > searchRequirementContext > null
+      const explicitReqId = typeof opts === 'string' ? opts : (opts && opts.requirementId);
+      currentCandidateReqId = explicitReqId
+        || state.searchRequirementContext?.id
+        || null;
       const overlay = document.getElementById('cand-slide');
       overlay.classList.remove('hidden');
       // Reset to Overview tab
@@ -3280,6 +3323,8 @@
       });
       document.getElementById('cand-notes-list').innerHTML = '';
       document.getElementById('cand-notes-empty').classList.remove('hidden');
+      // Hide submit-to-tl until detail loads
+      document.getElementById('cand-submit-tl-btn').style.display = 'none';
 
       api(`/api/candidates/${candidateId}/detail`).then(renderCandidateDetail).catch(err => {
         document.getElementById('cand-panel-overview').innerHTML =
@@ -3290,6 +3335,9 @@
     function closeCandidateDetail() {
       document.getElementById('cand-slide').classList.add('hidden');
       currentCandidateId = null;
+      currentCandidateReqId = null;
+      currentCandidateName = '';
+      currentCandidateSubmissions = [];
     }
 
     document.getElementById('cand-slide-close-top')?.addEventListener('click', closeCandidateDetail);
@@ -3322,6 +3370,8 @@
       const details = (data?.details || [])[0] || {};
       const notes = data?.notes || [];
       const shortlisted = !!data?.shortlisted;
+      currentCandidateSubmissions = data?.submissions || [];
+      currentCandidateName = c.name || '';
 
       document.getElementById('cand-slide-title').textContent = c.name || 'Candidate';
       document.getElementById('cand-slide-name').textContent = c.name || '—';
@@ -3334,12 +3384,62 @@
       if (c.highest_education) chipsEl.insertAdjacentHTML('beforeend',
         `<span class="cand-slide-chip"><span class="material-icons-outlined" style="font-size:12px">school</span> ${esc(c.highest_education)}</span>`);
 
+      // Show submission status chip if this candidate has any prior submissions
+      if (currentCandidateSubmissions.length > 0) {
+        const latest = currentCandidateSubmissions[0];
+        const statusText = latest.sent_to_client_at
+          ? 'Sent to client'
+          : latest.tl_approved
+          ? 'Approved by TL'
+          : latest.final_status === 'rejected_by_tl'
+          ? 'Rejected by TL'
+          : 'Awaiting TL review';
+        const statusIcon = latest.sent_to_client_at
+          ? 'mark_email_read'
+          : latest.tl_approved
+          ? 'verified'
+          : latest.final_status === 'rejected_by_tl'
+          ? 'block'
+          : 'hourglass_empty';
+        chipsEl.insertAdjacentHTML('beforeend',
+          `<span class="cand-slide-chip" style="background:#fef3c7;color:#92400e"><span class="material-icons-outlined" style="font-size:12px">${statusIcon}</span> ${esc(statusText)}</span>`);
+      }
+
       // Shortlist button state
       const slBtn = document.getElementById('cand-shortlist-btn');
       const slLabel = document.getElementById('cand-shortlist-label');
       slBtn.classList.toggle('is-shortlisted', shortlisted);
       slLabel.textContent = shortlisted ? 'Shortlisted' : 'Shortlist';
       slBtn.querySelector('.material-icons-outlined').textContent = shortlisted ? 'star' : 'star_outline';
+
+      // Submit to TL button state — only visible for recruiters with a requirement context
+      const subBtn = document.getElementById('cand-submit-tl-btn');
+      const subLabel = document.getElementById('cand-submit-tl-label');
+      const isRecruiter = (state.user?.role || 'recruiter') === 'recruiter';
+      if (!isRecruiter || !currentCandidateReqId) {
+        subBtn.style.display = 'none';
+      } else {
+        subBtn.style.display = '';
+        // Check if already submitted for this requirement
+        const existingForReq = currentCandidateSubmissions.find(s => s.requirement_id === currentCandidateReqId);
+        if (existingForReq) {
+          subBtn.disabled = true;
+          subBtn.classList.remove('btn-primary');
+          subBtn.classList.add('btn-secondary');
+          subLabel.textContent = existingForReq.sent_to_client_at
+            ? 'Sent to client'
+            : existingForReq.tl_approved ? 'TL approved' : 'Submitted';
+          subBtn.querySelector('.material-icons-outlined').textContent =
+            existingForReq.sent_to_client_at ? 'mark_email_read'
+            : existingForReq.tl_approved ? 'verified' : 'check';
+        } else {
+          subBtn.disabled = false;
+          subBtn.classList.remove('btn-secondary');
+          subBtn.classList.add('btn-primary');
+          subLabel.textContent = 'Submit to TL';
+          subBtn.querySelector('.material-icons-outlined').textContent = 'outbox';
+        }
+      }
 
       // Overview
       const ov = document.getElementById('cand-panel-overview');
@@ -3444,6 +3544,87 @@
       }
     });
 
+    // Submit to TL — open modal
+    document.getElementById('cand-submit-tl-btn')?.addEventListener('click', () => {
+      if (!currentCandidateId || !currentCandidateReqId) return;
+      const btn = document.getElementById('cand-submit-tl-btn');
+      if (btn.disabled) return;
+      const ctx = state.searchRequirementContext;
+      const roleTitle = ctx?.role_title || '';
+      const clientName = ctx?.client_name || '';
+      document.getElementById('submit-tl-summary').innerHTML =
+        `Submitting <b>${esc(currentCandidateName || 'candidate')}</b>` +
+        (roleTitle ? ` for <b>${esc(roleTitle)}</b>` : '') +
+        (clientName ? ` at <b>${esc(clientName)}</b>` : '') +
+        '. The TL will review and decide whether to send to the client.';
+      document.getElementById('stl-placement').value = '';
+      document.getElementById('stl-remarks').value = '';
+      document.getElementById('stl-error').style.display = 'none';
+      document.getElementById('modal-submit-tl').classList.remove('hidden');
+    });
+
+    // Submit to TL — confirm submission
+    document.getElementById('form-submit-tl')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentCandidateId || !currentCandidateReqId) return;
+      const errEl = document.getElementById('stl-error');
+      const confirmBtn = document.getElementById('btn-submit-tl-confirm');
+      const placement = document.getElementById('stl-placement').value || null;
+      const remarks = (document.getElementById('stl-remarks').value || '').trim();
+      errEl.style.display = 'none';
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">hourglass_empty</span> Submitting…';
+      try {
+        const res = await api(`/api/candidates/${currentCandidateId}/submit-to-tl`, {
+          method: 'POST',
+          body: {
+            requirement_id: currentCandidateReqId,
+            placement_type: placement,
+            remarks,
+          },
+        });
+        // Append the new submission to local cache so chips update immediately
+        currentCandidateSubmissions.unshift({
+          id: res.submission_id,
+          requirement_id: currentCandidateReqId,
+          submitted_by_recruiter: state.user?.email,
+          submitted_at: res.submitted_at,
+          tl_approved: false,
+          final_status: null,
+          placement_type: placement,
+          remarks,
+        });
+        document.getElementById('modal-submit-tl').classList.add('hidden');
+        // Re-render the submit button & status chip
+        const subBtn = document.getElementById('cand-submit-tl-btn');
+        const subLabel = document.getElementById('cand-submit-tl-label');
+        subBtn.disabled = true;
+        subBtn.classList.remove('btn-primary');
+        subBtn.classList.add('btn-secondary');
+        subLabel.textContent = 'Submitted';
+        subBtn.querySelector('.material-icons-outlined').textContent = 'check';
+        // Append/refresh status chip without full reload
+        const chipsEl = document.getElementById('cand-slide-chips');
+        // Remove any prior submission chip, then add a fresh one
+        chipsEl.querySelectorAll('.cand-slide-chip').forEach(el => {
+          if (el.textContent.includes('Awaiting TL') ||
+              el.textContent.includes('Approved by TL') ||
+              el.textContent.includes('Sent to client') ||
+              el.textContent.includes('Rejected by TL')) {
+            el.remove();
+          }
+        });
+        chipsEl.insertAdjacentHTML('beforeend',
+          '<span class="cand-slide-chip" style="background:#fef3c7;color:#92400e"><span class="material-icons-outlined" style="font-size:12px">hourglass_empty</span> Awaiting TL review</span>');
+      } catch (err) {
+        errEl.textContent = err.message || 'Submission failed.';
+        errEl.style.display = '';
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">send</span> Submit';
+      }
+    });
+
     document.getElementById('cand-add-note-btn')?.addEventListener('click', async () => {
       if (!currentCandidateId) return;
       const ta = document.getElementById('cand-note-input');
@@ -3465,7 +3646,9 @@
       const card = e.target.closest('.person-card[data-candidate-id]');
       if (!card) return;
       if (e.target.closest('button, a, input')) return;
-      openCandidateDetail(card.dataset.candidateId);
+      // Card-level requirement context wins over global search context
+      const reqId = card.dataset.requirementId || null;
+      openCandidateDetail(card.dataset.candidateId, { requirementId: reqId });
     });
 
     // Market tab filtering
@@ -3714,7 +3897,20 @@
           const card = document.createElement('div');
           card.className = 'person-card';
           card.dataset.candidateId = c.id || '';
+          if (c.latest_requirement_id) card.dataset.requirementId = c.latest_requirement_id;
           card.style.cursor = 'pointer';
+
+          let subTag = '';
+          if (c.submission_status === 'sent_to_client') {
+            subTag = '<span class="tag" style="background:#dbeafe;color:#1e40af;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">mark_email_read</span> Sent to client</span>';
+          } else if (c.submission_status === 'tl_approved') {
+            subTag = '<span class="tag" style="background:#dcfce7;color:#166534;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">verified</span> TL approved</span>';
+          } else if (c.submission_status === 'submitted_to_tl') {
+            subTag = '<span class="tag" style="background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">hourglass_empty</span> With TL</span>';
+          } else if (c.submission_status === 'rejected_by_tl') {
+            subTag = '<span class="tag" style="background:#fee2e2;color:#991b1b;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">block</span> TL rejected</span>';
+          }
+
           card.innerHTML = `
             <div class="person-card-header">
               <div class="person-avatar">${initials}</div>
@@ -3728,6 +3924,7 @@
             ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
             ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
             ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
+            ${subTag ? `<div style="margin-top:8px">${subTag}</div>` : ''}
             ${c.note ? `<div class="person-reasoning">${esc(c.note)}</div>` : ''}
           `;
           grid.appendChild(card);

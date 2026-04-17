@@ -861,7 +861,9 @@ def source_requirements_batch(payload: Any, user_role: str,
 def get_candidate_detail(candidate_id: str, user_role: str,
                          user_email: str) -> dict:
     """Full candidate view for the slide-over: base row + any existing
-    candidate_details + notes + shortlist status for the logged-in user."""
+    candidate_details + notes + shortlist status + submissions for this
+    candidate (so the slide-over can tell whether Submit-to-TL is already
+    done per requirement)."""
     _require_role(user_role, ["recruiter", "tl"])
     cand = db.get_candidate_by_id(candidate_id)
     if not cand:
@@ -880,11 +882,85 @@ def get_candidate_detail(candidate_id: str, user_role: str,
                        .execute().data)
     except Exception:
         detail_rows = []
+    try:
+        submissions = (db.get_client().table("submissions")
+                       .select("id, requirement_id, submitted_by_recruiter, "
+                               "submitted_at, tl_approved, tl_approved_at, "
+                               "sent_to_client_at, final_status, "
+                               "placement_type, remarks")
+                       .eq("candidate_id", candidate_id)
+                       .order("submitted_at", desc=True)
+                       .execute().data)
+    except Exception:
+        submissions = []
     return {
         "candidate": cand,
         "details": detail_rows,
         "notes": notes,
         "shortlisted": shortlisted,
+        "submissions": submissions,
+    }
+
+
+def submit_to_tl(candidate_id: str, payload: Any, user_role: str,
+                 user_email: str) -> dict:
+    """Recruiter pushes a shortlisted candidate into the TL submission queue.
+
+    Creates a submissions row with tl_approved=false. TL sees it in
+    /api/tl/queue and can Approve-and-send or Reject from there.
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    body = payload if isinstance(payload, dict) else {}
+    requirement_id = (body.get("requirement_id") or "").strip() \
+        if isinstance(body.get("requirement_id"), str) else body.get("requirement_id")
+    if not requirement_id:
+        raise CoreError(422, "requirement_id is required")
+    cand = db.get_candidate_by_id(candidate_id)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+    requirement = db.get_requirement_by_id(requirement_id)
+    if not requirement:
+        raise CoreError(404, "Requirement not found")
+
+    existing = (db.get_client().table("submissions")
+                .select("id, tl_approved, final_status, submitted_at")
+                .eq("candidate_id", candidate_id)
+                .eq("requirement_id", requirement_id)
+                .execute().data)
+    if existing:
+        raise CoreError(409,
+                        "Candidate already submitted for this requirement")
+
+    placement = body.get("placement_type")
+    if placement and placement not in ("FTE", "TP", "C2H"):
+        raise CoreError(422, "placement_type must be FTE, TP, or C2H")
+
+    remarks = (body.get("remarks") or body.get("tl_notes") or "").strip()
+    now_ts = datetime.now(timezone.utc).isoformat()
+    sub_row = db.insert_submission({
+        "candidate_id": candidate_id,
+        "requirement_id": requirement_id,
+        "client_name": requirement.get("client_name") or "",
+        "tender_number": requirement.get("tender_number"),
+        "market": requirement.get("market"),
+        "submitted_by_recruiter": user_email,
+        "submitted_at": now_ts,
+        "tl_approved": False,
+        "placement_type": placement,
+        "remarks": remarks,
+    })
+    try:
+        db.upsert_candidate_details(candidate_id, requirement_id, {
+            "status": "submitted_to_tl",
+        })
+    except Exception:
+        pass  # non-fatal if candidate_details row insert fails
+    return {
+        "status": "submitted",
+        "submission_id": sub_row["id"],
+        "submitted_at": now_ts,
+        "candidate_id": candidate_id,
+        "requirement_id": requirement_id,
     }
 
 
@@ -921,15 +997,47 @@ def add_note_to_candidate(candidate_id: str, payload: Any,
 def list_user_shortlists(user_role: str, user_email: str) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
     rows = db.list_shortlists_for_user(user_email)
-    # Flatten the joined 'candidates' sub-object
+    cand_ids = [r.get("candidates", {}).get("id")
+                for r in rows if r.get("candidates", {}).get("id")]
+    # Batch-fetch latest submission per candidate so the UI can show
+    # "Submitted" / "Approved" / "Sent" tags without another round-trip.
+    submissions_by_cand: dict = {}
+    if cand_ids:
+        try:
+            sub_rows = (db.get_client().table("submissions")
+                        .select("candidate_id, requirement_id, tl_approved, "
+                                "sent_to_client_at, final_status, submitted_at")
+                        .in_("candidate_id", cand_ids)
+                        .order("submitted_at", desc=True)
+                        .execute().data) or []
+            for sub in sub_rows:
+                cid = sub.get("candidate_id")
+                # Keep only the most recent submission per candidate
+                if cid and cid not in submissions_by_cand:
+                    submissions_by_cand[cid] = sub
+        except Exception:
+            submissions_by_cand = {}
+
     out = []
     for r in rows:
         cand = r.get("candidates") or {}
+        cid = cand.get("id")
+        sub = submissions_by_cand.get(cid) or {}
+        if sub.get("sent_to_client_at"):
+            sub_status = "sent_to_client"
+        elif sub.get("tl_approved"):
+            sub_status = "tl_approved"
+        elif sub.get("final_status") == "rejected_by_tl":
+            sub_status = "rejected_by_tl"
+        elif sub:
+            sub_status = "submitted_to_tl"
+        else:
+            sub_status = None
         out.append({
             "shortlist_id": r["id"],
             "shortlisted_at": r.get("created_at"),
             "note": r.get("note"),
-            "id": cand.get("id"),
+            "id": cid,
             "name": cand.get("name"),
             "email": cand.get("email"),
             "phone": cand.get("phone"),
@@ -940,6 +1048,8 @@ def list_user_shortlists(user_role: str, user_email: str) -> dict:
             "total_experience": cand.get("total_experience"),
             "linkedin_url": cand.get("linkedin_url"),
             "market": cand.get("market"),
+            "submission_status": sub_status,
+            "latest_requirement_id": sub.get("requirement_id") if sub else None,
         })
     return {"shortlists": out, "count": len(out)}
 
