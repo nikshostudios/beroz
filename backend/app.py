@@ -388,6 +388,15 @@ def api_search():
     return _ai_core_call(ai_core.parse_search, request.get_json(silent=True))
 
 
+@app.route("/api/search/run", methods=["POST"])
+def api_search_run():
+    """Unified search (natural / jd / manual) — parse + fetch + rank candidates."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    market = request.args.get("market") or None
+    return _ai_core_call(ai_core.run_search, request.get_json(silent=True), market)
+
+
 @app.route("/api/outreach/emails", methods=["POST"])
 def api_outreach_emails():
     """Fetch and classify inbox emails via ai_core."""

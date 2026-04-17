@@ -839,6 +839,141 @@
     .search-hero.compact .search-mode-chips { margin-bottom: 12px; }
     .search-hero.compact .search-hero-examples { display: none; }
 
+    /* Manual filter panel */
+    .manual-filter-panel {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      min-height: 70vh;
+      margin-top: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .manual-filter-panel.hidden { display: none; }
+    .mf-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .mf-matches { font-size: 13px; color: var(--text-secondary); }
+    .mf-save {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mf-save:hover { background: #6d28d9; }
+    .mf-body { display: flex; flex: 1; min-height: 0; }
+    .mf-sidebar {
+      width: 240px;
+      border-right: 1px solid var(--border-color);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #fafafa;
+    }
+    .mf-search {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .mf-cat-list { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+    .mf-cat {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      user-select: none;
+    }
+    .mf-cat:hover { background: #f0e8ff; }
+    .mf-cat.active { background: #ede4ff; color: #7c3aed; font-weight: 600; }
+    .mf-cat .material-icons-outlined { font-size: 16px; }
+    .mf-hide-inactive {
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mf-content { flex: 1; padding: 24px 32px; overflow-y: auto; }
+    .mf-cat-panel { display: none; }
+    .mf-cat-panel.active { display: block; }
+    .mf-row { display: flex; gap: 16px; margin-bottom: 20px; }
+    .mf-row .mf-field { flex: 1; margin-bottom: 0; }
+    .mf-field { margin-bottom: 20px; }
+    .mf-field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+    .mf-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #fff;
+      font-family: inherit;
+    }
+    .mf-input:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    select.mf-input[multiple] { padding: 4px; }
+    .mf-field-future { opacity: 0.55; }
+    .mf-field-future .mf-input { background: #f5f5f5; cursor: not-allowed; }
+    .mf-chip-mini {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #f0e8ff;
+      color: #7c3aed;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+
+    /* Result score chip */
+    .person-score {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #ede4ff;
+      color: #7c3aed;
+      border-radius: 10px;
+    }
+    .person-reasoning {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
     /* Row action menu (⋯ popover on projects table) */
     .row-menu-wrapper { position: relative; display: inline-block; }
     .row-menu {
@@ -1390,10 +1525,6 @@
                 <span class="material-icons-outlined" style="color:#ef4444">description</span>
                 Job Description
               </button>
-              <button class="search-mode-chip" data-search-mode="boolean" type="button">
-                <span class="material-icons-outlined" style="color:#10b981">functions</span>
-                Boolean
-              </button>
               <button class="search-mode-chip" data-search-mode="manual" type="button">
                 <span class="material-icons-outlined" style="color:#6b7280">build</span>
                 Select Manually
@@ -1414,6 +1545,225 @@
               <div class="search-hero-example" data-example="Senior Scientist in Australia, 8+ years experience">Senior Scientist in Australia, 8+ years experience</div>
               <div class="search-hero-example" data-example="Consultant in London with 2+ years experience at top consulting firms">Consultant in London with 2+ years experience at top consulting firms</div>
               <div class="search-hero-example" data-example="Sales Manager in Dallas with experience in ERP">Sales Manager in Dallas with experience in ERP</div>
+            </div>
+          </div>
+
+          <div class="manual-filter-panel hidden" id="manual-filter-panel">
+            <div class="mf-header">
+              <div style="font-weight:600;font-size:16px">Edit Your Search Filters</div>
+              <div style="display:flex;align-items:center;gap:16px">
+                <div class="mf-matches" id="mf-matches">— matches</div>
+                <button type="button" class="mf-save" id="mf-save">
+                  Save Changes <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">arrow_outward</span>
+                </button>
+              </div>
+            </div>
+            <div class="mf-body">
+              <div class="mf-sidebar">
+                <input class="mf-search" type="text" placeholder="Search filters" id="mf-search">
+                <div class="mf-cat-list" id="mf-cat-list">
+                  <div class="mf-cat active" data-cat="general"><span class="material-icons-outlined">tune</span> General</div>
+                  <div class="mf-cat" data-cat="locations"><span class="material-icons-outlined">place</span> Locations</div>
+                  <div class="mf-cat" data-cat="job"><span class="material-icons-outlined">work_outline</span> Job</div>
+                  <div class="mf-cat" data-cat="company"><span class="material-icons-outlined">business</span> Company</div>
+                  <div class="mf-cat" data-cat="industry"><span class="material-icons-outlined">domain</span> Industry</div>
+                  <div class="mf-cat" data-cat="funding"><span class="material-icons-outlined">attach_money</span> Funding &amp; Revenue</div>
+                  <div class="mf-cat" data-cat="skills"><span class="material-icons-outlined">add_circle_outline</span> Skills or Keywords</div>
+                  <div class="mf-cat" data-cat="power"><span class="material-icons-outlined">bolt</span> Power Filters</div>
+                  <div class="mf-cat" data-cat="switch"><span class="material-icons-outlined">star_outline</span> Likely to Switch</div>
+                  <div class="mf-cat" data-cat="developer"><span class="material-icons-outlined">code</span> Developer Data</div>
+                  <div class="mf-cat" data-cat="education"><span class="material-icons-outlined">school</span> Education</div>
+                  <div class="mf-cat" data-cat="languages"><span class="material-icons-outlined">language</span> Languages</div>
+                  <div class="mf-cat" data-cat="boolean"><span class="material-icons-outlined">text_fields</span> Boolean &amp; Name</div>
+                </div>
+                <label class="mf-hide-inactive"><input type="checkbox" id="mf-hide-inactive"> Hide inactive filters</label>
+              </div>
+
+              <div class="mf-content" id="mf-content">
+                <!-- General -->
+                <div class="mf-cat-panel active" data-cat="general">
+                  <div class="mf-row">
+                    <div class="mf-field">
+                      <label class="mf-field-label">Min Experience (Years)</label>
+                      <input type="number" min="0" class="mf-input" id="mf-min-exp" placeholder="0">
+                    </div>
+                    <div class="mf-field">
+                      <label class="mf-field-label">Max Experience (Years)</label>
+                      <input type="number" min="0" class="mf-input" id="mf-max-exp" placeholder="Example: 10 years">
+                    </div>
+                  </div>
+                  <div class="mf-row">
+                    <div class="mf-field">
+                      <label class="mf-field-label">Required Contact Info <span class="mf-chip-mini">Match Any</span></label>
+                      <select class="mf-input" id="mf-contact-req" multiple size="3">
+                        <option value="email">Email</option>
+                        <option value="phone">Phone</option>
+                        <option value="linkedin">LinkedIn</option>
+                      </select>
+                    </div>
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">Only Connections</label>
+                      <select class="mf-input" disabled><option>Don't restrict to connections</option></select>
+                    </div>
+                  </div>
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Hide Profiles <span class="mf-chip-mini">Shortlisted + Viewed</span> <span class="mf-chip-mini">All Time</span></label>
+                    <select class="mf-input" disabled><option>Don't hide profiles</option></select>
+                  </div>
+                </div>
+
+                <!-- Locations -->
+                <div class="mf-cat-panel" data-cat="locations">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Location(s) <span class="mf-chip-mini">Within 25 miles</span></label>
+                    <input type="text" class="mf-input" id="mf-location" placeholder="Examples: San Francisco / United States / NYC / California">
+                  </div>
+                  <div class="mf-field">
+                    <label class="mf-field-label">Past Locations</label>
+                    <input type="text" class="mf-input" id="mf-past-location" placeholder="Examples: San Francisco / United States / NYC / ...">
+                  </div>
+                  <div class="mf-row">
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">Timezone</label>
+                      <select class="mf-input" disabled><option>Select timezone</option></select>
+                    </div>
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">DNC Countries</label>
+                      <label><input type="checkbox" disabled> Remove your DNC Countries from results</label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Job -->
+                <div class="mf-cat-panel" data-cat="job">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Job Titles</label>
+                    <input type="text" class="mf-input" id="mf-titles" placeholder="e.g. Software Engineer, Backend Developer (comma separated)">
+                  </div>
+                  <div class="mf-row">
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">Seniority</label>
+                      <select class="mf-input" disabled>
+                        <option>Any</option>
+                        <option>Junior</option>
+                        <option>Mid</option>
+                        <option>Senior</option>
+                        <option>Staff / Principal</option>
+                      </select>
+                    </div>
+                    <div class="mf-field">
+                      <label class="mf-field-label">Current Employer</label>
+                      <input type="text" class="mf-input" id="mf-employer" placeholder="e.g. Google">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Company -->
+                <div class="mf-cat-panel" data-cat="company">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Company Name</label>
+                    <input type="text" class="mf-input" id="mf-company" placeholder="e.g. Stripe">
+                  </div>
+                  <div class="mf-row">
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">Company Size</label>
+                      <select class="mf-input" disabled><option>Any size</option></select>
+                    </div>
+                    <div class="mf-field mf-field-future">
+                      <label class="mf-field-label">Company Type</label>
+                      <select class="mf-input" disabled><option>Any type</option></select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Industry -->
+                <div class="mf-cat-panel" data-cat="industry">
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Industry Tags</label>
+                    <input type="text" class="mf-input" disabled placeholder="e.g. Fintech, Healthcare (coming soon)">
+                  </div>
+                </div>
+
+                <!-- Funding -->
+                <div class="mf-cat-panel" data-cat="funding">
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Funding Stage</label>
+                    <select class="mf-input" disabled><option>Any</option></select>
+                  </div>
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Revenue Range</label>
+                    <select class="mf-input" disabled><option>Any</option></select>
+                  </div>
+                </div>
+
+                <!-- Skills -->
+                <div class="mf-cat-panel" data-cat="skills">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Must-have Skills</label>
+                    <input type="text" class="mf-input" id="mf-must-skills" placeholder="e.g. Python, AWS, Kubernetes (comma separated)">
+                  </div>
+                  <div class="mf-field">
+                    <label class="mf-field-label">Nice-to-have Skills</label>
+                    <input type="text" class="mf-input" id="mf-nice-skills" placeholder="e.g. Terraform, GraphQL (comma separated)">
+                  </div>
+                </div>
+
+                <!-- Power -->
+                <div class="mf-cat-panel" data-cat="power">
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Power Filters</label>
+                    <input type="text" class="mf-input" disabled placeholder="Coming soon — advanced boolean combinators">
+                  </div>
+                </div>
+
+                <!-- Switch -->
+                <div class="mf-cat-panel" data-cat="switch">
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Likely to Switch</label>
+                    <select class="mf-input" disabled><option>Any likelihood</option></select>
+                  </div>
+                </div>
+
+                <!-- Developer -->
+                <div class="mf-cat-panel" data-cat="developer">
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">GitHub / Stack Overflow Presence</label>
+                    <select class="mf-input" disabled><option>Any</option></select>
+                  </div>
+                </div>
+
+                <!-- Education -->
+                <div class="mf-cat-panel" data-cat="education">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Degree</label>
+                    <input type="text" class="mf-input" id="mf-degree" placeholder="e.g. B.Tech, MBA">
+                  </div>
+                  <div class="mf-field">
+                    <label class="mf-field-label">Institution</label>
+                    <input type="text" class="mf-input" id="mf-institution" placeholder="e.g. IIT Bombay">
+                  </div>
+                </div>
+
+                <!-- Languages -->
+                <div class="mf-cat-panel" data-cat="languages">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Languages</label>
+                    <input type="text" class="mf-input" id="mf-languages" placeholder="e.g. English, Mandarin (comma separated)">
+                  </div>
+                </div>
+
+                <!-- Boolean -->
+                <div class="mf-cat-panel" data-cat="boolean">
+                  <div class="mf-field">
+                    <label class="mf-field-label">Full Name</label>
+                    <input type="text" class="mf-input" id="mf-fullname" placeholder="e.g. Jane Doe">
+                  </div>
+                  <div class="mf-field mf-field-future">
+                    <label class="mf-field-label">Boolean Expression</label>
+                    <textarea class="mf-input" disabled rows="3" placeholder='(Python OR "Go") AND ("San Francisco" OR Remote) — coming soon'></textarea>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1672,6 +2022,8 @@
       projects: [],
       team: [],
       activeProject: null,   // null = "All projects" view; otherwise the project id
+      // Search
+      searchMode: 'natural',
     };
 
     // ── API Helper ──
@@ -2423,19 +2775,38 @@
     const searchModePlaceholders = {
       natural: 'Software Engineers with 5+ yrs of experience at fintech companies in the Bay Area',
       jd:      'Paste a full job description — we\'ll parse skills, seniority, and location for you',
-      boolean: '(Python OR Node.js) AND (Series B OR "Series C") AND "San Francisco" -intern',
       manual:  'Pick filters manually: role, skills, location, experience, salary…',
     };
 
-    document.querySelectorAll('.search-mode-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('.search-mode-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        const mode = chip.dataset.searchMode;
-        const ta = document.getElementById('search-hero-input');
-        if (ta && searchModePlaceholders[mode]) ta.placeholder = searchModePlaceholders[mode];
-        ta?.focus();
+    function setSearchMode(mode) {
+      state.searchMode = mode;
+      document.querySelectorAll('.search-mode-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.searchMode === mode);
       });
+      const hero = document.getElementById('search-hero');
+      const manualPanel = document.getElementById('manual-filter-panel');
+      const ta = document.getElementById('search-hero-input');
+      const inputWrap = document.getElementById('search-hero-input-wrap');
+      const examples = hero.querySelector('.search-hero-examples');
+
+      if (mode === 'manual') {
+        if (inputWrap) inputWrap.style.display = 'none';
+        if (examples) examples.style.display = 'none';
+        manualPanel.classList.remove('hidden');
+      } else {
+        if (inputWrap) inputWrap.style.display = '';
+        if (examples && !hero.classList.contains('compact')) examples.style.display = '';
+        manualPanel.classList.add('hidden');
+        if (ta) {
+          ta.placeholder = searchModePlaceholders[mode] || '';
+          ta.rows = (mode === 'jd') ? 10 : 3;
+          ta.focus();
+        }
+      }
+    }
+
+    document.querySelectorAll('.search-mode-chip').forEach(chip => {
+      chip.addEventListener('click', () => setSearchMode(chip.dataset.searchMode));
     });
 
     document.querySelectorAll('.search-hero-example').forEach(ex => {
@@ -2458,58 +2829,167 @@
 
     document.getElementById('search-hero-send').addEventListener('click', runHeroSearch);
 
-    async function runHeroSearch() {
-      const ta = document.getElementById('search-hero-input');
-      const query = (ta?.value || '').trim();
-      if (!query) {
-        ta?.focus();
-        return;
+    // ── Manual filter panel wiring ──
+    document.querySelectorAll('#mf-cat-list .mf-cat').forEach(el => {
+      el.addEventListener('click', () => {
+        const cat = el.dataset.cat;
+        document.querySelectorAll('#mf-cat-list .mf-cat').forEach(c => c.classList.toggle('active', c === el));
+        document.querySelectorAll('.mf-cat-panel').forEach(p => p.classList.toggle('active', p.dataset.cat === cat));
+      });
+    });
+
+    document.getElementById('mf-search')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('#mf-cat-list .mf-cat').forEach(c => {
+        const label = c.textContent.toLowerCase();
+        c.style.display = !q || label.includes(q) ? '' : 'none';
+      });
+    });
+
+    document.getElementById('mf-hide-inactive')?.addEventListener('change', (e) => {
+      const hide = e.target.checked;
+      document.querySelectorAll('.mf-field-future').forEach(el => {
+        el.style.display = hide ? 'none' : '';
+      });
+    });
+
+    document.getElementById('mf-save')?.addEventListener('click', runHeroSearch);
+
+    function splitCSV(s) {
+      return String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+    }
+
+    function collectManualFilters() {
+      const val = (id) => (document.getElementById(id)?.value || '').trim();
+      const intVal = (id) => {
+        const v = val(id);
+        if (!v) return null;
+        const n = parseInt(v, 10);
+        return isNaN(n) ? null : n;
+      };
+      const multiVal = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return [];
+        return Array.from(el.selectedOptions || []).map(o => o.value);
+      };
+
+      const filters = {
+        must_have_skills: splitCSV(val('mf-must-skills')),
+        title_keywords: splitCSV(val('mf-titles')),
+        location: val('mf-location') || null,
+        past_location: val('mf-past-location') || null,
+        min_years_experience: intVal('mf-min-exp'),
+        max_years_experience: intVal('mf-max-exp'),
+        current_employer: val('mf-employer') || val('mf-company') || null,
+        required_contact: multiVal('mf-contact-req'),
+        degree: val('mf-degree') || null,
+        institution: val('mf-institution') || null,
+        languages: splitCSV(val('mf-languages')),
+        full_name: val('mf-fullname') || null,
+      };
+      const niceSkills = splitCSV(val('mf-nice-skills'));
+      const soft_criteria = niceSkills.map(s => ({
+        criterion: `Has experience with ${s}`,
+        weight: 'preferred',
+      }));
+      return { filters, soft_criteria };
+    }
+
+    function renderFiltersCard(filters) {
+      const rows = [];
+      if (filters.title_keywords?.length) rows.push(['Role / Title', filters.title_keywords.join(', ')]);
+      if (filters.must_have_skills?.length) rows.push(['Must-have skills', filters.must_have_skills.join(', ')]);
+      if (filters.location) rows.push(['Location', filters.location]);
+      if (filters.min_years_experience != null) rows.push(['Min experience', filters.min_years_experience + ' years']);
+      if (filters.max_years_experience != null) rows.push(['Max experience', filters.max_years_experience + ' years']);
+      if (filters.current_employer) rows.push(['Current employer', filters.current_employer]);
+      if (filters.salary_min || filters.salary_max) {
+        const cur = filters.salary_currency || '';
+        rows.push(['Salary', `${filters.salary_min || '?'} – ${filters.salary_max || '?'} ${cur}`]);
       }
+      if (!rows.length) return '';
+      let html = '<div class="card"><div class="card-title">Interpreted filters</div><table><tbody>';
+      rows.forEach(([k, v]) => { html += `<tr><td style="font-weight:500;width:180px">${esc(k)}</td><td>${esc(String(v))}</td></tr>`; });
+      return html + '</tbody></table></div>';
+    }
+
+    function renderCandidateCards(candidates) {
+      if (!candidates?.length) {
+        return '<div class="empty-state"><p>No matching candidates. Try loosening the filters.</p></div>';
+      }
+      let html = `<div class="card"><div class="card-title">Matching Candidates (${candidates.length})</div>`;
+      html += '<div class="shortlist-grid">';
+      candidates.forEach(c => {
+        const initials = getInitials(c.name || 'Unknown');
+        const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
+        html += `<div class="person-card">
+          <div class="person-card-header">
+            <div class="person-avatar">${initials}</div>
+            <div style="flex:1;min-width:0">
+              <div class="person-name">${esc(c.name || 'Unknown')}</div>
+              <div class="person-role">${esc(primary)}</div>
+            </div>
+            ${typeof c.score === 'number' ? `<span class="person-score">${c.score}</span>` : ''}
+          </div>
+          ${c.current_employer ? `<div class="person-card-detail"><span class="material-icons-outlined">business</span> ${esc(c.current_employer)}</div>` : ''}
+          ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
+          ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
+          ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
+          ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
+        </div>`;
+      });
+      return html + '</div></div>';
+    }
+
+    async function runHeroSearch() {
+      const mode = state.searchMode || 'natural';
       const hero = document.getElementById('search-hero');
       const loading = document.getElementById('search-loading');
       const results = document.getElementById('search-results');
+      const manualPanel = document.getElementById('manual-filter-panel');
+
+      let payload;
+      if (mode === 'manual') {
+        const collected = collectManualFilters();
+        const anyFilter = Object.values(collected.filters).some(v =>
+          v != null && !(Array.isArray(v) && v.length === 0) && v !== '');
+        if (!anyFilter && collected.soft_criteria.length === 0) {
+          alert('Add at least one filter before saving.');
+          return;
+        }
+        payload = { mode: 'manual', filters: collected.filters, soft_criteria: collected.soft_criteria };
+      } else {
+        const ta = document.getElementById('search-hero-input');
+        const text = (ta?.value || '').trim();
+        if (!text) { ta?.focus(); return; }
+        payload = { mode, text };
+      }
+
       hero.classList.add('compact');
+      if (manualPanel) manualPanel.classList.add('hidden');
       loading.style.display = '';
+      loading.firstElementChild.nextSibling.textContent =
+        mode === 'manual'
+          ? ' Finding matching candidates...'
+          : (mode === 'jd' ? ' Parsing job description and scoring candidates...' : ' Parsing query and scoring candidates...');
       results.innerHTML = '';
 
+      const market = state.currentMarket || '';
+      const url = '/api/search/run' + (market ? `?market=${encodeURIComponent(market)}` : '');
+
       try {
-        const data = await api('/api/search', { method: 'POST', body: { query } });
+        const data = await api(url, { method: 'POST', body: payload });
         loading.style.display = 'none';
-
-        if (data?.parsed) {
-          const p = data.parsed;
-          let html = '<div class="card"><div class="card-title">Parsed Search Query</div>';
-          html += '<table><tbody>';
-          if (p.skills_required?.length) html += `<tr><td style="font-weight:500">Skills</td><td>${esc(p.skills_required.join(', '))}</td></tr>`;
-          if (p.min_experience) html += `<tr><td style="font-weight:500">Min Experience</td><td>${p.min_experience} years</td></tr>`;
-          if (p.location) html += `<tr><td style="font-weight:500">Location</td><td>${esc(p.location)}</td></tr>`;
-          if (p.market) html += `<tr><td style="font-weight:500">Market</td><td>${esc(p.market)}</td></tr>`;
-          if (p.salary_range) html += `<tr><td style="font-weight:500">Salary Range</td><td>${esc(JSON.stringify(p.salary_range))}</td></tr>`;
-          html += '</tbody></table></div>';
-
-          // Show matching candidates if available
-          if (data.candidates?.length) {
-            html += `<div class="card"><div class="card-title">Matching Candidates (${data.candidates.length})</div>`;
-            html += '<div class="shortlist-grid">';
-            data.candidates.forEach(c => {
-              const initials = getInitials(c.name || 'Unknown');
-              html += `<div class="person-card">
-                <div class="person-card-header">
-                  <div class="person-avatar">${initials}</div>
-                  <div><div class="person-name">${esc(c.name || 'Unknown')}</div>
-                  <div class="person-role">${esc((c.skills || []).slice(0, 2).join(', '))}</div></div>
-                </div>
-                ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
-                ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
-              </div>`;
-            });
-            html += '</div></div>';
-          }
-
-          results.innerHTML = html;
-        } else {
-          results.innerHTML = '<div class="empty-state"><p>No results found for this query.</p></div>';
+        if (!data || data.status !== 'ok') {
+          results.innerHTML = `<div class="empty-state"><p>No results.</p></div>`;
+          return;
         }
+        let html = renderFiltersCard(data.filters || {});
+        html += renderCandidateCards(data.candidates || []);
+        if (typeof data.candidate_pool === 'number' && data.candidate_pool > 0 && !(data.candidates || []).length) {
+          html += `<div class="empty-state"><p>Scanned ${data.candidate_pool} candidates but none scored above the match threshold. Try loosening the filters.</p></div>`;
+        }
+        results.innerHTML = html;
       } catch (err) {
         loading.style.display = 'none';
         results.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;

@@ -477,6 +477,195 @@ def parse_search(payload: dict) -> dict:
         raise CoreError(422, str(e))
 
 
+SEARCH_RESULT_LIMIT = 30
+
+
+def _exp_years(cand: dict) -> float | None:
+    """Parse a candidate's total_experience text ('5 years', '3+', '7.5 yrs') to float."""
+    raw = cand.get("total_experience")
+    if not raw:
+        return None
+    import re
+    m = re.search(r"(\d+(?:\.\d+)?)", str(raw))
+    return float(m.group(1)) if m else None
+
+
+def _apply_python_filters(candidates: list[dict], filters: dict) -> list[dict]:
+    """Apply filters Supabase helpers can't cover: experience range, title keywords."""
+    min_exp = filters.get("min_years_experience")
+    max_exp = filters.get("max_years_experience")
+    title_kws = [t.lower() for t in (filters.get("title_keywords") or []) if t]
+    employer = (filters.get("current_employer") or "").strip().lower()
+    out = []
+    for c in candidates:
+        exp = _exp_years(c)
+        if min_exp is not None and exp is not None and exp < float(min_exp):
+            continue
+        if max_exp is not None and exp is not None and exp > float(max_exp):
+            continue
+        if title_kws:
+            title = (c.get("current_job_title") or "").lower()
+            if not any(kw in title for kw in title_kws):
+                continue
+        if employer:
+            emp = (c.get("current_employer") or "").lower()
+            if employer not in emp:
+                continue
+        out.append(c)
+    return out
+
+
+def _score_candidates_for_search(candidates: list[dict], filters: dict,
+                                 soft_criteria: list[dict]) -> list[dict]:
+    """Batch-score candidates 0-100 against parsed filters + soft criteria."""
+    if not candidates:
+        return []
+    req_lines = []
+    if filters.get("title_keywords"):
+        req_lines.append(f"Role: {', '.join(filters['title_keywords'])}")
+    if filters.get("must_have_skills"):
+        req_lines.append(f"Must-have skills: {', '.join(filters['must_have_skills'])}")
+    if filters.get("location"):
+        req_lines.append(f"Location: {filters['location']}")
+    if filters.get("min_years_experience") is not None:
+        req_lines.append(f"Min experience: {filters['min_years_experience']} years")
+    if filters.get("max_years_experience") is not None:
+        req_lines.append(f"Max experience: {filters['max_years_experience']} years")
+    if soft_criteria:
+        crit_block = "; ".join(
+            f"[{c.get('weight', 'preferred')}] {c.get('criterion', '')}"
+            for c in soft_criteria if c.get("criterion")
+        )
+        if crit_block:
+            req_lines.append(f"Soft criteria: {crit_block}")
+    req_summary = "\n".join(req_lines) or "Open search"
+
+    all_scores: dict[str, dict] = {}
+    for i in range(0, len(candidates), MATCH_BATCH_SIZE):
+        batch = candidates[i:i + MATCH_BATCH_SIZE]
+        cand_block = "\n\n".join(
+            _build_candidate_summary(c, j + 1) for j, c in enumerate(batch)
+        )
+        prompt = (
+            "You are a recruitment matching engine. Score each candidate 0-100 "
+            "for fit against this search. Consider skill synonyms (React = ReactJS, "
+            ".NET = dotnet), transferable experience, seniority, and location fit.\n\n"
+            f"SEARCH:\n{req_summary}\n\n"
+            f"CANDIDATES:\n{cand_block}\n\n"
+            "Return a JSON array. Each element must have:\n"
+            "- \"candidate_id\": exact ID string from above\n"
+            "- \"score\": integer 0-100\n"
+            "- \"reasoning\": one short sentence\n\n"
+            "Return ONLY the JSON array, no other text."
+        )
+        result_text = _call_claude(
+            "claude-sonnet-4-20250514",
+            "You are an expert IT recruitment matcher. Score candidates accurately.",
+            prompt, max_tokens=4096, endpoint="/search-run-scoring",
+        )
+        parsed = _parse_llm_json(result_text)
+        if not isinstance(parsed, list):
+            continue
+        cand_ids = {c["id"] for c in batch}
+        for entry in parsed:
+            if (isinstance(entry, dict)
+                    and entry.get("candidate_id") in cand_ids
+                    and isinstance(entry.get("score"), (int, float))
+                    and 0 <= entry["score"] <= 100):
+                all_scores[entry["candidate_id"]] = {
+                    "score": int(entry["score"]),
+                    "reasoning": str(entry.get("reasoning", "")),
+                }
+    return [
+        {"candidate_id": cid, **data}
+        for cid, data in all_scores.items()
+        if data["score"] >= MATCH_MIN_SCORE
+    ]
+
+
+def run_search(payload: dict, market: str | None) -> dict:
+    """Unified search handler: parses (for natural/jd modes) then fetches + ranks candidates.
+
+    Payload shape:
+        {mode: 'natural'|'jd'|'manual',
+         text?: str,                      # required for natural / jd
+         filters?: dict,                  # required for manual; parser output shape
+         soft_criteria?: list[dict]}      # optional for manual
+    """
+    if not isinstance(payload, dict):
+        raise CoreError(422, "payload must be a JSON object")
+    mode = (payload.get("mode") or "natural").lower()
+    if mode not in ("natural", "jd", "manual"):
+        raise CoreError(422, f"invalid mode: {mode}")
+
+    filters: dict = {}
+    soft_criteria: list[dict] = []
+
+    if mode in ("natural", "jd"):
+        text = payload.get("text") or payload.get("requirement_text") or ""
+        if not isinstance(text, str) or not text.strip():
+            raise CoreError(422, "text (string) is required for this mode")
+        try:
+            if mode == "jd":
+                parsed = search_parser.parse_jd_to_filters(
+                    text, _call_claude, _parse_llm_json)
+            else:
+                parsed = search_parser.parse_search_query(
+                    text, _call_claude, _parse_llm_json)
+        except ValueError as e:
+            raise CoreError(422, str(e))
+        filters = parsed.get("hard_filters", {}) or {}
+        soft_criteria = parsed.get("soft_criteria", []) or []
+    else:  # manual
+        filters = payload.get("filters") or {}
+        soft_criteria = payload.get("soft_criteria") or []
+        if not isinstance(filters, dict):
+            raise CoreError(422, "filters must be an object")
+
+    market = _normalize_market(market) or _normalize_market(filters.get("market"))
+
+    must_skills = filters.get("must_have_skills") or []
+    location = filters.get("location")
+    if must_skills:
+        candidates = db.search_candidates_by_skill(must_skills, market)
+    else:
+        candidates = db.search_candidates_broad(
+            market=market, location=location, limit=200)
+
+    candidates = _apply_python_filters(candidates, filters)
+
+    scored = _score_candidates_for_search(candidates, filters, soft_criteria)
+    scored.sort(key=lambda x: x["score"], reverse=True)
+
+    cand_by_id = {c["id"]: c for c in candidates}
+    results = []
+    for s in scored[:SEARCH_RESULT_LIMIT]:
+        c = cand_by_id.get(s["candidate_id"])
+        if not c:
+            continue
+        results.append({
+            "id": c["id"],
+            "name": c.get("name"),
+            "email": c.get("email"),
+            "skills": c.get("skills") or [],
+            "current_location": c.get("current_location"),
+            "current_job_title": c.get("current_job_title"),
+            "current_employer": c.get("current_employer"),
+            "total_experience": c.get("total_experience"),
+            "score": s["score"],
+            "reasoning": s["reasoning"],
+        })
+
+    return {
+        "status": "ok",
+        "mode": mode,
+        "filters": filters,
+        "soft_criteria": soft_criteria,
+        "candidate_pool": len(candidates),
+        "candidates": results,
+    }
+
+
 # ── Requirements ───────────────────────────────────────────────
 
 def list_requirements(market: str | None, status: str = "open",
