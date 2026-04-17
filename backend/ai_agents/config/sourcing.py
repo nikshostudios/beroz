@@ -31,9 +31,10 @@ async def source_apollo(skills: list[str], location: str,
     Raises RuntimeError with a descriptive message on non-200 responses so the
     caller can surface the reason instead of silently returning an empty list.
     """
-    api_key = os.environ.get("APOLLO_API_KEY")
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
     if not api_key:
-        raise RuntimeError("APOLLO_API_KEY not set")
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
     region = "Singapore" if market == "SG" else "India"
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -269,8 +270,8 @@ async def run_all_sources(requirement: dict) -> dict:
         tasks.append(("naukri", source_naukri_with_cookie(
             skills, exp_min, location, naukri_cookie)))
 
-    # Apollo — both markets (skipped if no API key)
-    if os.environ.get("APOLLO_API_KEY"):
+    # Apollo — both markets (skipped if no API key under either alias)
+    if os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API"):
         tasks.append(("apollo", source_apollo(skills, location, market)))
 
     # Run in parallel

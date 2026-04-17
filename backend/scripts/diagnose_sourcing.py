@@ -39,12 +39,15 @@ def _print_header(title: str) -> None:
 
 async def test_apollo() -> None:
     _print_header("Apollo.io  —  POST https://api.apollo.io/v1/mixed_people/search")
-    key = os.environ.get("APOLLO_API_KEY", "").strip()
+    key = (os.environ.get("APOLLO_API_KEY")
+           or os.environ.get("APOLLO_API") or "").strip()
     if not key:
-        print("[SKIP] APOLLO_API_KEY is not set in the environment.")
+        print("[SKIP] Neither APOLLO_API_KEY nor APOLLO_API is set.")
         print("       Set it in Railway → Variables (for prod) or export locally.")
         return
-    print(f"[OK]   APOLLO_API_KEY is set ({len(key)} chars).")
+    alias = ("APOLLO_API_KEY" if os.environ.get("APOLLO_API_KEY")
+             else "APOLLO_API")
+    print(f"[OK]   {alias} is set ({len(key)} chars).")
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
