@@ -737,18 +737,24 @@ DEFAULT_SOURCE_CAP_PER_REQ = 5
 
 async def _source_and_score_capped(req_id: str, cap: int) -> dict:
     """Source candidates for one requirement, score the just-sourced batch,
-    persist match_scores, and report how many ended up above threshold."""
+    persist match_scores, and report how many ended up above threshold.
+
+    The returned dict always includes ``channel_errors`` (possibly empty) so
+    the UI can show "Apollo 403" etc. rather than a silent zero.
+    """
     requirement = db.get_requirement_by_id(req_id)
     if not requirement:
         return {"requirement_id": req_id, "error": "not_found",
-                "sourced": 0, "top_count": 0}
+                "sourced": 0, "top_count": 0, "channel_errors": {}}
     try:
         source_results = await sourcing.run_all_sources(requirement)
     except Exception as e:
         log.exception("run_all_sources failed for %s", req_id)
         return {"requirement_id": req_id, "error": f"sourcing: {e}",
-                "sourced": 0, "top_count": 0}
+                "sourced": 0, "top_count": 0,
+                "channel_errors": {"_run": str(e)}}
     just_sourced = source_results.pop("upserted_candidates", [])
+    channel_errors = source_results.pop("channel_errors", {}) or {}
     if just_sourced:
         new_scores: list[dict] = []
         for i in range(0, len(just_sourced), MATCH_BATCH_SIZE):
@@ -767,6 +773,7 @@ async def _source_and_score_capped(req_id: str, cap: int) -> dict:
         "requirement_id": req_id,
         "sourced": source_results.get("total_unique", 0),
         "top_count": min(len(top), cap),
+        "channel_errors": channel_errors,
     }
 
 

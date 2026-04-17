@@ -26,24 +26,31 @@ log = logging.getLogger(__name__)
 
 async def source_apollo(skills: list[str], location: str,
                         market: str) -> list[dict]:
-    """Search Apollo.io People Search API for passive candidates."""
+    """Search Apollo.io People Search API for passive candidates.
+
+    Raises RuntimeError with a descriptive message on non-200 responses so the
+    caller can surface the reason instead of silently returning an empty list.
+    """
     api_key = os.environ.get("APOLLO_API_KEY")
     if not api_key:
-        log.warning("No APOLLO_API_KEY set — skipping Apollo search")
-        return []
+        raise RuntimeError("APOLLO_API_KEY not set")
     region = "Singapore" if market == "SG" else "India"
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.apollo.io/v1/mixed_people/search",
-            headers={"X-Api-Key": api_key},
+            headers={"X-Api-Key": api_key,
+                     "Cache-Control": "no-cache",
+                     "Content-Type": "application/json"},
             json={
                 "q_keywords": " ".join(skills),
                 "person_locations": [location or region],
                 "per_page": 50,
             },
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
 
     results = []
     for person in resp.json().get("people", []):
@@ -267,7 +274,16 @@ async def run_all_sources(requirement: dict) -> dict:
         tasks.append(("apollo", source_apollo(skills, location, market)))
 
     # Run in parallel
-    results_by_source = {}
+    results_by_source: dict[str, int] = {}
+    channel_errors: dict[str, str] = {}
+    if not tasks:
+        return {
+            "total_unique": 0,
+            "upserted_candidates": [],
+            "channel_errors": {"_no_channels":
+                "No sourcing channels configured — set APOLLO_API_KEY, "
+                "FOUNDIT_SESSION_COOKIE, and/or NAUKRI_SESSION_COOKIE."},
+        }
     gathered = await asyncio.gather(
         *[t[1] for t in tasks], return_exceptions=True)
 
@@ -275,8 +291,10 @@ async def run_all_sources(requirement: dict) -> dict:
     upserted_candidates = []
     for (source_name, _), result in zip(tasks, gathered):
         if isinstance(result, Exception):
-            log.error("Sourcing channel %s failed: %s", source_name, result)
+            err_msg = f"{type(result).__name__}: {result}"
+            log.error("Sourcing channel %s failed: %s", source_name, err_msg)
             results_by_source[source_name] = 0
+            channel_errors[source_name] = err_msg
             continue
 
         # Deduplicate and upsert — only count candidates actually saved to DB
@@ -301,10 +319,14 @@ async def run_all_sources(requirement: dict) -> dict:
         log.info("Sourcing %s: %d returned, %d saved to DB",
                  source_name, len(result), saved_count)
 
+    # total_unique was previously len(saved_emails), which ignored name-only
+    # upserts (Apollo often doesn't expose email, so every Apollo candidate
+    # was invisible to this counter). Fixed: use actual upsert count.
     return {
         **results_by_source,
-        "total_unique": len(saved_emails),
+        "total_unique": len(upserted_candidates),
         "upserted_candidates": upserted_candidates,
+        "channel_errors": channel_errors,
     }
 
 

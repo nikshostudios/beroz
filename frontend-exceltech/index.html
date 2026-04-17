@@ -2966,8 +2966,33 @@
         // Clear selection + reload (will show "Found N candidates" via matched_count)
         state.selectedRequirements.clear();
         await loadRequirements();
-        const totalFound = (data?.results || []).reduce((s, r) => s + (r.top_count || 0), 0);
-        alert(`Sourced ${ids.length} requirement${ids.length === 1 ? '' : 's'}. ${totalFound} candidate${totalFound === 1 ? '' : 's'} found above match threshold.`);
+
+        const results = data?.results || [];
+        const totalFound = results.reduce((s, r) => s + (r.top_count || 0), 0);
+        const totalSourced = results.reduce((s, r) => s + (r.sourced || 0), 0);
+
+        // Aggregate channel errors across the batch
+        const errMap = new Map();  // channel → array of requirement short-ids
+        results.forEach(r => {
+          Object.entries(r.channel_errors || {}).forEach(([ch, msg]) => {
+            if (!errMap.has(ch)) errMap.set(ch, []);
+            errMap.get(ch).push(msg);
+          });
+        });
+
+        let msg = `Sourced ${ids.length} requirement${ids.length === 1 ? '' : 's'}.\n`;
+        msg += `${totalSourced} candidate${totalSourced === 1 ? '' : 's'} saved to DB.\n`;
+        msg += `${totalFound} scored above the match threshold.`;
+        if (errMap.size) {
+          msg += '\n\nChannel issues:';
+          errMap.forEach((msgs, ch) => {
+            // Deduplicate error messages per channel
+            const unique = [...new Set(msgs)];
+            msg += `\n  • ${ch}: ${unique[0]}`;
+          });
+          msg += '\n\nFix these in Railway → Variables, then try again.';
+        }
+        alert(msg);
       } catch (err) {
         alert('Batch source failed: ' + err.message);
         document.querySelectorAll('[data-sourcing="1"]').forEach(el => el.remove());
