@@ -3148,6 +3148,16 @@ def api_close_requirement(req_id):
     return _ai_core_call(ai_core.close_requirement, req_id, role, email)
 
 
+@app.route("/api/requirements/wipe-all", methods=["POST"])
+def api_wipe_all_requirements():
+    """Destructively delete every requirement + dependent rows. TL only."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.wipe_all_requirements, role, email)
+
+
 @app.route("/api/requirements/<req_id>/source", methods=["POST"])
 def api_source_requirement(req_id):
     if not is_logged_in():

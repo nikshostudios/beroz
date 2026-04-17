@@ -1704,6 +1704,9 @@
                 <div class="market-tab" data-market="IN">India</div>
                 <div class="market-tab" data-market="SG">Singapore</div>
               </div>
+              <button class="btn-secondary" id="btn-wipe-reqs" style="display:none;border-color:#fecaca;color:#b91c1c" title="Delete every requirement — irreversible">
+                <span class="material-icons-outlined" style="font-size:16px">delete_sweep</span> Clear All
+              </button>
               <button class="btn-primary" id="btn-create-req">
                 <span class="material-icons-outlined">add</span> New Requirement
               </button>
@@ -2651,10 +2654,12 @@
       document.getElementById('settings-email').value = data.email;
       document.getElementById('settings-role-input').value = data.role === 'tl' ? 'Team Lead' : 'Recruiter';
 
-      // Show submissions nav for TL
+      // Show submissions nav + Clear All + Create button for TL
       if (data.role === 'tl') {
         document.getElementById('nav-submissions').style.display = '';
         document.getElementById('btn-create-req').style.display = '';
+        const wipeBtn = document.getElementById('btn-wipe-reqs');
+        if (wipeBtn) wipeBtn.style.display = '';
       } else {
         document.getElementById('btn-create-req').style.display = 'none';
       }
@@ -2911,6 +2916,36 @@
         if (btn) { btn.disabled = false; }
       }
     }
+
+    // Clear All (TL only) — destructive wipe of every requirement + dependents
+    document.getElementById('btn-wipe-reqs')?.addEventListener('click', async () => {
+      const count = state.requirements?.length || 0;
+      const typed = prompt(
+        `This will PERMANENTLY delete EVERY requirement and all related ` +
+        `screenings, match scores, submissions, outreach logs, candidate ` +
+        `details, and interviews. Candidates themselves are kept.\n\n` +
+        `Currently visible: ${count} requirement${count === 1 ? '' : 's'}.\n\n` +
+        `This cannot be undone without a Supabase restore.\n\n` +
+        `Type DELETE to confirm:`);
+      if (typed !== 'DELETE') return;
+      const btn = document.getElementById('btn-wipe-reqs');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loading-spinner" style="width:12px;height:12px;border-width:2px"></div> Wiping…';
+      try {
+        const data = await api('/api/requirements/wipe-all', { method: 'POST' });
+        const deleted = data?.deleted || {};
+        const lines = Object.entries(deleted).map(([t, n]) => `  • ${t}: ${n < 0 ? 'FAILED' : n}`).join('\n');
+        alert('Wipe complete.\n\n' + lines);
+        state.selectedRequirements?.clear();
+        await loadRequirements();
+      } catch (err) {
+        alert('Wipe failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
 
     // Scope toggle wiring
     document.querySelectorAll('#req-scope-tabs .scope-tab').forEach(tab => {

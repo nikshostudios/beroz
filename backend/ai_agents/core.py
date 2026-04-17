@@ -732,46 +732,100 @@ def close_requirement(req_id: str, user_role: str, user_email: str) -> dict:
     return {"status": "ok", "requirement_id": req_id}
 
 
+def wipe_all_requirements(user_role: str, user_email: str) -> dict:
+    """Destructively delete every requirement and its FK-linked children.
+
+    TL only. Candidates, projects, client_contacts are kept. This is the
+    "start fresh" operation agreed in the workflow spec — irreversible
+    without a Supabase point-in-time restore.
+    """
+    _require_role(user_role, ["tl"])
+    counts = db.wipe_all_requirements()
+    log.warning("[wipe] %s wiped all requirements: %s", user_email, counts)
+    return {"status": "ok", "deleted": counts}
+
+
 DEFAULT_SOURCE_CAP_PER_REQ = 5
 
 
 async def _source_and_score_capped(req_id: str, cap: int) -> dict:
-    """Source candidates for one requirement, score the just-sourced batch,
-    persist match_scores, and report how many ended up above threshold.
+    """Source candidates for one requirement, score, persist match_scores, and
+    report how many ended up above threshold.
 
-    The returned dict always includes ``channel_errors`` (possibly empty) so
-    the UI can show "Apollo 403" etc. rather than a silent zero.
+    Source pool = (external channels if any configured + available) UNION
+    (internal DB candidates for this market). The internal fallback means
+    Source Now still returns real results even when every external channel
+    is unavailable (expired cookies, free-plan lockouts, etc.).
+
+    The response includes a ``channel_errors`` map so the UI can show
+    "apollo: HTTP 403" etc. rather than a silent zero.
     """
     requirement = db.get_requirement_by_id(req_id)
     if not requirement:
         return {"requirement_id": req_id, "error": "not_found",
                 "sourced": 0, "top_count": 0, "channel_errors": {}}
+    channel_errors: dict[str, str] = {}
+    external_pool: list[dict] = []
     try:
         source_results = await sourcing.run_all_sources(requirement)
+        external_pool = source_results.pop("upserted_candidates", []) or []
+        channel_errors = source_results.pop("channel_errors", {}) or {}
+        external_sourced_count = source_results.get("total_unique", 0)
     except Exception as e:
         log.exception("run_all_sources failed for %s", req_id)
-        return {"requirement_id": req_id, "error": f"sourcing: {e}",
-                "sourced": 0, "top_count": 0,
-                "channel_errors": {"_run": str(e)}}
-    just_sourced = source_results.pop("upserted_candidates", [])
-    channel_errors = source_results.pop("channel_errors", {}) or {}
-    if just_sourced:
-        new_scores: list[dict] = []
-        for i in range(0, len(just_sourced), MATCH_BATCH_SIZE):
-            batch = just_sourced[i:i + MATCH_BATCH_SIZE]
-            new_scores.extend(_score_candidate_batch(batch, requirement))
-        if new_scores:
-            try:
-                db.upsert_match_scores(req_id, new_scores)
-            except Exception:
-                log.exception("upsert_match_scores failed for %s", req_id)
+        channel_errors["_run"] = str(e)
+        external_sourced_count = 0
+
+    # Always include an internal-DB slice to keep Source Now useful even when
+    # external channels contribute zero (free-tier Apollo, expired cookies).
+    internal_pool: list[dict] = []
+    try:
+        internal_pool = db.search_candidates_broad(
+            market=requirement.get("market"),
+            location=requirement.get("location"),
+            limit=100,
+        ) or []
+    except Exception as e:
+        log.exception("search_candidates_broad failed for %s", req_id)
+        channel_errors["internal_db"] = f"{type(e).__name__}: {e}"
+
+    # Merge + dedupe by id
+    pool_by_id: dict[str, dict] = {}
+    for c in external_pool + internal_pool:
+        cid = c.get("id")
+        if cid and cid not in pool_by_id:
+            pool_by_id[cid] = c
+    pool = list(pool_by_id.values())
+
+    # Only re-score pool members that don't already have a match_score row
+    # for this requirement (avoids redundant LLM cost on re-clicks).
+    already_scored: dict[str, dict] = {}
+    try:
+        already_scored = db.get_cached_match_scores(
+            req_id, [c["id"] for c in pool])
+    except Exception:
+        pass
+    to_score = [c for c in pool if c["id"] not in already_scored]
+    new_scores: list[dict] = []
+    for i in range(0, len(to_score), MATCH_BATCH_SIZE):
+        batch = to_score[i:i + MATCH_BATCH_SIZE]
+        new_scores.extend(_score_candidate_batch(batch, requirement))
+    if new_scores:
+        try:
+            db.upsert_match_scores(req_id, new_scores)
+        except Exception:
+            log.exception("upsert_match_scores failed for %s", req_id)
+
     try:
         top = db.get_match_scores_above(req_id, min_score=MATCH_MIN_SCORE)
     except Exception:
         top = []
+
     return {
         "requirement_id": req_id,
-        "sourced": source_results.get("total_unique", 0),
+        "sourced": external_sourced_count,
+        "internal_pool_size": len(internal_pool),
+        "scored_new": len(new_scores),
         "top_count": min(len(top), cap),
         "channel_errors": channel_errors,
     }
@@ -1053,6 +1107,13 @@ def create_requirement(payload: Any, user_role: str, user_email: str) -> dict:
                 skills = _parse_llm_json(parsed)
                 if isinstance(skills, list):
                     data["skills_required"] = skills
+
+    # TL-only requirements: if no recruiters were picked, the TL is keeping
+    # it for themselves. Store their own email in assigned_recruiters so the
+    # "My Requirements" filter picks it up for them (and still hides it from
+    # other recruiters).
+    if user_role == "tl" and not data.get("assigned_recruiters"):
+        data["assigned_recruiters"] = [user_email]
 
     req = db.insert_requirement(data)
     return {"requirement_id": req["id"], "sourcing_started": False,

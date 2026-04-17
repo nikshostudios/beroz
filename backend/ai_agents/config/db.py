@@ -243,6 +243,37 @@ def get_candidate_details(candidate_id: str,
     return rows[0] if rows else None
 
 
+# ── Admin: wipe all requirements (+ dependents) ──────────────
+
+def wipe_all_requirements() -> dict[str, int]:
+    """Hard-delete every requirement and every row that references one.
+
+    FKs on requirements don't cascade, so children must go first. Candidates,
+    projects, client_contacts etc. are untouched. Returns per-table delete
+    counts for the caller to display.
+    """
+    client = get_client()
+    counts: dict[str, int] = {}
+    # Use a dummy value "not-null-sentinel" — supabase-py requires a filter
+    # on delete(), so we use `neq` against an impossible id to match all rows.
+    IMPOSSIBLE_ID = "00000000-0000-0000-0000-000000000000"
+    for table in ("interview_tracker", "submissions", "outreach_log",
+                  "match_scores", "candidate_details", "screenings"):
+        try:
+            res = (client.table(table).delete()
+                   .neq("id", IMPOSSIBLE_ID).execute())
+            counts[table] = len(res.data or [])
+        except Exception:
+            counts[table] = -1  # failed; caller will see it in the summary
+    try:
+        res = (client.table("requirements").delete()
+               .neq("id", IMPOSSIBLE_ID).execute())
+        counts["requirements"] = len(res.data or [])
+    except Exception:
+        counts["requirements"] = -1
+    return counts
+
+
 # ── Shortlists + Notes (Phase 3) ────────────────────────────
 
 def toggle_shortlist(candidate_id: str, user_email: str,
