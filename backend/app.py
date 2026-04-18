@@ -3364,7 +3364,7 @@ def api_sequence_send():
 
 @app.route("/api/sequences", methods=["GET"])
 def api_sequences_list():
-    """List sequenced outreach emails for the logged-in user.
+    """List sequenced outreach emails for the logged-in user (legacy Phase 4).
 
     Query param: ?scope=mine (default) | all (TL only)
     """
@@ -3374,6 +3374,127 @@ def api_sequences_list():
     email = session.get("recruiter_email", "")
     scope = request.args.get("scope", "mine")
     return _ai_core_call(ai_core.list_sequences, role, email, scope)
+
+
+# ── Sequences v2 ─────────────────────────────────────────────
+
+@app.route("/api/sequences/list", methods=["GET"])
+def api_sequences_v2_list():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    scope = request.args.get("scope", "mine")
+    return _ai_core_call(ai_core.list_sequences_v2, role, email, scope)
+
+
+@app.route("/api/sequences/generate", methods=["POST"])
+def api_sequences_generate():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+
+    def _stream():
+        try:
+            yield from ai_core.generate_sequence_stream(payload, role, email)
+        except Exception as exc:
+            import json as _json
+            yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
+
+    return Response(
+        stream_with_context(_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/sequences/new", methods=["POST"])
+def api_sequences_create():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_sequence,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/sequences/<seq_id>", methods=["GET"])
+def api_sequences_detail(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_sequence_detail, seq_id, role, email)
+
+
+@app.route("/api/sequences/<seq_id>", methods=["PUT"])
+def api_sequences_update(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_sequence, seq_id,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/sequences/<seq_id>", methods=["DELETE"])
+def api_sequences_delete(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.delete_sequence, seq_id, role, email)
+
+
+@app.route("/api/sequences/<seq_id>/steps/<step_id>", methods=["PUT"])
+def api_sequences_update_step(seq_id, step_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_step, seq_id, step_id,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/sequences/<seq_id>/steps/reorder", methods=["POST"])
+def api_sequences_reorder_steps(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+    return _ai_core_call(ai_core.reorder_steps, seq_id,
+                         payload.get("step_ids") or [], role, email)
+
+
+@app.route("/api/sequences/<seq_id>/preview", methods=["POST"])
+def api_sequences_preview(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.preview_step1_for_candidates, seq_id,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/api/sequences/<seq_id>/enroll", methods=["POST"])
+def api_sequences_enroll(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.enroll_candidates, seq_id,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/internal/sequence-tick", methods=["POST"])
+def api_sequence_tick():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.sequence_tick,
+                         session.get("recruiter_role", "recruiter"))
 
 
 @app.route("/api/requirements/<req_id>/linkedin")

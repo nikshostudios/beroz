@@ -497,3 +497,77 @@ def delete_project(project_id: str) -> None:
 def clear_project_collaborators(project_id: str) -> None:
     (get_client().table("project_collaborators").delete()
      .eq("project_id", project_id).execute())
+
+
+# ── Sequences v2 ────────────────────────────────────────────
+
+def insert_sequence(data: dict) -> dict:
+    return get_client().table("sequences").insert(data).execute().data[0]
+
+
+def insert_sequence_steps(steps: list[dict]) -> list[dict]:
+    if not steps:
+        return []
+    return get_client().table("sequence_steps").insert(steps).execute().data
+
+
+def get_sequence_full(seq_id: str) -> dict | None:
+    rows = (get_client().table("sequences").select("*")
+            .eq("id", seq_id).execute().data)
+    if not rows:
+        return None
+    seq = rows[0]
+    seq["steps"] = (get_client().table("sequence_steps").select("*")
+                    .eq("sequence_id", seq_id)
+                    .order("position").execute().data) or []
+    return seq
+
+
+def list_sequences_for_user(created_by: str, role: str) -> list[dict]:
+    q = get_client().table("sequences").select("*")
+    if role != "tl":
+        q = q.eq("created_by", created_by)
+    q = q.neq("status", "archived")
+    return q.order("created_at", desc=True).execute().data or []
+
+
+def update_sequence_row(seq_id: str, patch: dict) -> dict:
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return (get_client().table("sequences").update(patch)
+            .eq("id", seq_id).execute().data[0])
+
+
+def update_step_row(step_id: str, patch: dict) -> dict:
+    return (get_client().table("sequence_steps").update(patch)
+            .eq("id", step_id).execute().data[0])
+
+
+def archive_sequence(seq_id: str) -> dict:
+    return update_sequence_row(seq_id, {"status": "archived"})
+
+
+def count_sequence_metrics(seq_id: str) -> dict:
+    """Return {active, replied, total, sent} run counts for one sequence."""
+    runs = (get_client().table("sequence_runs").select("id, status")
+            .eq("sequence_id", seq_id).execute().data) or []
+    total = len(runs)
+    active = sum(1 for r in runs if r["status"] == "active")
+    replied = sum(1 for r in runs if r["status"] == "replied")
+    # Count total sent step_sends
+    run_ids = [r["id"] for r in runs]
+    sent = 0
+    if run_ids:
+        sends = (get_client().table("sequence_step_sends").select("id")
+                 .in_("run_id", run_ids).eq("status", "sent").execute().data) or []
+        sent = len(sends)
+    return {"total": total, "active": active, "replied": replied, "sent": sent}
+
+
+def get_pending_replies(recruiter_email: str):
+    return (get_client().table("outreach_log")
+            .select("id, candidate_id, requirement_id, email_subject, "
+                    "outlook_thread_id, sent_at, sequence_run_id")
+            .eq("recruiter_email", recruiter_email)
+            .eq("reply_received", False)
+            .order("sent_at", desc=True)
+            .execute().data)
