@@ -893,12 +893,39 @@ def get_candidate_detail(candidate_id: str, user_role: str,
                        .execute().data)
     except Exception:
         submissions = []
+    try:
+        outreach_rows = (db.get_client().table("outreach_log")
+                         .select("id, requirement_id, recruiter_email, "
+                                 "email_subject, sent_at, reply_received, "
+                                 "replied_at, outlook_thread_id")
+                         .eq("candidate_id", candidate_id)
+                         .order("sent_at", desc=True)
+                         .execute().data) or []
+    except Exception:
+        outreach_rows = []
+    # Enrich outreach with requirement role_title + client_name for display
+    req_titles: dict[str, dict] = {}
+    req_ids_needed = list({o.get("requirement_id") for o in outreach_rows if o.get("requirement_id")})
+    if req_ids_needed:
+        try:
+            for r in (db.get_client().table("requirements")
+                      .select("id, role_title, client_name")
+                      .in_("id", req_ids_needed)
+                      .execute().data):
+                req_titles[r["id"]] = r
+        except Exception:
+            req_titles = {}
+    for o in outreach_rows:
+        meta = req_titles.get(o.get("requirement_id"), {})
+        o["requirement_role_title"] = meta.get("role_title")
+        o["requirement_client_name"] = meta.get("client_name")
     return {
         "candidate": cand,
         "details": detail_rows,
         "notes": notes,
         "shortlisted": shortlisted,
         "submissions": submissions,
+        "outreach": outreach_rows,
     }
 
 
@@ -992,6 +1019,93 @@ def add_note_to_candidate(candidate_id: str, payload: Any,
         raise CoreError(404, "Candidate not found")
     row = db.add_candidate_note(candidate_id, user_email, content.strip())
     return {"status": "ok", "note": row}
+
+
+def list_sequences(user_role: str, user_email: str,
+                   scope: str = "mine") -> dict:
+    """Return sequenced outreach emails grouped by requirement.
+
+    scope='mine' → only emails this recruiter sent (recruiter_email=user_email)
+    scope='all'  → TL sees everything, recruiter falls back to 'mine'
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    q = db.get_client().table("outreach_log").select(
+        "id, candidate_id, requirement_id, recruiter_email, email_subject, "
+        "sent_at, reply_received, replied_at, outlook_thread_id"
+    )
+    if scope == "all" and user_role == "tl":
+        pass  # no filter
+    else:
+        q = q.eq("recruiter_email", user_email)
+    try:
+        rows = q.order("sent_at", desc=True).limit(300).execute().data or []
+    except Exception:
+        rows = []
+
+    if not rows:
+        return {"sequences": [], "requirements": [], "count": 0}
+
+    cand_ids = list({r.get("candidate_id") for r in rows if r.get("candidate_id")})
+    req_ids = list({r.get("requirement_id") for r in rows if r.get("requirement_id")})
+
+    cand_by_id: dict[str, dict] = {}
+    req_by_id: dict[str, dict] = {}
+    if cand_ids:
+        try:
+            for c in (db.get_client().table("candidates")
+                      .select("id, name, email, current_job_title, current_employer")
+                      .in_("id", cand_ids).execute().data) or []:
+                cand_by_id[c["id"]] = c
+        except Exception:
+            cand_by_id = {}
+    if req_ids:
+        try:
+            for r in (db.get_client().table("requirements")
+                      .select("id, role_title, client_name, market, status")
+                      .in_("id", req_ids).execute().data) or []:
+                req_by_id[r["id"]] = r
+        except Exception:
+            req_by_id = {}
+
+    sequences = []
+    for o in rows:
+        cand = cand_by_id.get(o.get("candidate_id"), {})
+        req = req_by_id.get(o.get("requirement_id"), {})
+        sequences.append({
+            "id": o["id"],
+            "candidate_id": o.get("candidate_id"),
+            "candidate_name": cand.get("name"),
+            "candidate_email": cand.get("email"),
+            "candidate_role": cand.get("current_job_title"),
+            "requirement_id": o.get("requirement_id"),
+            "requirement_role_title": req.get("role_title"),
+            "requirement_client_name": req.get("client_name"),
+            "recruiter_email": o.get("recruiter_email"),
+            "email_subject": o.get("email_subject"),
+            "sent_at": o.get("sent_at"),
+            "reply_received": bool(o.get("reply_received")),
+            "replied_at": o.get("replied_at"),
+        })
+
+    # Summary per requirement for group headers
+    requirements_summary = []
+    for rid, req in req_by_id.items():
+        req_rows = [s for s in sequences if s["requirement_id"] == rid]
+        requirements_summary.append({
+            "id": rid,
+            "role_title": req.get("role_title"),
+            "client_name": req.get("client_name"),
+            "status": req.get("status"),
+            "total_sent": len(req_rows),
+            "replies": sum(1 for s in req_rows if s["reply_received"]),
+        })
+    requirements_summary.sort(key=lambda x: x.get("total_sent", 0), reverse=True)
+
+    return {
+        "sequences": sequences,
+        "requirements": requirements_summary,
+        "count": len(sequences),
+    }
 
 
 def list_user_shortlists(user_role: str, user_email: str) -> dict:

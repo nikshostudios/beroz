@@ -3270,6 +3270,20 @@ def api_sequence_send():
                          request.get_json(silent=True), role, email)
 
 
+@app.route("/api/sequences", methods=["GET"])
+def api_sequences_list():
+    """List sequenced outreach emails for the logged-in user.
+
+    Query param: ?scope=mine (default) | all (TL only)
+    """
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    scope = request.args.get("scope", "mine")
+    return _ai_core_call(ai_core.list_sequences, role, email, scope)
+
+
 @app.route("/api/requirements/<req_id>/linkedin")
 def api_linkedin_string(req_id):
     if not is_logged_in():

@@ -1778,6 +1778,36 @@
         <!-- SEQUENCES / OUTREACH -->
         <div class="page" id="page-sequences">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h3 style="font-size:16px;font-weight:600">Sequences</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div class="tabs" id="seq-scope-tabs" style="margin:0">
+                <div class="tab active" data-seq-scope="mine">My sequences</div>
+                <div class="tab" data-seq-scope="all" id="seq-scope-all" style="display:none">All sequences</div>
+              </div>
+              <button class="btn-secondary" id="btn-refresh-sequences">
+                <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="tabs" style="margin-bottom:16px">
+            <div class="tab active" data-seq-filter="all">All</div>
+            <div class="tab" data-seq-filter="awaiting">Awaiting reply</div>
+            <div class="tab" data-seq-filter="replied">Replied</div>
+          </div>
+          <div class="stats-grid" id="seq-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+            <div class="stat-card"><div class="stat-label">Emails sent</div><div class="stat-value" id="seq-stat-sent">--</div></div>
+            <div class="stat-card"><div class="stat-label">Replies received</div><div class="stat-value" id="seq-stat-replied">--</div></div>
+            <div class="stat-card"><div class="stat-label">Reply rate</div><div class="stat-value" id="seq-stat-rate">--</div></div>
+          </div>
+          <div id="seq-loading-list" class="loading-state" style="display:none">
+            <div class="loading-spinner"></div> Loading sequences…
+          </div>
+          <div id="seq-groups"></div>
+        </div>
+
+        <!-- LEGACY OUTREACH & INBOX (kept as a separate route for now) -->
+        <div class="page" id="page-outreach">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <h3 style="font-size:16px;font-weight:600">Outreach & Inbox</h3>
           </div>
           <div class="tabs" style="margin-bottom:20px">
@@ -2454,7 +2484,7 @@
           <div class="cand-right-tabs" id="cand-right-tabs">
             <button class="cand-right-tab active" data-right-tab="notes" type="button">Notes</button>
             <button class="cand-right-tab" data-right-tab="sequences" type="button">Sequences</button>
-            <button class="cand-right-tab cand-tab-disabled" data-right-tab="activity" type="button" disabled>Activity</button>
+            <button class="cand-right-tab" data-right-tab="activity" type="button">Activity</button>
             <button class="cand-right-tab cand-tab-disabled" data-right-tab="projects" type="button" disabled>Projects</button>
             <button class="cand-right-tab cand-tab-disabled" data-right-tab="tasks" type="button" disabled>Tasks</button>
           </div>
@@ -2471,7 +2501,16 @@
               <div class="cand-notes-list" id="cand-notes-list"></div>
             </div>
             <div class="cand-right-panel" data-right-tab="sequences" id="cand-sequences-panel">
-              <div class="empty-state"><p style="color:var(--text-secondary);font-size:13px">No active sequences — Phase 4 will wire this up.</p></div>
+              <div id="cand-sequences-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <div style="font-size:12px;color:var(--text-secondary)">Email history for this candidate</div>
+                <button type="button" class="btn-secondary" id="cand-new-sequence-btn" style="font-size:12px;padding:6px 10px;display:none">
+                  <span class="material-icons-outlined" style="font-size:14px">forward_to_inbox</span> New sequence
+                </button>
+              </div>
+              <div id="cand-sequences-list"></div>
+            </div>
+            <div class="cand-right-panel" data-right-tab="activity" id="cand-activity-panel">
+              <div id="cand-activity-list" style="display:flex;flex-direction:column;gap:10px"></div>
             </div>
           </div>
         </div>
@@ -2784,6 +2823,7 @@
       if (pageId === 'contacts') loadContacts();
       if (pageId === 'analytics') loadPipeline();
       if (pageId === 'submissions') loadSubmissions();
+      if (pageId === 'sequences') loadSequencesPage();
 
       renderProjectContext();
     }
@@ -3505,6 +3545,157 @@
 
       // Notes
       renderNotes(notes);
+
+      // Sequences (email history for this candidate)
+      renderCandidateSequences(data?.outreach || []);
+
+      // Activity timeline (merges notes, sequences, submissions in chrono order)
+      renderCandidateActivity({
+        notes,
+        outreach: data?.outreach || [],
+        submissions: currentCandidateSubmissions,
+      });
+    }
+
+    function renderCandidateSequences(outreach) {
+      const list = document.getElementById('cand-sequences-list');
+      const newBtn = document.getElementById('cand-new-sequence-btn');
+      // Show New-sequence button only when we have both a requirement context
+      // and the candidate has an email on file
+      const candEmailEl = document.getElementById('cand-panel-overview')?.innerText || '';
+      const canSend = !!currentCandidateReqId; // further gated at click time
+      newBtn.style.display = canSend ? '' : 'none';
+
+      if (!outreach.length) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><span class="material-icons-outlined" style="font-size:32px;color:var(--text-muted)">mail_outline</span><div style="color:var(--text-secondary);font-size:13px;margin-top:8px">No emails sent to this candidate yet.</div></div>';
+        return;
+      }
+      list.innerHTML = outreach.map(o => {
+        const when = o.sent_at ? new Date(o.sent_at).toLocaleString() : '';
+        const repliedWhen = o.replied_at ? new Date(o.replied_at).toLocaleString() : '';
+        const statusTag = o.reply_received
+          ? `<span class="tag" style="background:#dcfce7;color:#166534;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">reply</span> Replied${repliedWhen ? ' · ' + esc(repliedWhen) : ''}</span>`
+          : `<span class="tag" style="background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">schedule_send</span> Awaiting reply</span>`;
+        const reqMeta = o.requirement_role_title
+          ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">For: ${esc(o.requirement_role_title)}${o.requirement_client_name ? ' · ' + esc(o.requirement_client_name) : ''}</div>`
+          : '';
+        return `
+          <div class="cand-note-card" style="padding:12px 14px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">
+              <div style="font-weight:600;font-size:13px;word-break:break-word">${esc(o.email_subject || '(no subject)')}</div>
+              ${statusTag}
+            </div>
+            ${reqMeta}
+            <div class="cand-note-meta" style="margin-top:6px">
+              <span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">send</span>
+              ${esc(o.recruiter_email || '—')} · ${esc(when)}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCandidateActivity({notes = [], outreach = [], submissions = []}) {
+      const list = document.getElementById('cand-activity-list');
+      if (!list) return;
+      const items = [];
+      notes.forEach(n => {
+        items.push({
+          ts: n.created_at,
+          type: 'note',
+          icon: 'edit_note',
+          color: '#64748b',
+          title: 'Note added',
+          detail: (n.content || '').slice(0, 200),
+          meta: n.user_email || '',
+        });
+      });
+      outreach.forEach(o => {
+        items.push({
+          ts: o.sent_at,
+          type: 'email',
+          icon: 'send',
+          color: '#7c3aed',
+          title: o.email_subject ? `Email sent — ${o.email_subject}` : 'Email sent',
+          detail: o.requirement_role_title ? `For ${o.requirement_role_title}${o.requirement_client_name ? ' · ' + o.requirement_client_name : ''}` : '',
+          meta: o.recruiter_email || '',
+        });
+        if (o.reply_received) {
+          items.push({
+            ts: o.replied_at || o.sent_at,
+            type: 'reply',
+            icon: 'reply',
+            color: '#16a34a',
+            title: 'Candidate replied',
+            detail: o.email_subject ? `Thread: ${o.email_subject}` : '',
+            meta: '',
+          });
+        }
+      });
+      submissions.forEach(s => {
+        items.push({
+          ts: s.submitted_at,
+          type: 'submission',
+          icon: 'outbox',
+          color: '#f59e0b',
+          title: 'Submitted to TL',
+          detail: s.placement_type ? `Placement: ${s.placement_type}` : '',
+          meta: s.submitted_by_recruiter || '',
+        });
+        if (s.tl_approved) {
+          items.push({
+            ts: s.tl_approved_at || s.submitted_at,
+            type: 'tl_approval',
+            icon: 'verified',
+            color: '#16a34a',
+            title: 'TL approved',
+            detail: '',
+            meta: '',
+          });
+        }
+        if (s.sent_to_client_at) {
+          items.push({
+            ts: s.sent_to_client_at,
+            type: 'client_sent',
+            icon: 'mark_email_read',
+            color: '#2563eb',
+            title: 'Sent to client',
+            detail: '',
+            meta: '',
+          });
+        }
+        if (s.final_status === 'rejected_by_tl') {
+          items.push({
+            ts: s.submitted_at,
+            type: 'tl_rejection',
+            icon: 'block',
+            color: '#dc2626',
+            title: 'Rejected by TL',
+            detail: s.remarks || '',
+            meta: '',
+          });
+        }
+      });
+      items.sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+      if (!items.length) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><span class="material-icons-outlined" style="font-size:32px;color:var(--text-muted)">history</span><div style="color:var(--text-secondary);font-size:13px;margin-top:8px">No activity yet. Shortlist, send a sequence, or add a note to see events here.</div></div>';
+        return;
+      }
+      list.innerHTML = items.map(i => {
+        const when = i.ts ? new Date(i.ts).toLocaleString() : '';
+        return `
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:${i.color}1a;color:${i.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
+              <span class="material-icons-outlined" style="font-size:16px">${i.icon}</span>
+            </div>
+            <div style="flex:1;min-width:0;border-left:1px solid var(--border-color);padding:0 0 0 12px;margin-left:-14px;margin-top:12px">
+              <div style="font-size:13px;font-weight:600">${esc(i.title)}</div>
+              ${i.detail ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;word-break:break-word">${esc(i.detail)}</div>` : ''}
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${esc(i.meta)}${i.meta && when ? ' · ' : ''}${esc(when)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function renderNotes(notes) {
@@ -3542,6 +3733,18 @@
       } catch (err) {
         alert('Could not update shortlist: ' + err.message);
       }
+    });
+
+    // New sequence button inside the slide-over — launches the existing
+    // sequence modal pre-filled with this single candidate.
+    document.getElementById('cand-new-sequence-btn')?.addEventListener('click', () => {
+      if (!currentCandidateId || !currentCandidateReqId) return;
+      const req = state.requirements?.find(r => r.id === currentCandidateReqId)
+                 || state.searchRequirementContext;
+      const ctx = req
+        ? { id: currentCandidateReqId, role_title: req.role_title, client_name: req.client_name }
+        : { id: currentCandidateReqId, role_title: '', client_name: '' };
+      openSequenceModal(ctx, [currentCandidateId]);
     });
 
     // Submit to TL — open modal
@@ -4158,6 +4361,135 @@
     }
 
     document.getElementById('btn-refresh-submissions')?.addEventListener('click', loadSubmissions);
+
+    // ══════════════════════════════════
+    // ── Sequences page (list view) ──
+    // ══════════════════════════════════
+
+    let sequencesCache = [];
+    let sequencesReqsCache = [];
+    let sequencesScope = 'mine';
+    let sequencesFilter = 'all';
+
+    async function loadSequencesPage() {
+      // Show TL-only "All sequences" tab
+      const allTab = document.getElementById('seq-scope-all');
+      if (state.user?.role === 'tl' && allTab) allTab.style.display = '';
+
+      const loading = document.getElementById('seq-loading-list');
+      const groups = document.getElementById('seq-groups');
+      loading.style.display = '';
+      groups.innerHTML = '';
+      try {
+        const data = await api(`/api/sequences?scope=${encodeURIComponent(sequencesScope)}`);
+        sequencesCache = data?.sequences || [];
+        sequencesReqsCache = data?.requirements || [];
+        renderSequencesPage();
+      } catch (err) {
+        groups.innerHTML = `<div class="empty-state"><p>Error loading sequences: ${esc(err.message)}</p></div>`;
+      } finally {
+        loading.style.display = 'none';
+      }
+    }
+
+    function renderSequencesPage() {
+      const groups = document.getElementById('seq-groups');
+      let filtered = sequencesCache;
+      if (sequencesFilter === 'awaiting') filtered = filtered.filter(s => !s.reply_received);
+      else if (sequencesFilter === 'replied') filtered = filtered.filter(s => s.reply_received);
+
+      // Stats
+      const totalSent = sequencesCache.length;
+      const totalReplied = sequencesCache.filter(s => s.reply_received).length;
+      const rate = totalSent ? Math.round((totalReplied / totalSent) * 100) : 0;
+      document.getElementById('seq-stat-sent').textContent = totalSent;
+      document.getElementById('seq-stat-replied').textContent = totalReplied;
+      document.getElementById('seq-stat-rate').textContent = totalSent ? `${rate}%` : '—';
+
+      if (!filtered.length) {
+        groups.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">mail_outline</span><p>No sequences yet. Pick candidates from a requirement and send a sequence to see them here.</p></div>';
+        return;
+      }
+
+      // Group by requirement_id
+      const byReq = new Map();
+      filtered.forEach(s => {
+        const key = s.requirement_id || '__none__';
+        if (!byReq.has(key)) byReq.set(key, []);
+        byReq.get(key).push(s);
+      });
+      const reqOrder = [...byReq.keys()].sort((a, b) => {
+        const aLatest = Math.max(...byReq.get(a).map(s => new Date(s.sent_at || 0).getTime()));
+        const bLatest = Math.max(...byReq.get(b).map(s => new Date(s.sent_at || 0).getTime()));
+        return bLatest - aLatest;
+      });
+
+      groups.innerHTML = reqOrder.map(reqKey => {
+        const rows = byReq.get(reqKey);
+        const first = rows[0];
+        const header = reqKey === '__none__'
+          ? 'Uncategorised'
+          : `${esc(first.requirement_role_title || 'Untitled role')}${first.requirement_client_name ? ' · ' + esc(first.requirement_client_name) : ''}`;
+        const replies = rows.filter(r => r.reply_received).length;
+        return `
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+              <div>${header}</div>
+              <div style="font-size:12px;color:var(--text-secondary);font-weight:400">${rows.length} sent · ${replies} replied</div>
+            </div>
+            <div class="seq-thread-list" style="display:flex;flex-direction:column;gap:8px">
+              ${rows.map(r => renderSequenceRow(r)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSequenceRow(r) {
+      const when = r.sent_at ? new Date(r.sent_at).toLocaleString() : '';
+      const statusTag = r.reply_received
+        ? `<span class="tag" style="background:#dcfce7;color:#166534;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">reply</span> Replied</span>`
+        : `<span class="tag" style="background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">schedule_send</span> Awaiting</span>`;
+      return `
+        <div class="seq-row" data-candidate-id="${esc(r.candidate_id || '')}" data-requirement-id="${esc(r.requirement_id || '')}" style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;display:flex;justify-content:space-between;gap:12px;cursor:pointer" onmouseover="this.style.background='#faf7ff'" onmouseout="this.style.background='#fff'">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:13px">${esc(r.candidate_name || 'Unknown')}${r.candidate_role ? ` <span style="color:var(--text-muted);font-weight:400">· ${esc(r.candidate_role)}</span>` : ''}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;word-break:break-word">${esc(r.email_subject || '(no subject)')}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">From ${esc(r.recruiter_email || '—')} · ${esc(when)}</div>
+          </div>
+          <div style="align-self:center">${statusTag}</div>
+        </div>
+      `;
+    }
+
+    document.getElementById('btn-refresh-sequences')?.addEventListener('click', loadSequencesPage);
+
+    document.querySelectorAll('[data-seq-scope]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-seq-scope]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        sequencesScope = tab.dataset.seqScope;
+        loadSequencesPage();
+      });
+    });
+
+    document.querySelectorAll('[data-seq-filter]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-seq-filter]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        sequencesFilter = tab.dataset.seqFilter;
+        renderSequencesPage();
+      });
+    });
+
+    // Clicking a sequence row opens the candidate slide-over with the requirement context
+    document.addEventListener('click', (e) => {
+      const row = e.target.closest('.seq-row[data-candidate-id]');
+      if (!row) return;
+      const cid = row.dataset.candidateId;
+      const rid = row.dataset.requirementId || null;
+      if (cid) openCandidateDetail(cid, { requirementId: rid });
+    });
 
     // ══════════════════════════════════
     // ── Search ──
