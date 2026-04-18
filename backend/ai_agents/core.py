@@ -55,6 +55,14 @@ class CoreError(Exception):
         super().__init__(message)
 
 
+SHORTLIST_SCHEMA_ERROR = (
+    "Supabase is missing shortlist tables (`candidate_shortlists` / "
+    "`candidate_notes`). Run "
+    "`backend/ai_agents/data/phase3_shortlists_notes.sql` in the SQL Editor "
+    "for the same Supabase project your app is using."
+)
+
+
 # ── Init ───────────────────────────────────────────────────────
 
 def _load_md_files(directory: str) -> dict[str, str]:
@@ -92,6 +100,11 @@ def init() -> None:
 def _require_role(role: str, allowed: list[str]) -> None:
     if role not in allowed:
         raise CoreError(403, f"Role '{role}' not allowed. Need: {allowed}")
+
+
+def _is_missing_table_error(exc: Exception, table_name: str) -> bool:
+    msg = str(exc)
+    return "PGRST205" in msg and table_name in msg
 
 
 # ── Async helper ───────────────────────────────────────────────
@@ -546,6 +559,12 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
         cand_block = "\n\n".join(
             _build_candidate_summary(c, j + 1) for j, c in enumerate(batch)
         )
+        criteria_names = [c.get("criterion", "") for c in soft_criteria if c.get("criterion")]
+        criterion_matches_instruction = (
+            "\n- \"criterion_matches\": object mapping each soft criterion name to true/false "
+            f"(criteria: {criteria_names})"
+            if criteria_names else ""
+        )
         prompt = (
             "You are a recruitment matching engine. Score each candidate 0-100 "
             "for fit against this search. Consider skill synonyms (React = ReactJS, "
@@ -555,7 +574,7 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
             "Return a JSON array. Each element must have:\n"
             "- \"candidate_id\": exact ID string from above\n"
             "- \"score\": integer 0-100\n"
-            "- \"reasoning\": one short sentence\n\n"
+            f"- \"reasoning\": one short sentence{criterion_matches_instruction}\n\n"
             "Return ONLY the JSON array, no other text."
         )
         result_text = _call_claude(
@@ -572,9 +591,11 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
                     and entry.get("candidate_id") in cand_ids
                     and isinstance(entry.get("score"), (int, float))
                     and 0 <= entry["score"] <= 100):
+                cm = entry.get("criterion_matches")
                 all_scores[entry["candidate_id"]] = {
                     "score": int(entry["score"]),
                     "reasoning": str(entry.get("reasoning", "")),
+                    "criterion_matches": cm if isinstance(cm, dict) else {},
                 }
     return [
         {"candidate_id": cid, **data}
@@ -654,6 +675,7 @@ def run_search(payload: dict, market: str | None) -> dict:
             "total_experience": c.get("total_experience"),
             "score": s["score"],
             "reasoning": s["reasoning"],
+            "criterion_matches": s.get("criterion_matches") or {},
         })
 
     return {
@@ -1002,7 +1024,12 @@ def toggle_shortlist_candidate(candidate_id: str, payload: Any,
         raw = payload.get("note")
         if isinstance(raw, str) and raw.strip():
             note = raw.strip()
-    result = db.toggle_shortlist(candidate_id, user_email, note=note)
+    try:
+        result = db.toggle_shortlist(candidate_id, user_email, note=note)
+    except Exception as exc:
+        if _is_missing_table_error(exc, "candidate_shortlists"):
+            raise CoreError(500, SHORTLIST_SCHEMA_ERROR) from exc
+        raise
     return {"status": "ok", **result}
 
 
@@ -1017,7 +1044,12 @@ def add_note_to_candidate(candidate_id: str, payload: Any,
     cand = db.get_candidate_by_id(candidate_id)
     if not cand:
         raise CoreError(404, "Candidate not found")
-    row = db.add_candidate_note(candidate_id, user_email, content.strip())
+    try:
+        row = db.add_candidate_note(candidate_id, user_email, content.strip())
+    except Exception as exc:
+        if _is_missing_table_error(exc, "candidate_notes"):
+            raise CoreError(500, SHORTLIST_SCHEMA_ERROR) from exc
+        raise
     return {"status": "ok", "note": row}
 
 
@@ -1110,7 +1142,12 @@ def list_sequences(user_role: str, user_email: str,
 
 def list_user_shortlists(user_role: str, user_email: str) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
-    rows = db.list_shortlists_for_user(user_email)
+    try:
+        rows = db.list_shortlists_for_user(user_email)
+    except Exception as exc:
+        if _is_missing_table_error(exc, "candidate_shortlists"):
+            raise CoreError(500, SHORTLIST_SCHEMA_ERROR) from exc
+        raise
     cand_ids = [r.get("candidates", {}).get("id")
                 for r in rows if r.get("candidates", {}).get("id")]
     # Batch-fetch latest submission per candidate so the UI can show

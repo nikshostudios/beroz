@@ -475,6 +475,20 @@
     .score-mid { background: #fff3e0; color: #e65100; }
     .score-low { background: #fce4ec; color: #c62828; }
 
+    .results-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .view-toggle    { display:flex; gap:4px; }
+    .view-toggle-btn{ width:28px; height:28px; border-radius:6px; border:1px solid var(--border-color); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-muted); }
+    .view-toggle-btn.active { background:#f3eeff; border-color:var(--brand-purple); color:var(--brand-purple); }
+
+    .synopsis-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; }
+    .person-card-synopsis { padding:14px; }
+    .person-card-synopsis .person-reasoning { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; font-size:12px; color:var(--text-secondary); margin-top:8px; }
+
+    .search-table-row { cursor:pointer; }
+    .search-table-row:hover { background:#faf7ff; }
+    .criterion-cell { text-align:center; }
+    .criterion-cell .material-icons-outlined { font-size:18px; color:#22c55e; }
+
     /* ── Market Tabs ── */
     .market-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
     .market-tab {
@@ -1097,6 +1111,12 @@
       cursor: pointer;
     }
     .seq-action-bar .seq-clear:hover { color: #fff; }
+    .seq-action-bar .seq-go-secondary {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .seq-action-bar .seq-go-secondary:hover { background: rgba(255,255,255,0.1); }
 
     /* Sequence email preview cards */
     .seq-email-card {
@@ -2012,12 +2032,20 @@
 
           <div class="seq-action-bar hidden" id="seq-action-bar">
             <span class="material-icons-outlined" style="font-size:16px">check_circle</span>
-            <span><span id="seq-count">0</span> candidates selected</span>
-            <button type="button" class="seq-go" id="seq-add-btn">
-              <span class="material-icons-outlined" style="font-size:14px">mail_outline</span>
+            <span><span id="seq-count">0</span> selected</span>
+            <button id="seq-shortlist-btn" type="button" class="seq-go seq-go-secondary">
+              <span class="material-icons-outlined" style="font-size:14px" id="seq-shortlist-icon">star_outline</span>
+              <span id="seq-shortlist-label">Shortlist</span>
+            </button>
+            <button id="seq-add-btn" type="button" class="seq-go">
+              <span class="material-icons-outlined" style="font-size:14px">send</span>
               Add to Sequence
             </button>
-            <button type="button" class="seq-clear" id="seq-clear-btn">Clear</button>
+            <button id="seq-download-btn" type="button" class="seq-go seq-go-secondary">
+              <span class="material-icons-outlined" style="font-size:14px">download</span>
+              Download
+            </button>
+            <button id="seq-clear-btn" type="button" class="seq-clear">Clear</button>
           </div>
 
           <div class="search-hero" id="search-hero">
@@ -2663,6 +2691,23 @@
     </div>
   </div>
 
+  <!-- Download modal -->
+  <div class="modal-overlay hidden" id="modal-download">
+    <div class="modal">
+      <h3>Download candidates</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Choose a format to export the selected candidates.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="modal-download-csv-btn">
+          <span class="material-icons-outlined" style="font-size:16px">table_chart</span> CSV
+        </button>
+        <button type="button" class="btn-secondary" id="modal-download-pdf-btn">
+          <span class="material-icons-outlined" style="font-size:16px">picture_as_pdf</span> PDF
+        </button>
+        <button type="button" class="btn-secondary" onclick="document.getElementById('modal-download').classList.add('hidden')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ══════════════════════════════════════════════════════
     // ExcelTech Recruitment Agent — Frontend Application
@@ -2682,6 +2727,7 @@
       activeProject: null,   // null = "All projects" view; otherwise the project id
       // Search
       searchMode: 'natural',
+      searchViewMode: localStorage.getItem('searchViewMode') || 'synopsis',
       // Requirements scope: 'mine' (recruiter default) or 'all' (transparency toggle / TL default)
       requirementsScope: 'mine',
       // Set of selected requirement ids for batch Source Now
@@ -3146,51 +3192,26 @@
       api(`/api/requirements/${ctx.id}/candidates`).then(data => {
         const cands = data?.candidates || [];
         state.sourcedCandidates = cands;
-        results.innerHTML = renderSourcedCandidateCards(cands);
-        // Wire checkboxes
-        results.querySelectorAll('.seq-cand-check').forEach(cb => {
-          cb.addEventListener('change', (e) => {
-            e.stopPropagation();
-            const id = cb.dataset.candId;
-            if (cb.checked) state.selectedSequenceCandidates.add(id);
-            else state.selectedSequenceCandidates.delete(id);
-            cb.closest('.person-card')?.classList.toggle('selected', cb.checked);
-            updateSeqActionBar();
-          });
-        });
+        const softCriteria = data?.soft_criteria || [];
+        results.innerHTML = renderSearchResults(cands, softCriteria, { withCheckboxes: true });
+        wireSelectionCheckboxes(results);
       }).catch(err => {
         results.innerHTML = `<div class="empty-state"><p>Error loading candidates: ${esc(err.message)}</p></div>`;
       });
     }
 
-    function renderSourcedCandidateCards(candidates) {
-      if (!candidates?.length) {
-        return '<div class="empty-state"><p>No candidates scored above the threshold. Run Source Now again to re-score the pool.</p></div>';
-      }
-      const reqId = state.searchRequirementContext?.id || '';
-      let html = `<div class="card"><div class="card-title">Sourced candidates (${candidates.length})</div>`;
-      html += '<div class="shortlist-grid">';
-      candidates.forEach(c => {
-        const initials = getInitials(c.name || 'Unknown');
-        const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
-        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" ${reqId ? `data-requirement-id="${esc(reqId)}"` : ''} style="cursor:pointer;position:relative">
-          <input type="checkbox" class="seq-cand-check req-card-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()">
-          <div class="person-card-header" style="padding-left:28px">
-            <div class="person-avatar">${initials}</div>
-            <div style="flex:1;min-width:0">
-              <div class="person-name">${esc(c.name || 'Unknown')}</div>
-              <div class="person-role">${esc(primary)}</div>
-            </div>
-            ${typeof c.score === 'number' ? `<span class="person-score">${c.score}</span>` : ''}
-          </div>
-          ${c.current_employer ? `<div class="person-card-detail"><span class="material-icons-outlined">business</span> ${esc(c.current_employer)}</div>` : ''}
-          ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
-          ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
-          ${c.email ? `<div class="person-card-detail"><span class="material-icons-outlined">email</span> ${esc(c.email)}</div>` : ''}
-          ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
-        </div>`;
+    function wireSelectionCheckboxes(container) {
+      container.querySelectorAll('.seq-cand-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const id = cb.dataset.candId;
+          if (cb.checked) state.selectedSequenceCandidates.add(id);
+          else state.selectedSequenceCandidates.delete(id);
+          const card = cb.closest('.person-card') || cb.closest('tr');
+          card?.classList.toggle('selected', cb.checked);
+          updateSeqActionBar();
+        });
       });
-      return html + '</div></div>';
     }
 
     function updateSeqActionBar() {
@@ -3199,12 +3220,24 @@
       if (count === 0) { bar.classList.add('hidden'); return; }
       bar.classList.remove('hidden');
       document.getElementById('seq-count').textContent = count;
+
+      // Compute shortlist toggle label
+      const ids = Array.from(state.selectedSequenceCandidates);
+      const pool = state.sourcedCandidates || state._lastSearchData?.candidates || [];
+      const allShortlisted = ids.length > 0 && ids.every(id => {
+        const c = pool.find(x => x.id === id);
+        return c && c.shortlisted;
+      });
+      const label = document.getElementById('seq-shortlist-label');
+      const icon = document.getElementById('seq-shortlist-icon');
+      if (label) label.textContent = allShortlisted ? 'Unshortlist' : 'Shortlist';
+      if (icon) icon.textContent = allShortlisted ? 'star' : 'star_outline';
     }
 
     document.getElementById('seq-clear-btn')?.addEventListener('click', () => {
       state.selectedSequenceCandidates?.clear();
       document.querySelectorAll('.seq-cand-check:checked').forEach(cb => { cb.checked = false; });
-      document.querySelectorAll('.person-card.selected').forEach(c => c.classList.remove('selected'));
+      document.querySelectorAll('.person-card.selected, tr.selected').forEach(c => c.classList.remove('selected'));
       updateSeqActionBar();
     });
 
@@ -3215,6 +3248,89 @@
       if (!ids.length) return;
       openSequenceModal(ctx, ids);
     });
+
+    document.getElementById('seq-shortlist-btn')?.addEventListener('click', async () => {
+      const ids = Array.from(state.selectedSequenceCandidates || []);
+      if (!ids.length) return;
+      const pool = state.sourcedCandidates || state._lastSearchData?.candidates || [];
+      const allShortlisted = ids.every(id => pool.find(x => x.id === id)?.shortlisted);
+      const btn = document.getElementById('seq-shortlist-btn');
+      btn.disabled = true;
+      try {
+        await Promise.all(ids.map(id =>
+          api(`/api/candidates/${id}/shortlist`, { method: 'POST', body: { unshortlist: allShortlisted } })
+        ));
+        // Update local state
+        pool.forEach(c => {
+          if (ids.includes(c.id)) c.shortlisted = !allShortlisted;
+        });
+        updateSeqActionBar();
+      } catch (err) {
+        alert('Shortlist update failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('seq-download-btn')?.addEventListener('click', () => {
+      document.getElementById('modal-download').classList.remove('hidden');
+    });
+
+    document.getElementById('modal-download-csv-btn')?.addEventListener('click', () => {
+      document.getElementById('modal-download').classList.add('hidden');
+      downloadCandidatesCSV();
+    });
+
+    document.getElementById('modal-download-pdf-btn')?.addEventListener('click', async () => {
+      document.getElementById('modal-download').classList.add('hidden');
+      const ids = Array.from(state.selectedSequenceCandidates || []);
+      if (!ids.length) return;
+      const ctx = state.searchRequirementContext;
+      try {
+        const resp = await fetch('/api/candidates/export/pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ candidate_ids: ids, requirement_id: ctx?.id || null }),
+          credentials: 'include',
+        });
+        if (!resp.ok) { alert('PDF export failed.'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'candidates.pdf'; a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('PDF export failed: ' + err.message);
+      }
+    });
+
+    function downloadCandidatesCSV() {
+      const ids = Array.from(state.selectedSequenceCandidates || []);
+      const pool = state.sourcedCandidates || state._lastSearchData?.candidates || [];
+      const selected = ids.map(id => pool.find(c => c.id === id)).filter(Boolean);
+      if (!selected.length) return;
+      const softCriteria = (state._lastSearchData?.soft_criteria || []).map(sc =>
+        typeof sc === 'string' ? sc : (sc.criterion || sc.name || '')
+      );
+      const headers = ['Name', 'Email', 'Company', 'Job Title', 'Location', 'Experience', 'Score', 'Reasoning', ...softCriteria];
+      const rows = selected.map(c => {
+        const base = [
+          c.name || '', c.email || '', c.current_employer || '',
+          c.current_job_title || '', c.current_location || '',
+          c.total_experience || '', c.score ?? '', c.reasoning || '',
+        ];
+        const criterionCols = softCriteria.map(cr => (c.criterion_matches?.[cr] === true ? 'Yes' : 'No'));
+        return [...base, ...criterionCols];
+      });
+      const csvLines = [headers, ...rows].map(row =>
+        row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+      );
+      const blob = new Blob([csvLines.join('\r\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'candidates.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
 
     // ── Sequences modal (Phase 4) ──
     let currentSequenceEmails = [];
@@ -3852,6 +3968,14 @@
       // Card-level requirement context wins over global search context
       const reqId = card.dataset.requirementId || null;
       openCandidateDetail(card.dataset.candidateId, { requirementId: reqId });
+    });
+
+    // Table row click handler for search table view
+    document.addEventListener('click', (e) => {
+      const row = e.target.closest('.search-table-row[data-candidate-id]');
+      if (!row) return;
+      if (e.target.closest('button, a, input')) return;
+      openCandidateDetail(row.dataset.candidateId);
     });
 
     // Market tab filtering
@@ -4638,12 +4762,98 @@
       return html + '</tbody></table></div>';
     }
 
-    function renderCandidateCards(candidates) {
+    function renderSearchResults(candidates, softCriteria) {
       if (!candidates?.length) {
         return '<div class="empty-state"><p>No matching candidates. Try loosening the filters.</p></div>';
       }
-      let html = `<div class="card"><div class="card-title">Matching Candidates (${candidates.length})</div>`;
-      html += '<div class="shortlist-grid">';
+      const mode = state.searchViewMode || 'synopsis';
+      const toggleHtml = `
+        <div class="results-header">
+          <span>Matching Candidates (${candidates.length})</span>
+          <div class="view-toggle">
+            <button class="view-toggle-btn${mode === 'synopsis' ? ' active' : ''}" title="Synopsis" onclick="setSearchViewMode('synopsis')">
+              <span class="material-icons-outlined" style="font-size:16px">view_module</span>
+            </button>
+            <button class="view-toggle-btn${mode === 'table' ? ' active' : ''}" title="Table" onclick="setSearchViewMode('table')">
+              <span class="material-icons-outlined" style="font-size:16px">table_chart</span>
+            </button>
+            <button class="view-toggle-btn${mode === 'cards' ? ' active' : ''}" title="Cards" onclick="setSearchViewMode('cards')">
+              <span class="material-icons-outlined" style="font-size:16px">view_agenda</span>
+            </button>
+          </div>
+        </div>`;
+      let html = `<div class="card" id="search-results-card">${toggleHtml}`;
+      if (mode === 'synopsis') html += renderSynopsisGrid(candidates);
+      else if (mode === 'table') html += renderTableView(candidates, softCriteria || []);
+      else                      html += renderClassicCards(candidates);
+      return html + '</div>';
+    }
+
+    function setSearchViewMode(mode) {
+      state.searchViewMode = mode;
+      localStorage.setItem('searchViewMode', mode);
+      // Re-render results in place using last search data
+      const card = document.getElementById('search-results-card');
+      if (!card || !state._lastSearchData) return;
+      const wrapper = card.parentElement;
+      const newHtml = renderSearchResults(state._lastSearchData.candidates || [], state._lastSearchData.soft_criteria || []);
+      const tmp = document.createElement('div');
+      tmp.innerHTML = newHtml;
+      wrapper.replaceChild(tmp.firstElementChild, card);
+    }
+
+    function renderSynopsisGrid(candidates) {
+      let html = '<div class="synopsis-grid">';
+      candidates.forEach(c => {
+        const initials = getInitials(c.name || 'Unknown');
+        const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
+        const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
+        html += `<div class="person-card person-card-synopsis" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer">
+          <div class="person-card-header">
+            <div class="person-avatar">${initials}</div>
+            <div style="flex:1;min-width:0">
+              <div class="person-name">${esc(c.name || 'Unknown')}</div>
+              <div class="person-role">${esc(primary)}</div>
+            </div>
+            ${typeof c.score === 'number' ? `<span class="score-badge ${scoreClass}">${c.score}%</span>` : ''}
+          </div>
+          ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
+          ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
+          ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
+        </div>`;
+      });
+      return html + '</div>';
+    }
+
+    function renderTableView(candidates, softCriteria) {
+      const criteria = (softCriteria || []).map(sc => typeof sc === 'string' ? sc : (sc.criterion || sc.name || String(sc)));
+      let html = '<div class="table-container"><table><thead><tr>';
+      html += '<th>Name</th><th>Profiles</th><th>Job Title</th><th>Company</th><th>Match</th>';
+      criteria.forEach(cr => { html += `<th style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(cr)}">${esc(cr.length > 12 ? cr.slice(0, 12) + '…' : cr)}</th>`; });
+      html += '</tr></thead><tbody>';
+      candidates.forEach(c => {
+        const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
+        const matches = c.criterion_matches || {};
+        html += `<tr class="search-table-row" data-candidate-id="${esc(c.id || '')}">
+          <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
+          <td>
+            ${c.linkedin_url ? `<a href="${esc(c.linkedin_url)}" target="_blank" onclick="event.stopPropagation()" title="LinkedIn"><span class="material-icons-outlined" style="font-size:16px;color:#0a66c2">link</span></a>` : ''}
+            ${c.email ? `<span title="${esc(c.email)}"><span class="material-icons-outlined" style="font-size:16px;color:var(--text-muted)">email</span></span>` : ''}
+          </td>
+          <td>${esc(c.current_job_title || '—')}</td>
+          <td>${esc(c.current_employer || '—')}</td>
+          <td>${typeof c.score === 'number' ? `<span class="score-badge ${scoreClass}">${c.score}%</span>` : '—'}</td>`;
+        criteria.forEach(cr => {
+          const matched = matches[cr];
+          html += `<td class="criterion-cell">${matched === true ? '<span class="material-icons-outlined">thumb_up</span>' : '—'}</td>`;
+        });
+        html += '</tr>';
+      });
+      return html + '</tbody></table></div>';
+    }
+
+    function renderClassicCards(candidates) {
+      let html = '<div class="shortlist-grid">';
       candidates.forEach(c => {
         const initials = getInitials(c.name || 'Unknown');
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
@@ -4663,7 +4873,7 @@
           ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
         </div>`;
       });
-      return html + '</div></div>';
+      return html + '</div>';
     }
 
     async function runHeroSearch() {
@@ -4709,8 +4919,9 @@
           results.innerHTML = `<div class="empty-state"><p>No results.</p></div>`;
           return;
         }
+        state._lastSearchData = data;
         let html = renderFiltersCard(data.filters || {});
-        html += renderCandidateCards(data.candidates || []);
+        html += renderSearchResults(data.candidates || [], data.soft_criteria || []);
         if (typeof data.candidate_pool === 'number' && data.candidate_pool > 0 && !(data.candidates || []).length) {
           html += `<div class="empty-state"><p>Scanned ${data.candidate_pool} candidates but none scored above the match threshold. Try loosening the filters.</p></div>`;
         }
