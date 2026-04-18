@@ -498,6 +498,35 @@
     }
     .market-tab.active { background: var(--brand-blue); color: white; border-color: var(--brand-blue); }
 
+    /* View toggle (table / cards) */
+    .view-toggle {
+      display: flex;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg-main);
+    }
+    .view-toggle-opt {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+    .view-toggle-opt .material-icons-outlined { font-size: 15px; }
+    .view-toggle-opt:hover { color: var(--text-primary); background: rgba(0,0,0,0.03); }
+    .view-toggle-opt.active {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
     /* ── Modal ── */
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1649,16 +1678,31 @@
       </div>
 
       <a class="nav-item nav-item-top active" data-page="requirements" href="#" style="margin:4px 8px">
-        <span class="material-icons-outlined">assignment</span> Requirements
+        <span class="material-icons-outlined">assignment</span> All Requirements
       </a>
 
-      <nav class="nav-section">
+      <div class="project-card">
+        <div class="projects-wrapper">
+          <div class="project-selector" id="requirements-selector" aria-label="Select requirement">
+            <span class="material-icons-outlined">folder_open</span>
+            <span id="requirements-selector-label">Requirements</span>
+            <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
+          </div>
+          <div class="projects-dropdown hidden" id="requirements-dropdown">
+            <input type="text" class="projects-dropdown-search" id="requirements-dropdown-search" placeholder="Search requirements…">
+            <ul class="projects-list" id="requirements-list-dropdown"></ul>
+            <a class="projects-dropdown-footer" id="requirements-dropdown-footer" href="#">View all requirements →</a>
+          </div>
+        </div>
         <a class="nav-item" data-page="search" href="#">
           <span class="material-icons-outlined">search</span> Searches
         </a>
         <a class="nav-item" data-page="shortlist" href="#">
           <span class="material-icons-outlined">star_outline</span> Shortlist
         </a>
+      </div>
+
+      <nav class="nav-section">
         <a class="nav-item" data-page="contacts" href="#">
           <span class="material-icons-outlined">person_outline</span> Contacts
         </a>
@@ -1763,12 +1807,12 @@
               </div>
             </div>
             <div style="display:flex;gap:8px">
-              <div class="view-toggle-btn" id="req-view-toggle" style="display:flex;border:1px solid var(--border-color);border-radius:var(--radius);overflow:hidden">
-                <button type="button" class="active" data-req-view="table" style="padding:6px 10px;border:none;background:var(--bg-card);cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px;color:var(--text-primary)">
-                  <span class="material-icons-outlined" style="font-size:15px">table_rows</span>
+              <div class="view-toggle" id="req-view-toggle">
+                <button type="button" class="view-toggle-opt active" data-req-view="table">
+                  <span class="material-icons-outlined">table_rows</span> Table
                 </button>
-                <button type="button" data-req-view="card" style="padding:6px 10px;border:none;background:transparent;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px;color:var(--text-secondary)">
-                  <span class="material-icons-outlined" style="font-size:15px">grid_view</span>
+                <button type="button" class="view-toggle-opt" data-req-view="card">
+                  <span class="material-icons-outlined">grid_view</span> Cards
                 </button>
               </div>
               <div class="market-tabs">
@@ -3284,6 +3328,7 @@
       // When user clicks 'View candidates' on a sourced requirement, Searches
       // page enters this mode and fetches /api/requirements/<id>/candidates.
       searchRequirementContext: null,
+      activeRequirement: null,  // null = "All requirements"; otherwise a requirement id
     };
 
     // ── API Helper ──
@@ -3420,6 +3465,7 @@
       if (pageId === 'analytics') loadPipeline();
       if (pageId === 'submissions') loadSubmissions();
       if (pageId === 'sequences') loadSequencesPageV2();
+      renderRequirementContext();
     }
 
     navItems.forEach(item => {
@@ -3530,6 +3576,7 @@
 
         const reqs = data?.requirements || [];
         state.requirements = reqs;
+        renderRequirementsDropdownList('');
 
         if (reqs.length === 0) {
           const msg = (state.requirementsScope === 'mine')
@@ -3694,14 +3741,8 @@
     // Requirements view toggle wiring
     document.querySelectorAll('#req-view-toggle button').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('#req-view-toggle button').forEach(b => {
-          b.classList.remove('active');
-          b.style.background = 'transparent';
-          b.style.color = 'var(--text-secondary)';
-        });
+        document.querySelectorAll('#req-view-toggle button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        btn.style.background = 'var(--bg-card)';
-        btn.style.color = 'var(--text-primary)';
         state.reqViewMode = btn.dataset.reqView;
         loadRequirements();
       });
@@ -6818,6 +6859,54 @@
       }
     }
 
+    // ── Requirements Selector ──
+
+    function renderRequirementsDropdownList(filter) {
+      const list = document.getElementById('requirements-list-dropdown');
+      if (!list) return;
+      const f = (filter || '').toLowerCase().trim();
+      const matches = state.requirements.filter(r =>
+        !f || (r.role_title || '').toLowerCase().includes(f)
+           || (r.client_name || '').toLowerCase().includes(f)
+      );
+      if (matches.length === 0) {
+        list.innerHTML = '<li class="empty">No requirements match</li>';
+        return;
+      }
+      list.innerHTML = matches.map(r =>
+        `<li data-requirement-id="${esc(r.id)}">
+          <span class="material-icons-outlined">folder_open</span>
+          ${esc(r.role_title || 'Untitled')}${r.client_name ? ' — ' + esc(r.client_name) : ''}
+        </li>`
+      ).join('');
+      list.querySelectorAll('li[data-requirement-id]').forEach(li => {
+        li.addEventListener('click', () => {
+          enterRequirement(li.dataset.requirementId);
+          closeAllDropdowns();
+        });
+      });
+    }
+
+    function renderRequirementContext() {
+      const active = state.activeRequirement
+        ? state.requirements.find(r => r.id === state.activeRequirement)
+        : null;
+      const label = active
+        ? (active.role_title || 'Untitled') + (active.client_name ? ' — ' + active.client_name : '')
+        : 'All requirements';
+      const selLabel = document.getElementById('requirements-selector-label');
+      if (selLabel) selLabel.textContent = active ? (active.role_title || 'Untitled') : 'Requirements';
+      const slc = document.getElementById('shortlist-context-label');
+      if (slc) slc.textContent = label;
+      const src = document.getElementById('search-context-label');
+      if (src) src.textContent = label;
+    }
+
+    function enterRequirement(id) {
+      state.activeRequirement = id;
+      renderRequirementContext();
+      switchPage('search');
+    }
 
     function closeAllRowMenus() {
       document.querySelectorAll('.row-menu').forEach(m => m.classList.add('hidden'));
@@ -6827,11 +6916,14 @@
 
     function closeAllDropdowns() {
       const ad = document.getElementById('avatar-dropdown');
+      const rd = document.getElementById('requirements-dropdown');
       if (ad) ad.classList.add('hidden');
+      if (rd) rd.classList.add('hidden');
     }
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#user-avatar')) {
+      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#user-avatar')
+          && !e.target.closest('#requirements-dropdown') && !e.target.closest('#requirements-selector')) {
         closeAllDropdowns();
       }
       if (!e.target.closest('.row-menu') && !e.target.closest('.row-menu-toggle')) {
@@ -6857,6 +6949,32 @@
         else if (action === 'support'){ e.preventDefault(); document.getElementById('modal-support').classList.remove('hidden'); }
         // signout has no data-avatar-action-click handler — href="/logout" takes over.
       });
+    });
+
+    // ── Requirements selector event listeners ──
+
+    document.getElementById('requirements-selector').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = document.getElementById('requirements-dropdown');
+      const willOpen = d.classList.contains('hidden');
+      closeAllDropdowns();
+      if (willOpen) {
+        d.classList.remove('hidden');
+        document.getElementById('requirements-dropdown-search').focus();
+        renderRequirementsDropdownList('');
+      }
+    });
+
+    document.getElementById('requirements-dropdown-search').addEventListener('input', (e) => {
+      renderRequirementsDropdownList(e.target.value);
+    });
+
+    document.getElementById('requirements-dropdown-footer').addEventListener('click', (e) => {
+      e.preventDefault();
+      state.activeRequirement = null;
+      renderRequirementContext();
+      switchPage('requirements');
+      closeAllDropdowns();
     });
 
     function openInviteModal() {
