@@ -543,12 +543,12 @@
     .notif-item:last-child { border-bottom: none; }
     .notif-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-    /* ── Projects Layer ── */
+    /* ── Requirements Layer ── */
 
-    /* Persistent "All Projects" item at the very top */
+    /* Persistent top-level nav item */
     .nav-item-top { margin: 4px 8px !important; }
 
-    /* Projects dropdown (under the Projects selector) */
+    /* Legacy dropdown styles (kept for potential reuse) */
     .projects-wrapper { position: relative; }
     .projects-dropdown {
       position: absolute;
@@ -1492,6 +1492,19 @@
     }
     .req-card-close:hover { border-color: #ef4444; color: #ef4444; }
 
+    /* Inline editable cells */
+    .inline-editable .edit-icon { visibility: hidden; transition: opacity .15s; }
+    .inline-editable:hover .edit-icon { visibility: visible; opacity: 0.6; }
+    .inline-edit-input {
+      border: 1px solid var(--brand-blue);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      width: 100%;
+      outline: none;
+    }
+
     /* Result score chip */
     .person-score {
       display: inline-block;
@@ -1635,34 +1648,16 @@
         </button>
       </div>
 
-      <a class="nav-item nav-item-top active" data-page="all-projects" href="#" style="margin:4px 8px">
-        <span class="material-icons-outlined">apps</span> All Projects
+      <a class="nav-item nav-item-top active" data-page="requirements" href="#" style="margin:4px 8px">
+        <span class="material-icons-outlined">assignment</span> Requirements
       </a>
 
-      <div class="project-card">
-        <div class="projects-wrapper">
-          <div class="project-selector" id="projects-selector" aria-label="Select project">
-            <span class="material-icons-outlined">folder_open</span>
-            <span id="projects-selector-label">Projects</span>
-            <span class="material-icons-outlined" style="font-size:16px;margin-left:auto">expand_more</span>
-          </div>
-          <div class="projects-dropdown hidden" id="projects-dropdown">
-            <input type="text" class="projects-dropdown-search" id="projects-dropdown-search" placeholder="Search projects…">
-            <ul class="projects-list" id="projects-list"></ul>
-            <a class="projects-dropdown-footer" data-page="all-projects" href="#">View all projects →</a>
-          </div>
-        </div>
+      <nav class="nav-section">
         <a class="nav-item" data-page="search" href="#">
           <span class="material-icons-outlined">search</span> Searches
         </a>
         <a class="nav-item" data-page="shortlist" href="#">
           <span class="material-icons-outlined">star_outline</span> Shortlist
-        </a>
-      </div>
-
-      <nav class="nav-section">
-        <a class="nav-item" data-page="requirements" href="#">
-          <span class="material-icons-outlined">assignment</span> Requirements
         </a>
         <a class="nav-item" data-page="contacts" href="#">
           <span class="material-icons-outlined">person_outline</span> Contacts
@@ -1722,7 +1717,7 @@
     <div class="main">
       <!-- Header -->
       <header class="header">
-        <div class="header-title" id="page-title">All Projects</div>
+        <div class="header-title" id="page-title">Requirements</div>
         <div class="header-actions">
           <div style="position:relative">
             <button class="icon-btn" aria-label="Notifications" id="notif-btn">
@@ -1738,56 +1733,27 @@
       <!-- Content -->
       <div class="content">
 
-        <!-- ALL PROJECTS -->
-        <div class="page active" id="page-all-projects">
-          <div class="stats-grid" id="projects-stats">
-            <div class="stat-card">
-              <div class="stat-label">Total Projects</div>
-              <div class="stat-value" id="stat-total-projects">0</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Active</div>
-              <div class="stat-value" id="stat-active-projects">0</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Yours</div>
-              <div class="stat-value" id="stat-owned-projects">0</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Shared</div>
-              <div class="stat-value" id="stat-shared-projects">0</div>
-            </div>
-          </div>
-          <div class="table-container">
-            <div class="table-header">
-              <div class="table-header-title">All Projects</div>
-              <div class="table-header-actions">
-                <button class="btn-primary" id="create-project-btn">
-                  <span class="material-icons-outlined">add</span> Create new project
-                </button>
-              </div>
-            </div>
-            <div id="projects-loading" class="loading-state">
-              <div class="loading-spinner"></div> Loading projects...
-            </div>
-            <table id="projects-table" style="display:none">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Status</th>
-                  <th>Progress</th>
-                  <th>Created On</th>
-                  <th>Collaborators</th>
-                  <th style="width:40px"></th>
-                </tr>
-              </thead>
-              <tbody id="projects-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-
         <!-- REQUIREMENTS -->
-        <div class="page" id="page-requirements">
+        <div class="page active" id="page-requirements">
+          <!-- Stats grid -->
+          <div class="stats-grid" id="requirements-stats">
+            <div class="stat-card">
+              <div class="stat-label">Total</div>
+              <div class="stat-value" id="stat-total-reqs">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Open</div>
+              <div class="stat-value" id="stat-open-reqs">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">On Hold</div>
+              <div class="stat-value" id="stat-hold-reqs">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Closed</div>
+              <div class="stat-value" id="stat-closed-reqs">0</div>
+            </div>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:12px">
               <h3 style="font-size:16px;font-weight:600;margin:0">Requirements</h3>
@@ -1856,7 +1822,7 @@
         <div class="page" id="page-shortlist">
           <div class="project-context-strip" id="shortlist-context">
             <span class="material-icons-outlined">folder_open</span>
-            In: <strong id="shortlist-context-label">All projects</strong>
+            In: <strong id="shortlist-context-label">All requirements</strong>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <h3 style="font-size:16px;font-weight:600" id="shortlist-title">Shortlisted Candidates</h3>
@@ -2572,7 +2538,7 @@
         <div class="page" id="page-search">
           <div class="project-context-strip" id="search-context">
             <span class="material-icons-outlined">folder_open</span>
-            In: <strong id="search-context-label">All projects</strong>
+            In: <strong id="search-context-label">All requirements</strong>
           </div>
 
           <div class="search-req-context hidden" id="search-req-context">
@@ -2959,24 +2925,6 @@
     </div>
   </div>
 
-  <!-- Create Project Modal -->
-  <div class="modal-overlay hidden" id="modal-create-project">
-    <div class="modal">
-      <h3>Create new project</h3>
-      <form id="form-create-project" style="display:flex;flex-direction:column;gap:12px">
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Project Title <span style="color:var(--brand-red)">*</span></label>
-          <input type="text" id="cp-title" placeholder="e.g. HCL — Senior Engineers" required>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-create-project').classList.add('hidden')">Cancel</button>
-          <button type="submit" class="btn-primary" id="btn-submit-project">
-            Create Project →
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- Sequences: AI draft + personalized preview modal -->
   <div class="modal-overlay hidden" id="modal-sequence">
@@ -3147,7 +3095,7 @@
             <button class="cand-right-tab active" data-right-tab="notes" type="button">Notes</button>
             <button class="cand-right-tab" data-right-tab="sequences" type="button">Sequences</button>
             <button class="cand-right-tab" data-right-tab="activity" type="button">Activity</button>
-            <button class="cand-right-tab cand-tab-disabled" data-right-tab="projects" type="button" disabled>Projects</button>
+            <button class="cand-right-tab cand-tab-disabled" data-right-tab="projects" type="button" disabled>Requirements</button>
             <button class="cand-right-tab cand-tab-disabled" data-right-tab="tasks" type="button" disabled>Tasks</button>
           </div>
           <div class="cand-right-content">
@@ -3210,36 +3158,6 @@
     </div>
   </div>
 
-  <!-- Edit Project Modal -->
-  <div class="modal-overlay hidden" id="modal-edit-project">
-    <div class="modal">
-      <h3>Edit project</h3>
-      <form id="form-edit-project" style="display:flex;flex-direction:column;gap:12px">
-        <input type="hidden" id="ep-id">
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Project Title <span style="color:var(--brand-red)">*</span></label>
-          <input type="text" id="ep-title" required>
-        </div>
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Access Level</label>
-          <div class="radio-group">
-            <label class="radio-option"><input type="radio" name="ep-access" value="shared"> Shared</label>
-            <label class="radio-option"><input type="radio" name="ep-access" value="private"> Private</label>
-          </div>
-        </div>
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Collaborators</label>
-          <select id="ep-collaborators" multiple size="5" style="min-height:96px"></select>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Hold ⌘/Ctrl to pick multiple</div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" onclick="document.getElementById('modal-edit-project').classList.add('hidden')">Cancel</button>
-          <button type="submit" class="btn-primary" id="btn-submit-edit-project">Save changes</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <!-- Invite Members Modal -->
   <div class="modal-overlay hidden" id="modal-invite">
     <div class="modal">
@@ -3267,7 +3185,7 @@
       <div style="display:flex;flex-direction:column;gap:8px">
         <a href="#" class="integration-card" style="cursor:pointer">
           <div class="integration-icon" style="background:#e3f2fd"><span class="material-icons-outlined" style="color:#1565c0">rocket_launch</span></div>
-          <div class="integration-info"><h4>Getting started</h4><p>Login, navigate, and land your first Project.</p></div>
+          <div class="integration-info"><h4>Getting started</h4><p>Login, navigate, and land your first Requirement.</p></div>
         </a>
         <a href="#" class="integration-card" style="cursor:pointer">
           <div class="integration-icon" style="background:#e8f5e9"><span class="material-icons-outlined" style="color:#058a5e">person_search</span></div>
@@ -3355,10 +3273,7 @@
       pipeline: [],
       notifications: [],
       currentMarket: '',
-      // Projects layer
-      projects: [],
       team: [],
-      activeProject: null,   // null = "All projects" view; otherwise the project id
       // Search
       searchMode: 'natural',
       searchViewMode: localStorage.getItem('searchViewMode') || 'synopsis',
@@ -3420,11 +3335,11 @@
       // Populate recruiter dropdowns
       populateRecruiterDropdowns();
 
-      // Load projects layer + team (for Collaborators picker)
-      await Promise.all([loadTeam(), loadProjects()]);
+      // Load team (for Collaborators picker)
+      await loadTeam();
 
       // Default landing page
-      switchPage('all-projects');
+      switchPage('requirements');
 
       // Other passive loads
       loadNotifications();
@@ -3468,7 +3383,6 @@
     const expandArrow = analyticsToggle.querySelector('.expand-arrow');
 
     const pageTitles = {
-      'all-projects': 'All Projects',
       'requirements': 'Requirements',
       'shortlist': 'Shortlist',
       'contacts': 'Contacts',
@@ -3500,15 +3414,12 @@
       pageTitle.textContent = pageTitles[pageId] || pageId;
 
       // Load data on page switch
-      if (pageId === 'all-projects') renderProjectsTable();
       if (pageId === 'requirements') loadRequirements();
       if (pageId === 'shortlist') loadShortlist();
       if (pageId === 'contacts') loadContacts();
       if (pageId === 'analytics') loadPipeline();
       if (pageId === 'submissions') loadSubmissions();
       if (pageId === 'sequences') loadSequencesPageV2();
-
-      renderProjectContext();
     }
 
     navItems.forEach(item => {
@@ -3583,7 +3494,19 @@
     // Requirements view mode: 'table' (default) or 'card'
     state.reqViewMode = state.reqViewMode || 'table';
 
+    async function loadRequirementStats() {
+      try {
+        const data = await api('/api/requirements?scope=all');
+        const reqs = data?.requirements || [];
+        document.getElementById('stat-total-reqs').textContent = reqs.length;
+        document.getElementById('stat-open-reqs').textContent = reqs.filter(r => r.status === 'open').length;
+        document.getElementById('stat-hold-reqs').textContent = reqs.filter(r => r.status === 'on_hold').length;
+        document.getElementById('stat-closed-reqs').textContent = reqs.filter(r => r.status === 'closed').length;
+      } catch (e) { console.error('loadRequirementStats:', e); }
+    }
+
     async function loadRequirements() {
+      loadRequirementStats();
       const listEl = document.getElementById('requirements-list');
       const tableWrap = document.getElementById('requirements-table-wrap');
       const tbody = document.getElementById('requirements-tbody');
@@ -3638,7 +3561,10 @@
               <td onclick="event.stopPropagation()">
                 <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
               </td>
-              <td style="font-weight:500">${esc(req.role_title || 'Untitled')}</td>
+              <td class="${isTL ? 'inline-editable' : ''}" data-req-id="${req.id}" style="font-weight:500">
+                <span class="editable-text">${esc(req.role_title || 'Untitled')}</span>
+                ${isTL ? '<span class="material-icons-outlined edit-icon" style="font-size:14px;margin-left:4px;cursor:pointer">edit</span>' : ''}
+              </td>
               <td>${esc(req.client_name || '')}</td>
               <td>${marketBadge}</td>
               <td>${statusBadge}</td>
@@ -3661,6 +3587,39 @@
               else state.selectedRequirements.delete(id);
               updateBatchActionBar();
             });
+          });
+
+          // Inline rename for TL users
+          tbody.querySelectorAll('.inline-editable').forEach(td => {
+            const editIcon = td.querySelector('.edit-icon');
+            function startEdit() {
+              const current = td.querySelector('.editable-text').textContent;
+              const input = document.createElement('input');
+              input.className = 'inline-edit-input';
+              input.value = current;
+              td.innerHTML = '';
+              td.appendChild(input);
+              input.focus();
+              input.select();
+              async function save() {
+                const val = input.value.trim();
+                if (val && val !== current) {
+                  try {
+                    await api(`/api/requirements/${td.dataset.reqId}`, {
+                      method: 'PATCH', body: { role_title: val }
+                    });
+                  } catch (e) { alert('Rename failed: ' + e.message); }
+                }
+                loadRequirements();
+              }
+              input.addEventListener('blur', save);
+              input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                if (e.key === 'Escape') loadRequirements();
+              });
+            }
+            editIcon?.addEventListener('click', e => { e.stopPropagation(); startEdit(); });
+            td.addEventListener('dblclick', e => { e.stopPropagation(); startEdit(); });
           });
         } else {
           // ── CARD VIEW ──
@@ -6834,7 +6793,7 @@
     });
 
     // ══════════════════════════════════
-    // ── Projects Layer ──
+    // ── Team ──
     // ══════════════════════════════════
 
     async function loadTeam() {
@@ -6859,177 +6818,20 @@
       }
     }
 
-    async function loadProjects() {
-      try {
-        const data = await api('/api/projects');
-        state.projects = data?.projects || [];
-      } catch (err) {
-        console.error('loadProjects failed:', err);
-        state.projects = [];
-      }
-      renderProjectsTable();
-      renderProjectsDropdownList('');
-      renderProjectsStats();
-    }
-
-    function renderProjectsStats() {
-      const all = state.projects;
-      const active = all.filter(p => p.status === 'active').length;
-      const owned = all.filter(p => p.created_by === state.user?.email).length;
-      const shared = all.filter(p => p.access_level === 'shared').length;
-      const el = id => document.getElementById(id);
-      if (el('stat-total-projects')) el('stat-total-projects').textContent = all.length;
-      if (el('stat-active-projects')) el('stat-active-projects').textContent = active;
-      if (el('stat-owned-projects')) el('stat-owned-projects').textContent = owned;
-      if (el('stat-shared-projects')) el('stat-shared-projects').textContent = shared;
-    }
-
-    function renderProjectsTable() {
-      const tbody = document.getElementById('projects-tbody');
-      const loading = document.getElementById('projects-loading');
-      const table = document.getElementById('projects-table');
-      if (!tbody) return;
-
-      loading.style.display = 'none';
-      table.style.display = '';
-      tbody.innerHTML = '';
-
-      if (state.projects.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6">
-          <div class="empty-state" style="padding:48px 20px">
-            <span class="material-icons-outlined">apps</span>
-            <p>No projects yet. Click <strong>Create new project</strong> to get started.</p>
-          </div></td></tr>`;
-        return;
-      }
-
-      state.projects.forEach(p => {
-        const statusTag = p.status === 'active'
-          ? '<span class="tag tag-active"><span class="status-dot green"></span>Active</span>'
-          : p.status === 'archived'
-          ? '<span class="tag tag-draft"><span class="status-dot gray"></span>Archived</span>'
-          : '<span class="tag tag-draft"><span class="status-dot gray"></span>Draft</span>';
-
-        const collabEmails = [p.created_by, ...(p.collaborators || [])];
-        const uniqueCollabs = [...new Set(collabEmails)].slice(0, 4);
-        const collabs = uniqueCollabs.map(e => {
-          const initial = (e || '?')[0].toUpperCase();
-          return `<span class="collab-chip" title="${esc(e)}">${initial}</span>`;
-        }).join('');
-
-        const dt = p.created_at ? new Date(p.created_at) : new Date();
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const createdOn = `${months[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
-
-        const isOwner = p.created_by === state.user?.email;
-        const menuCell = isOwner ? `
-          <div class="row-menu-wrapper" onclick="event.stopPropagation()">
-            <button class="icon-btn row-menu-toggle" data-project-id="${esc(p.id)}">
-              <span class="material-icons-outlined" style="font-size:18px">more_horiz</span>
-            </button>
-            <div class="row-menu hidden" data-menu-for="${esc(p.id)}">
-              <a class="row-menu-item" data-row-action="edit"    data-project-id="${esc(p.id)}"><span class="material-icons-outlined">edit</span>Edit</a>
-              <a class="row-menu-item" data-row-action="archive" data-project-id="${esc(p.id)}"><span class="material-icons-outlined">archive</span>Archive</a>
-              <a class="row-menu-item row-menu-item-danger" data-row-action="delete"  data-project-id="${esc(p.id)}"><span class="material-icons-outlined">delete</span>Delete</a>
-            </div>
-          </div>` : '';
-
-        const tr = document.createElement('tr');
-        tr.dataset.projectId = p.id;
-        tr.innerHTML = `
-          <td style="font-weight:500">${esc(p.title)}</td>
-          <td>${statusTag}</td>
-          <td><div class="progress-bar"><div class="progress-bar-fill" style="width:${p.progress || 0}%"></div></div></td>
-          <td>${createdOn}</td>
-          <td><div style="display:flex">${collabs}</div></td>
-          <td>${menuCell}</td>
-        `;
-        tr.addEventListener('click', () => enterProject(p.id));
-        tbody.appendChild(tr);
-      });
-
-      // Wire up the ⋯ toggles AFTER rows are in the DOM
-      tbody.querySelectorAll('.row-menu-toggle').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.projectId;
-          const menu = tbody.querySelector(`.row-menu[data-menu-for="${id}"]`);
-          const willOpen = menu.classList.contains('hidden');
-          closeAllDropdowns();
-          closeAllRowMenus();
-          if (willOpen) menu.classList.remove('hidden');
-        });
-      });
-      tbody.querySelectorAll('.row-menu-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const action = item.dataset.rowAction;
-          const id = item.dataset.projectId;
-          closeAllRowMenus();
-          if (action === 'edit') openEditProjectModal(id);
-          else if (action === 'archive') handleArchiveProject(id);
-          else if (action === 'delete') handleDeleteProject(id);
-        });
-      });
-    }
 
     function closeAllRowMenus() {
       document.querySelectorAll('.row-menu').forEach(m => m.classList.add('hidden'));
-    }
-
-    function renderProjectsDropdownList(filter) {
-      const list = document.getElementById('projects-list');
-      if (!list) return;
-      const f = (filter || '').toLowerCase().trim();
-      const matches = state.projects.filter(p => !f || (p.title || '').toLowerCase().includes(f));
-      if (matches.length === 0) {
-        list.innerHTML = '<li class="empty">No projects match</li>';
-        return;
-      }
-      list.innerHTML = matches.map(p =>
-        `<li data-project-id="${esc(p.id)}">
-          <span class="material-icons-outlined">folder_open</span>${esc(p.title)}
-        </li>`
-      ).join('');
-      list.querySelectorAll('li[data-project-id]').forEach(li => {
-        li.addEventListener('click', () => {
-          enterProject(li.dataset.projectId);
-          closeAllDropdowns();
-        });
-      });
-    }
-
-    function renderProjectContext() {
-      const active = state.activeProject
-        ? state.projects.find(p => p.id === state.activeProject)
-        : null;
-      const label = active ? active.title : 'All projects';
-      const selLabel = document.getElementById('projects-selector-label');
-      if (selLabel) selLabel.textContent = active ? label : 'Projects';
-      const slc = document.getElementById('shortlist-context-label');
-      if (slc) slc.textContent = label;
-      const src = document.getElementById('search-context-label');
-      if (src) src.textContent = label;
-    }
-
-    function enterProject(id) {
-      state.activeProject = id;
-      switchPage('search');
     }
 
     // ── Dropdown toggles (shared outside-click closer) ──
 
     function closeAllDropdowns() {
       const ad = document.getElementById('avatar-dropdown');
-      const pd = document.getElementById('projects-dropdown');
       if (ad) ad.classList.add('hidden');
-      if (pd) pd.classList.add('hidden');
     }
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#user-avatar')
-          && !e.target.closest('#projects-dropdown') && !e.target.closest('#projects-selector')) {
+      if (!e.target.closest('#avatar-dropdown') && !e.target.closest('#user-avatar')) {
         closeAllDropdowns();
       }
       if (!e.target.closest('.row-menu') && !e.target.closest('.row-menu-toggle')) {
@@ -7078,7 +6880,7 @@
     }
 
     // Close placeholder modals on backdrop click
-    ['modal-invite', 'modal-help', 'modal-kb', 'modal-support', 'modal-edit-project'].forEach(id => {
+    ['modal-invite', 'modal-help', 'modal-kb', 'modal-support'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('click', (e) => { if (e.target === el) el.classList.add('hidden'); });
     });
@@ -7101,187 +6903,6 @@
         li.style.display = (!q || li.textContent.toLowerCase().includes(q)) ? '' : 'none';
       });
     });
-
-    document.getElementById('projects-selector').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const d = document.getElementById('projects-dropdown');
-      const willOpen = d.classList.contains('hidden');
-      closeAllDropdowns();
-      if (willOpen) {
-        d.classList.remove('hidden');
-        document.getElementById('projects-dropdown-search').focus();
-      }
-    });
-
-    document.getElementById('projects-dropdown-search').addEventListener('input', (e) => {
-      renderProjectsDropdownList(e.target.value);
-    });
-
-    document.querySelector('.projects-dropdown-footer').addEventListener('click', (e) => {
-      e.preventDefault();
-      state.activeProject = null;
-      switchPage('all-projects');
-      closeAllDropdowns();
-    });
-
-    // ── Create Project Modal ──
-
-    const cpModal = document.getElementById('modal-create-project');
-    const cpTitle = document.getElementById('cp-title');
-
-    document.getElementById('create-project-btn').addEventListener('click', () => {
-      closeAllDropdowns();
-      cpTitle.value = '';
-      cpModal.classList.remove('hidden');
-      setTimeout(() => cpTitle.focus(), 0);
-    });
-
-    cpModal.addEventListener('click', (e) => {
-      if (e.target === cpModal) cpModal.classList.add('hidden');
-    });
-
-    document.getElementById('form-create-project').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('btn-submit-project');
-      const title = cpTitle.value.trim();
-      if (!title) {
-        cpTitle.focus();
-        cpTitle.style.borderColor = 'var(--brand-red)';
-        setTimeout(() => { cpTitle.style.borderColor = ''; }, 1500);
-        return;
-      }
-      btn.disabled = true;
-      btn.innerHTML = '<div class="loading-spinner"></div> Creating...';
-      try {
-        const resp = await api('/api/projects/create', {
-          method: 'POST',
-          body: { title }
-        });
-        const proj = resp?.project;
-        if (proj) {
-          state.projects.unshift(proj);
-          renderProjectsTable();
-          renderProjectsDropdownList('');
-          renderProjectsStats();
-          cpModal.classList.add('hidden');
-          enterProject(proj.id);
-        }
-      } catch (err) {
-        alert('Error creating project: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Create Project →';
-      }
-    });
-
-    // ── Edit / Archive / Delete Project ──
-
-    const epModal = document.getElementById('modal-edit-project');
-    const epId = document.getElementById('ep-id');
-    const epTitle = document.getElementById('ep-title');
-
-    function openEditProjectModal(projectId) {
-      const p = state.projects.find(x => x.id === projectId);
-      if (!p) return;
-      epId.value = p.id;
-      epTitle.value = p.title || '';
-      document.querySelector(`input[name="ep-access"][value="${p.access_level || 'shared'}"]`).checked = true;
-
-      // Populate collaborators dropdown with team list, pre-selecting current collaborators
-      const sel = document.getElementById('ep-collaborators');
-      sel.innerHTML = '';
-      const current = new Set(p.collaborators || []);
-      state.team
-        .filter(m => m.email !== state.user?.email)
-        .forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.email;
-          opt.textContent = `${m.name} (${m.role === 'tl' ? 'TL' : 'Recruiter'})`;
-          if (current.has(m.email)) opt.selected = true;
-          sel.appendChild(opt);
-        });
-
-      epModal.classList.remove('hidden');
-      setTimeout(() => epTitle.focus(), 0);
-    }
-
-    document.getElementById('form-edit-project').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('btn-submit-edit-project');
-      const id = epId.value;
-      const title = epTitle.value.trim();
-      if (!title) {
-        epTitle.focus();
-        epTitle.style.borderColor = 'var(--brand-red)';
-        setTimeout(() => { epTitle.style.borderColor = ''; }, 1500);
-        return;
-      }
-      const access = document.querySelector('input[name="ep-access"]:checked').value;
-      const collabs = Array.from(document.getElementById('ep-collaborators').selectedOptions).map(o => o.value);
-
-      btn.disabled = true;
-      btn.innerHTML = '<div class="loading-spinner"></div> Saving...';
-      try {
-        const resp = await api(`/api/projects/${id}`, {
-          method: 'PATCH',
-          body: { title, access_level: access, collaborators: collabs }
-        });
-        const updated = resp?.project;
-        if (updated) {
-          const idx = state.projects.findIndex(x => x.id === id);
-          if (idx !== -1) state.projects[idx] = updated;
-          renderProjectsTable();
-          renderProjectsDropdownList('');
-          renderProjectsStats();
-          renderProjectContext();
-        }
-        epModal.classList.add('hidden');
-      } catch (err) {
-        alert('Error saving project: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Save changes';
-      }
-    });
-
-    async function handleArchiveProject(projectId) {
-      const p = state.projects.find(x => x.id === projectId);
-      if (!p) return;
-      if (!confirm(`Archive "${p.title}"? It will be hidden from the active list but not deleted.`)) return;
-      try {
-        const resp = await api(`/api/projects/${projectId}/archive`, { method: 'POST' });
-        const updated = resp?.project;
-        if (updated) {
-          const idx = state.projects.findIndex(x => x.id === projectId);
-          if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
-          renderProjectsTable();
-          renderProjectsDropdownList('');
-          renderProjectsStats();
-        }
-      } catch (err) {
-        alert('Error archiving project: ' + err.message);
-      }
-    }
-
-    async function handleDeleteProject(projectId) {
-      const p = state.projects.find(x => x.id === projectId);
-      if (!p) return;
-      if (!confirm(`Permanently delete "${p.title}"? This cannot be undone. Any requirements tied to this project will be orphaned (they stay in your Requirements list).`)) return;
-      try {
-        await api(`/api/projects/${projectId}`, { method: 'DELETE' });
-        state.projects = state.projects.filter(x => x.id !== projectId);
-        // If the active project was the one deleted, clear context
-        if (state.activeProject === projectId) {
-          state.activeProject = null;
-          renderProjectContext();
-        }
-        renderProjectsTable();
-        renderProjectsDropdownList('');
-        renderProjectsStats();
-      } catch (err) {
-        alert('Error deleting project: ' + err.message);
-      }
-    }
 
     // ── Boot ──
     init();

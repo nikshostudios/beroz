@@ -760,6 +760,22 @@ def list_requirements(market: str | None, status: str = "open",
     return {"requirements": reqs, "count": len(reqs)}
 
 
+def update_requirement(req_id, payload, user_role, user_email):
+    """Update a requirement's editable fields (TL-only)."""
+    _require_role(user_role, ["tl"])
+    if not payload or not isinstance(payload, dict):
+        raise ValueError("Missing payload")
+    allowed = {"role_title", "client_name", "status", "skillset", "location",
+               "contract_type", "notice_period", "salary_budget"}
+    updates = {k: v for k, v in payload.items() if k in allowed and v is not None}
+    if not updates:
+        raise ValueError("No valid fields to update")
+    result = db.get_client().table("requirements").update(updates).eq("id", req_id).execute()
+    if not result.data:
+        raise ValueError("Requirement not found")
+    return {"ok": True, "requirement": result.data[0]}
+
+
 def close_requirement(req_id: str, user_role: str, user_email: str) -> dict:
     """Mark a requirement as closed. TL only."""
     _require_role(user_role, ["tl"])

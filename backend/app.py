@@ -3185,6 +3185,16 @@ def api_create_requirement():
                          request.get_json(silent=True), role, email)
 
 
+@app.route("/api/requirements/<req_id>", methods=["PATCH"])
+def api_update_requirement(req_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_requirement, req_id,
+                         request.get_json(silent=True), role, email)
+
+
 @app.route("/api/requirements/<req_id>/close", methods=["POST"])
 def api_close_requirement(req_id):
     if not is_logged_in():
