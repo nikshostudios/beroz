@@ -17,7 +17,7 @@ Browser (Juicebox Frontend)
 Flask Web App (app.py)          ← Serves frontend, handles auth, proxies API calls
     │
     ▼
-FastAPI AI Agent Layer (ai-agents/main.py)   ← 8 AI agents, 5 workflow skills, 20+ endpoints
+FastAPI AI Agent Layer (ai_agents/main.py)   ← 8 AI agents, 5 workflow skills, 20+ endpoints
     │
     ├── Claude Sonnet 4    (screening, formatting, JD parsing, market intel)
     ├── Claude Haiku 4.5   (classification, email parsing, outreach drafts)
@@ -218,7 +218,7 @@ TL enters client email → formatted .docx sent via Outlook Graph API
     │
     ▼
 candidate_details.status → "submitted_to_client"
-(If SG + tender_number → auto-insert to gebiz_submissions)
+(If SG + tender_number → auto-insert to interview_tracker)
 ```
 
 **Backend:**
@@ -361,8 +361,7 @@ candidate_details.status → "submitted_to_client"
 | `outreach_log` | Record of all outreach emails sent |
 | `match_scores` | AI-generated match scores |
 | `portal_credentials` | Foundit/sourcing portal login credentials (rotated) |
-| `client_contacts` | Client email addresses for submissions |
-| `gebiz_submissions` | Singapore government tender submissions |
+| `interview_tracker` | Interview + SG tender tracking (single source of truth) |
 
 ---
 

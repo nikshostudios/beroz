@@ -540,7 +540,7 @@ def migrate_gebiz(df, dry_run, market_filter):
             }
             gebiz_data = {k: v for k, v in gebiz_data.items() if v is not None}
 
-            if _safe_insert("gebiz_submissions", gebiz_data, dry_run):
+            if _safe_insert("interview_tracker", gebiz_data, dry_run):
                 inserted += 1
                 gebiz_inserted = True
             else:
@@ -746,60 +746,6 @@ def migrate_flipkart(df, dry_run, market_filter):
         sub_data = {k: v for k, v in sub_data.items() if v is not None}
 
         if _safe_insert("submissions", sub_data, dry_run):
-            inserted += 1
-        else:
-            errors += 1
-
-    return inserted, skipped_dup, skipped_blank, errors
-
-
-@_reg("Contacts")
-def migrate_contacts(df, dry_run, market_filter):
-    inserted = skipped_dup = skipped_blank = errors = 0
-
-    for idx, row in df.iterrows():
-        name = _clean(_get(row, df, "Name", "Contact Name"))
-        if not name:
-            skipped_blank += 1
-            continue
-
-        # Build outreach history from date columns
-        outreach_dates = []
-        for c in df.columns:
-            cl = c.lower().strip()
-            if any(k in cl for k in ["reachout", "reach out", "outreach date",
-                                      "date of reachout", "last contact"]):
-                d = _parse_date(row.get(c))
-                if d:
-                    outreach_dates.append(d)
-
-        region_raw = _clean(_get(row, df, "Region"))
-        region = None
-        if region_raw:
-            r = region_raw.upper().strip()
-            if r in ("IN", "SG", "MY"):
-                region = r
-            elif "india" in region_raw.lower():
-                region = "IN"
-            elif "singapore" in region_raw.lower():
-                region = "SG"
-            elif "malaysia" in region_raw.lower():
-                region = "MY"
-
-        contact_data = {
-            "name": name,
-            "company": _clean(_get(row, df, "Company", "Company Name")),
-            "region": region,
-            "contact_number": _clean_phone(_get(row, df, "Contact No", "Contact No.",
-                                                 "Phone", "Mob")),
-            "email": _clean(_get(row, df, "E-mail", "Email", "Email ID")),
-            "outreach_history": outreach_dates if outreach_dates else None,
-            "last_outreach_date": max(outreach_dates) if outreach_dates else None,
-            "notes": _clean(_get(row, df, "Notes", "Remarks")),
-        }
-        contact_data = {k: v for k, v in contact_data.items() if v is not None}
-
-        if _safe_insert("client_contacts", contact_data, dry_run):
             inserted += 1
         else:
             errors += 1

@@ -774,7 +774,7 @@ def close_requirement(req_id: str, user_role: str, user_email: str) -> dict:
 def wipe_all_requirements(user_role: str, user_email: str) -> dict:
     """Destructively delete every requirement and its FK-linked children.
 
-    TL only. Candidates, projects, client_contacts are kept. This is the
+    TL only. Candidates, projects, interview_tracker are kept. This is the
     "start fresh" operation agreed in the workflow spec — irreversible
     without a Supabase point-in-time restore.
     """
@@ -1744,11 +1744,14 @@ def tl_approve_and_send(payload: Any, user_role: str, user_email: str) -> dict:
         submission["candidate_id"], submission["requirement_id"],
         {"status": "submitted_to_client"})
     if requirement.get("market") == "SG" and requirement.get("tender_number"):
-        db.insert_gebiz_submission(
-            submission["candidate_id"],
-            requirement["tender_number"],
-            school_name=requirement.get("location"),
-        )
+        db.insert_interview_tracker({
+            "candidate_id": submission["candidate_id"],
+            "requirement_id": submission["requirement_id"],
+            "tender_number": requirement["tender_number"],
+            "school_name": requirement.get("location"),
+            "submission_date": now_ts[:10],
+            "status": "Submitted",
+        })
     return {"sent": True, "sent_at": now_ts}
 
 

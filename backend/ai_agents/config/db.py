@@ -249,7 +249,7 @@ def wipe_all_requirements() -> dict[str, int]:
     """Hard-delete every requirement and every row that references one.
 
     FKs on requirements don't cascade, so children must go first. Candidates,
-    projects, client_contacts etc. are untouched. Returns per-table delete
+    projects, interview_tracker etc. are untouched. Returns per-table delete
     counts for the caller to display.
     """
     client = get_client()
@@ -257,7 +257,7 @@ def wipe_all_requirements() -> dict[str, int]:
     # Use a dummy value "not-null-sentinel" — supabase-py requires a filter
     # on delete(), so we use `neq` against an impossible id to match all rows.
     IMPOSSIBLE_ID = "00000000-0000-0000-0000-000000000000"
-    for table in ("interview_tracker", "submissions", "outreach_log",
+    for table in ("submissions", "outreach_log",
                   "match_scores", "candidate_details", "screenings"):
         try:
             res = (client.table(table).delete()
@@ -397,22 +397,10 @@ def get_pipeline_summary(market: str | None = None, project_id: str | None = Non
     return q.order("submitted_at", desc=True).execute().data
 
 
-# ── GeBIZ ───────────────────────────────────────────────────
+# ── Interview tracker ───────────────────────────────────────
 
-def insert_gebiz_submission(candidate_id: str, tender_number: str,
-                            school_name: str | None = None) -> dict:
-    data = {"candidate_id": candidate_id, "tender_number": tender_number}
-    if school_name:
-        data["school_name"] = school_name
-    return get_client().table("gebiz_submissions").insert(data).execute().data[0]
-
-
-def get_gebiz_by_candidate(candidate_id: str):
-    return (get_client().table("gebiz_submissions")
-            .select("id, tender_number, school_name, submission_date, "
-                    "rechecking_date, status, remarks")
-            .eq("candidate_id", candidate_id)
-            .execute().data)
+def insert_interview_tracker(data: dict) -> dict:
+    return get_client().table("interview_tracker").insert(data).execute().data[0]
 
 
 # ── Projects ────────────────────────────────────────────────

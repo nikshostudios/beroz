@@ -222,7 +222,7 @@ def main():
         push_to_railway(cookie_str)
     else:
         print("\nTip: run with --railway to also push to Railway automatically.")
-        print("     You'll still need to redeploy the ai-agents service manually,")
+        print("     You'll still need to redeploy the ai_agents service manually,")
         print("     or trigger it via the Railway dashboard.")
 
 

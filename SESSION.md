@@ -44,7 +44,7 @@ JUICEBOX HTML/
 │   ├── requirements.txt              # Python dependencies
 │   ├── Procfile                      # Gunicorn deployment config
 │   ├── build.sh                      # Dashboard build script
-│   └── ai-agents/
+│   └── ai_agents/
 │       ├── main.py                   # FastAPI AI agent layer (1500+ lines)
 │       ├── config/
 │       │   ├── db.py                 # Supabase database helpers
@@ -122,7 +122,7 @@ Client Browser
     │   Google Sheets CRM, API proxy to FastAPI             │
     │                                                        │
     │   └── FastAPI (port 8001) ───────────────────────────┐│
-    │       ai-agents/main.py                               ││
+    │       ai_agents/main.py                               ││
     │       Requirements CRUD, AI sourcing, screening,      ││
     │       inbox processing, TL queue, pipeline stats      ││
     │                                                        ││
