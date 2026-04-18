@@ -79,12 +79,13 @@ async def run_inbox_scan(process_fn) -> dict:
     return summary
 
 
-def setup_scheduler(scheduler, process_fn):
-    """Configure APScheduler with the inbox cron job.
+def setup_scheduler(scheduler, process_fn, sequence_tick_fn=None):
+    """Configure APScheduler with cron jobs.
 
     Args:
         scheduler: AsyncIOScheduler instance
         process_fn: the _run_process_inbox coroutine from main.py
+        sequence_tick_fn: optional callable for sequence_tick (sync)
     """
     async def _job():
         await run_inbox_scan(process_fn)
@@ -97,3 +98,20 @@ def setup_scheduler(scheduler, process_fn):
         misfire_grace_time=60,
         max_instances=1,
     )
+
+    if sequence_tick_fn:
+        def _tick_job():
+            try:
+                result = sequence_tick_fn(user_role=None)
+                _cron_log(f"sequence_tick OK: {result}")
+            except Exception as e:
+                _cron_log(f"sequence_tick ERR: {e}")
+
+        scheduler.add_job(
+            _tick_job,
+            "interval",
+            minutes=5,
+            id="sequence_tick_cron",
+            misfire_grace_time=60,
+            max_instances=1,
+        )

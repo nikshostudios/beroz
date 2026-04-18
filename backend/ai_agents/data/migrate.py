@@ -271,68 +271,6 @@ def migrate_master(df, dry_run, market_filter):
     return inserted, skipped_dup, skipped_blank, errors
 
 
-@_reg("Interview Tracker Updated")
-def migrate_interviews(df, dry_run, market_filter):
-    inserted = skipped_dup = skipped_blank = errors = 0
-    seen_emails = set()
-
-    for idx, row in df.iterrows():
-        name = _clean(_get(row, df, "Name of Candidate", "Name of the Candidate",
-                           "Candidate Name", "Name"))
-        if not name:
-            skipped_blank += 1
-            continue
-
-        email = _clean(_get(row, df, "Email", "Email ID", "E-mail"))
-        client = _clean(_get(row, df, "Client", "End client", "End Client"))
-
-        # Upsert candidate
-        cand_data = {
-            "name": name,
-            "email": email,
-            "phone": _clean_phone(_get(row, df, "Mob", "Contact No", "Phone")),
-            "cv_id": _clean(_get(row, df, "CV ID", "CVID")),
-            "market": _infer_market(client),
-            "source": "excel_migration",
-        }
-        if email and email in seen_emails:
-            cand = _safe_upsert_candidate(
-                {k: v for k, v in cand_data.items() if v is not None}, dry_run)
-            skipped_dup += 1
-        else:
-            if email:
-                seen_emails.add(email)
-            cand = _safe_upsert_candidate(
-                {k: v for k, v in cand_data.items() if v is not None}, dry_run)
-
-        if not cand:
-            errors += 1
-            continue
-
-        tracker_data = {
-            "candidate_id": cand["id"],
-            "recruiter": _clean(_get(row, df, "Recruiter", "Recruiter Name")),
-            "interview_date": _parse_date(_get(row, df, "Interview Date")),
-            "interview_time": _clean(_get(row, df, "Time", "Interview Time")),
-            "status": _clean(_get(row, df, "Status", "Final Status")),
-            "end_client": _clean(_get(row, df, "End client", "End Client", "Client")),
-            "placement_type": _map_placement_type(_clean(_get(row, df, "Placement type",
-                                                               "Placement Type"))),
-            "doj": _parse_date(_get(row, df, "DOJ")),
-            "package": _clean(_get(row, df, "Package")),
-            "sap_id": _clean(_get(row, df, "SAP ID", "SAP Id")),
-            "remarks": _clean(_get(row, df, "Remarks")),
-        }
-        tracker_data = {k: v for k, v in tracker_data.items() if v is not None}
-
-        if _safe_insert("interview_tracker", tracker_data, dry_run):
-            inserted += 1
-        else:
-            errors += 1
-
-    return inserted, skipped_dup, skipped_blank, errors
-
-
 @_reg("Onboarded Candidates")
 def migrate_onboarded(df, dry_run, market_filter):
     inserted = skipped_dup = skipped_blank = errors = 0
@@ -777,7 +715,6 @@ def run_migration(file_path: str, sheet_name: str, dry_run: bool,
     # Ordered processing: candidates first, then requirements, contacts, gebiz tenders
     ORDERED_SHEETS = [
         "Master submission sheet",
-        "Interview Tracker Updated",
         "Onboarded Candidates",
         "HCL - Non IT",
         "GeBIZ",
