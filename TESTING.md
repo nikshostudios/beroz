@@ -29,14 +29,14 @@
 
 ### Phase 2: Backend API Health (tests Supabase + AI Agent Layer)
 
-These tests verify the FastAPI backend is reachable. If these fail, the `ai-agents` service may not be deployed yet on Railway.
+These tests verify the FastAPI backend is reachable. If these fail, the `ai_agents` service may not be deployed yet on Railway.
 
 - [ ] **Requirements API** — After login, go to Requirements page. If requirements load (cards appear), the Flask→FastAPI→Supabase chain works.
 - [ ] **Pipeline API** — Go to Shortlist or Analytics page. If data loads, pipeline API works.
 - [ ] **Session API** — Settings page shows your name/email/role = Flask session works.
 
 **If pages show empty/errors:**
-The FastAPI `ai-agents` service needs to be deployed as a separate Railway service. Currently only the `web` (Flask) service is live. The Flask API proxy routes forward to `AI_AGENT_URL` which points to the ai-agents internal service.
+The FastAPI `ai_agents` service needs to be deployed as a separate Railway service. Currently only the `web` (Flask) service is live. The Flask API proxy routes forward to `AI_AGENT_URL` which points to the ai_agents internal service.
 
 ### Phase 3: Requirements (needs Supabase + AI Agent Layer)
 
@@ -144,7 +144,7 @@ curl -s https://exceltechcomputers.up.railway.app/api/session \
 # This is an internal Railway service — not publicly accessible
 # Test from the Flask app by visiting the Requirements page
 # If requirements load → FastAPI is connected
-# If empty → ai-agents service needs deployment
+# If empty → ai_agents service needs deployment
 ```
 
 ### Check Railway logs
@@ -156,7 +156,7 @@ railway logs  # View latest web service logs
 ### Common Issues
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Pages load but no data | AI agent service not deployed | Deploy ai-agents as separate Railway service |
+| Pages load but no data | AI agent service not deployed | Deploy ai_agents as separate Railway service |
 | "Check Inbox" fails | Outlook not configured | Set AZURE_* env vars in Railway |
 | Screening returns errors | No Claude API key | Set ANTHROPIC_API_KEY in Railway |
 | Sourcing finds 0 candidates | No portal credentials | Add Foundit/Apollo creds to Supabase portal_credentials table |
@@ -166,7 +166,7 @@ railway logs  # View latest web service logs
 
 ## Next Steps for Full Validation
 
-1. **Deploy ai-agents service** — The FastAPI layer needs its own Railway service with internal networking
+1. **Deploy ai_agents service** — The FastAPI layer needs its own Railway service with internal networking
 2. **Verify env vars** — Ensure all env vars (Anthropic, Supabase, Azure) are set in Railway
 3. **Seed test data** — Create a test requirement and source candidates to populate the pipeline
 4. **End-to-end test** — Walk through the full pipeline: Create Requirement → Source → Screen → Outreach → Reply → Submit → TL Approve → Send to Client

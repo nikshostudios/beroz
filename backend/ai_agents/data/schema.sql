@@ -133,17 +133,30 @@ create table submissions (
   remarks text
 );
 
--- GeBIZ submissions (Singapore tenders - one candidate can have multiple)
-create table gebiz_submissions (
+-- Interview tracker (single source of truth for candidate interview +
+-- SG tender tracking; consolidates the retired gebiz_submissions table)
+create table interview_tracker (
   id uuid primary key default gen_random_uuid(),
   candidate_id uuid references candidates(id),
-  tender_number text not null,
+  requirement_id uuid references requirements(id),
+  recruiter text,
+  interview_date date,
+  interview_time text,
+  status text,
+  end_client text,
+  placement_type text,
+  doj date,
+  package text,
+  sap_id text,
+  remarks text,
+  tender_number text,
   school_name text,
   submission_date date,
-  rechecking_date date,
-  status text,
-  remarks text
+  rechecking_date date
 );
+
+create index if not exists idx_tracker_tender on interview_tracker(tender_number);
+create index if not exists idx_tracker_candidate on interview_tracker(candidate_id);
 
 -- Match scores (LLM semantic matching cache)
 create table match_scores (
@@ -159,19 +172,6 @@ create table match_scores (
 create index idx_match_scores_requirement on match_scores(requirement_id);
 create index idx_match_scores_candidate on match_scores(candidate_id);
 create index idx_match_scores_score on match_scores(requirement_id, score desc);
-
--- Client contacts (TL's BD CRM)
-create table client_contacts (
-  id uuid primary key default gen_random_uuid(),
-  name text,
-  company text,
-  region text check (region in ('IN', 'SG', 'MY')),
-  contact_number text,
-  email text,
-  last_outreach_date date,
-  outreach_history jsonb,
-  notes text
-);
 
 -- Portal credentials (shared Foundit logins etc.)
 create table portal_credentials (
@@ -193,8 +193,6 @@ create index idx_screenings_candidate on screenings(candidate_id);
 create index idx_screenings_requirement on screenings(requirement_id);
 create index idx_submissions_candidate on submissions(candidate_id);
 create index idx_submissions_requirement on submissions(requirement_id);
-create index idx_gebiz_candidate on gebiz_submissions(candidate_id);
-create index idx_gebiz_tender on gebiz_submissions(tender_number);
 create index idx_outreach_recruiter on outreach_log(recruiter_email);
 
 -- Enable Row Level Security (can configure policies later)
@@ -204,8 +202,7 @@ alter table screenings enable row level security;
 alter table candidate_details enable row level security;
 alter table outreach_log enable row level security;
 alter table submissions enable row level security;
-alter table gebiz_submissions enable row level security;
-alter table client_contacts enable row level security;
+alter table interview_tracker enable row level security;
 alter table portal_credentials enable row level security;
 alter table match_scores enable row level security;
 

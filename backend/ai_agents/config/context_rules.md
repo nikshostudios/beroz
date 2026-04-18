@@ -65,10 +65,10 @@ open | closed | on_hold
 
 - Market is always "SG"
 - One candidate can be submitted to multiple tenders simultaneously
-- Each tender submission is a separate row in `gebiz_submissions`
+- Each tender submission is a separate row in `interview_tracker`
 - Nationality check: GeBIZ school roles often require Singaporean/PR — flag in screening
 - Tender numbers format: MOESCHETQxxxxxxxx
-- When TL approves and sends, auto-insert into gebiz_submissions if requirement has tender_number
+- When TL approves and sends, auto-insert into interview_tracker if requirement has tender_number
 
 ## Foundit credential rotation
 
