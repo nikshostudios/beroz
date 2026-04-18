@@ -1769,6 +1769,337 @@ def tl_reject(payload: Any, user_role: str) -> dict:
     return {"status": "rejected", "submission_id": body["submission_id"]}
 
 
+# ── Submissions (new dual-role endpoints) ──────────────────────
+
+def get_my_submissions(recruiter_email: str) -> dict:
+    """Return this recruiter's submissions grouped by requirement."""
+    client = db.get_client()
+    # All submissions by this recruiter (any status)
+    rows = (client.table("submissions")
+            .select("id, candidate_id, requirement_id, submitted_at, "
+                    "tl_approved, final_status, submitted_by_recruiter")
+            .eq("submitted_by_recruiter", recruiter_email)
+            .order("submitted_at", desc=True)
+            .execute().data)
+
+    # Fetch requirements and candidates in bulk
+    req_ids = list({r["requirement_id"] for r in rows if r.get("requirement_id")})
+    cand_ids = list({r["candidate_id"] for r in rows if r.get("candidate_id")})
+
+    reqs_map: dict = {}
+    cands_map: dict = {}
+    if req_ids:
+        for r in (client.table("requirements")
+                  .select("id, role_title, client_name, market, assigned_recruiters")
+                  .in_("id", req_ids).execute().data):
+            reqs_map[r["id"]] = r
+    if cand_ids:
+        for c in (client.table("candidates")
+                  .select("id, name, current_ctc, expected_ctc, notice_period")
+                  .in_("id", cand_ids).execute().data):
+            cands_map[c["id"]] = c
+
+    # Also pull requirements assigned to this recruiter but not yet submitted
+    try:
+        all_reqs = (client.table("requirements")
+                    .select("id, role_title, client_name, market, assigned_recruiters")
+                    .eq("status", "open")
+                    .execute().data)
+        assigned_reqs = [r for r in all_reqs
+                         if recruiter_email in (r.get("assigned_recruiters") or [])]
+    except Exception:
+        assigned_reqs = []
+    for r in assigned_reqs:
+        reqs_map.setdefault(r["id"], r)
+
+    # Group submissions by requirement
+    groups: dict = {}
+    for sub in rows:
+        rid = sub.get("requirement_id")
+        if not rid:
+            continue
+        if rid not in groups:
+            req = reqs_map.get(rid, {})
+            groups[rid] = {"requirement": req, "submissions": []}
+        cand = cands_map.get(sub.get("candidate_id"), {})
+        # Derive simple status for recruiter view
+        if sub.get("final_status") == "rejected_by_tl":
+            status = "rejected"
+        elif sub.get("tl_approved"):
+            status = "approved"
+        else:
+            status = "pending"
+        groups[rid]["submissions"].append({
+            **sub,
+            "candidate_name": cand.get("name", ""),
+            "current_ctc": cand.get("current_ctc", ""),
+            "expected_ctc": cand.get("expected_ctc", ""),
+            "notice_period": cand.get("notice_period", ""),
+            "status": status,
+        })
+
+    # Ensure every assigned requirement appears (even with 0 submissions)
+    for rid, req in reqs_map.items():
+        if rid not in groups:
+            groups[rid] = {"requirement": req, "submissions": []}
+
+    return {"groups": list(groups.values())}
+
+
+def create_submission(payload: Any, recruiter_email: str) -> dict:
+    """Recruiter submits an existing candidate for a requirement.
+    Optionally patches new fields on the candidate row first."""
+    body = _require_fields(payload, ["candidate_id", "requirement_id"])
+    cid = body["candidate_id"]
+    rid = body["requirement_id"]
+
+    # Optional candidate field updates (new columns + existing)
+    candidate_patch = {}
+    for field in ("date_of_birth", "address_full", "current_company",
+                  "phone", "email", "total_experience", "relevant_experience",
+                  "current_ctc", "expected_ctc", "current_location",
+                  "preferred_location", "notice_period", "name"):
+        if body.get(field) is not None:
+            candidate_patch[field] = body[field]
+    if candidate_patch:
+        db.get_client().table("candidates").update(candidate_patch).eq("id", cid).execute()
+
+    # Check for duplicate submission
+    existing = (db.get_client().table("submissions")
+                .select("id, tl_approved, final_status")
+                .eq("candidate_id", cid)
+                .eq("requirement_id", rid)
+                .execute().data)
+    if existing:
+        ex = existing[0]
+        if not ex.get("tl_approved") and ex.get("final_status") != "rejected_by_tl":
+            raise CoreError(409, "Candidate already submitted for this requirement")
+
+    # Fetch requirement for client/market info
+    req_rows = (db.get_client().table("requirements")
+                .select("client_name, market, tender_number")
+                .eq("id", rid).execute().data)
+    req = req_rows[0] if req_rows else {}
+
+    now_ts = datetime.now(timezone.utc).isoformat()
+    sub_row = (db.get_client().table("submissions").insert({
+        "candidate_id": cid,
+        "requirement_id": rid,
+        "client_name": req.get("client_name"),
+        "market": req.get("market"),
+        "tender_number": req.get("tender_number"),
+        "submitted_by_recruiter": recruiter_email,
+        "submitted_at": now_ts,
+        "tl_approved": False,
+    }).execute().data)
+
+    db.upsert_candidate_details(cid, rid, {"status": "submitted_to_tl"})
+    return {"submission": sub_row[0] if sub_row else {}, "status": "pending"}
+
+
+def get_tl_submissions(requirement_id: str | None = None) -> dict:
+    """TL: all submissions grouped by requirement. Optionally filter by req."""
+    client = db.get_client()
+
+    query = (client.table("submissions")
+             .select("id, candidate_id, requirement_id, submitted_by_recruiter, "
+                     "submitted_at, tl_approved, tl_approved_at, final_status"))
+    if requirement_id:
+        query = query.eq("requirement_id", requirement_id)
+    rows = query.order("submitted_at", desc=True).execute().data
+
+    req_ids = list({r["requirement_id"] for r in rows if r.get("requirement_id")})
+    cand_ids = list({r["candidate_id"] for r in rows if r.get("candidate_id")})
+
+    reqs_map: dict = {}
+    cands_map: dict = {}
+    details_map: dict = {}
+
+    if req_ids:
+        for r in (client.table("requirements")
+                  .select("id, role_title, client_name, market, status")
+                  .in_("id", req_ids).execute().data):
+            reqs_map[r["id"]] = r
+    if cand_ids:
+        for c in (client.table("candidates")
+                  .select("id, name, current_ctc, expected_ctc, notice_period, "
+                          "email, phone, current_location, date_of_birth, "
+                          "address_full, current_company, total_experience, "
+                          "relevant_experience")
+                  .in_("id", cand_ids).execute().data):
+            cands_map[c["id"]] = c
+        # Candidate details for tl_feedback
+        for d in (client.table("candidate_details")
+                  .select("candidate_id, requirement_id, tl_feedback, status")
+                  .in_("candidate_id", cand_ids).execute().data):
+            details_map[(d["candidate_id"], d.get("requirement_id"))] = d
+
+    # Build recruiter name map
+    from app import RECRUITER_LOGINS
+    email_to_name = {u["email"]: u["name"] for u in RECRUITER_LOGINS.values()}
+
+    groups: dict = {}
+    for sub in rows:
+        rid = sub.get("requirement_id")
+        cid = sub.get("candidate_id")
+        if not rid:
+            continue
+        if rid not in groups:
+            groups[rid] = {"requirement": reqs_map.get(rid, {}), "submissions": []}
+        cand = cands_map.get(cid, {})
+        det = details_map.get((cid, rid), {})
+        if sub.get("final_status") == "rejected_by_tl":
+            status = "rejected"
+        elif sub.get("tl_approved"):
+            status = "approved"
+        else:
+            status = "pending"
+        groups[rid]["submissions"].append({
+            **sub,
+            "candidate_name": cand.get("name", ""),
+            "current_ctc": cand.get("current_ctc", ""),
+            "expected_ctc": cand.get("expected_ctc", ""),
+            "notice_period": cand.get("notice_period", ""),
+            "email": cand.get("email", ""),
+            "phone": cand.get("phone", ""),
+            "current_location": cand.get("current_location", ""),
+            "date_of_birth": cand.get("date_of_birth", ""),
+            "address_full": cand.get("address_full", ""),
+            "current_company": cand.get("current_company", ""),
+            "total_experience": cand.get("total_experience", ""),
+            "relevant_experience": cand.get("relevant_experience", ""),
+            "tl_feedback": det.get("tl_feedback", ""),
+            "recruiter_name": email_to_name.get(sub.get("submitted_by_recruiter", ""), ""),
+            "status": status,
+        })
+
+    return {"groups": list(groups.values())}
+
+
+def get_performance(user_role: str, user_email: str) -> dict:
+    """Performance metrics — TL sees all recruiters, recruiter sees own data."""
+    client = db.get_client()
+    from app import RECRUITER_LOGINS
+    email_to_name = {u["email"]: u["name"] for u in RECRUITER_LOGINS.values()}
+
+    # Build date boundaries for 30-day window
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    yesterday = (now - timedelta(hours=24)).isoformat()
+
+    # Fetch submissions (TL: all; recruiter: own)
+    query = client.table("submissions").select(
+        "id, submitted_by_recruiter, submitted_at, tl_approved, tl_approved_at, "
+        "final_status")
+    if user_role != "tl":
+        query = query.eq("submitted_by_recruiter", user_email)
+    all_subs = query.execute().data
+
+    total = len(all_subs)
+    approved = sum(1 for s in all_subs if s.get("tl_approved"))
+    rejected = sum(1 for s in all_subs
+                   if s.get("final_status") == "rejected_by_tl")
+    pending = total - approved - rejected
+
+    # Daily trend (last 30 days)
+    from collections import Counter
+    day_counter: Counter = Counter()
+    for s in all_subs:
+        ts = s.get("submitted_at") or ""
+        if ts >= thirty_days_ago:
+            day = ts[:10]  # YYYY-MM-DD
+            day_counter[day] += 1
+    by_day = [{"date": d, "count": c}
+              for d, c in sorted(day_counter.items())]
+
+    result: dict = {
+        "summary": {"total": total, "approved": approved,
+                    "rejected": rejected, "pending": pending},
+        "by_day": by_day,
+    }
+
+    if user_role == "tl":
+        # Per-recruiter breakdown
+        rec_stats: dict = {}
+        for s in all_subs:
+            email = s.get("submitted_by_recruiter") or "unknown"
+            if email not in rec_stats:
+                rec_stats[email] = {"name": email_to_name.get(email, email),
+                                    "total": 0, "approved": 0, "rejected": 0}
+            rec_stats[email]["total"] += 1
+            if s.get("tl_approved"):
+                rec_stats[email]["approved"] += 1
+            if s.get("final_status") == "rejected_by_tl":
+                rec_stats[email]["rejected"] += 1
+        result["by_recruiter"] = list(rec_stats.values())
+    else:
+        # Recent verdicts (last 24 hours) for recruiter transparency
+        recent: list = []
+        for s in all_subs:
+            decided_at = s.get("tl_approved_at") or ""
+            if decided_at and decided_at >= yesterday:
+                if s.get("tl_approved"):
+                    verdict = "approved"
+                elif s.get("final_status") == "rejected_by_tl":
+                    verdict = "rejected"
+                else:
+                    continue
+                recent.append({"submission_id": s["id"], "verdict": verdict,
+                                "decided_at": decided_at})
+        result["recent_verdicts"] = recent
+
+    return result
+
+
+def get_usage() -> dict:
+    """Aggregate real usage metrics from existing tables."""
+    client = db.get_client()
+    from datetime import date as date_type
+    today = date_type.today().isoformat()
+
+    screenings_total = 0
+    screenings_today = 0
+    emails_total = 0
+    emails_today = 0
+    matches_total = 0
+    submissions_total = 0
+
+    try:
+        res = client.table("screenings").select("id, screened_at", count="exact").execute()
+        screenings_total = res.count or 0
+        screenings_today = sum(1 for r in (res.data or [])
+                               if (r.get("screened_at") or "").startswith(today))
+    except Exception:
+        pass
+    try:
+        res = client.table("outreach_log").select("id, sent_at", count="exact").execute()
+        emails_total = res.count or 0
+        emails_today = sum(1 for r in (res.data or [])
+                           if (r.get("sent_at") or "").startswith(today))
+    except Exception:
+        pass
+    try:
+        res = client.table("match_scores").select("id", count="exact").execute()
+        matches_total = res.count or 0
+    except Exception:
+        pass
+    try:
+        res = client.table("submissions").select("id", count="exact").execute()
+        submissions_total = res.count or 0
+    except Exception:
+        pass
+
+    return {
+        "ai_screenings_today": screenings_today,
+        "ai_screenings_total": screenings_total,
+        "emails_sent_today": emails_today,
+        "emails_sent_total": emails_total,
+        "candidates_scored_total": matches_total,
+        "submissions_processed_total": submissions_total,
+    }
+
+
 # ── Pipeline ───────────────────────────────────────────────────
 
 def pipeline_summary(market: str | None, project_id: str | None = None) -> dict:
@@ -1797,7 +2128,7 @@ def pipeline_summary(market: str | None, project_id: str | None = None) -> dict:
         pass
     try:
         for s in (db.get_client().table("submissions")
-                  .select("requirement_id, tl_approved, sent_to_client_at")
+                  .select("requirement_id, tl_approved, sent_to_client_at, final_status")
                   .in_("requirement_id", req_ids).execute().data):
             sub_by_req[s["requirement_id"]].append(s)
     except Exception:
@@ -1835,6 +2166,7 @@ def pipeline_summary(market: str | None, project_id: str | None = None) -> dict:
             matched_n = db.count_matched_candidates(rid, min_score=60)
         except Exception:
             pass
+        placed_statuses = {"Selected-Joined", "Selected"}
         pipeline.append({
             "requirement_id": rid,
             "role_title": req.get("role_title"),
@@ -1849,6 +2181,15 @@ def pipeline_summary(market: str | None, project_id: str | None = None) -> dict:
             "replied": sum(1 for o in outreach_rows if o.get("reply_received")),
             "details_complete": sum(1 for d in details
                                     if d.get("status") == "ready_for_review"),
+            # Align frontend field names: submitted = all rows in TL queue
+            "submitted": len(submissions_rows),
+            # approved = sent to client
+            "approved": sum(1 for s in submissions_rows
+                            if s.get("sent_to_client_at")),
+            # placed = final outcome (joined or selected)
+            "placed": sum(1 for s in submissions_rows
+                          if s.get("final_status") in placed_statuses),
+            # legacy names kept for backwards compat
             "submitted_to_tl": len(submissions_rows),
             "sent_to_client": sum(1 for s in submissions_rows
                                   if s.get("sent_to_client_at")),
@@ -2500,7 +2841,142 @@ def enroll_candidates(seq_id: str, payload: dict,
     }
 
 
-# Phase D stub — scheduler tick will be wired here later
-def sequence_tick(user_role: str) -> dict:
-    _require_role(user_role, ["tl"])
-    return {"ok": True, "skipped": "phase_d"}
+def sequence_tick(user_role: str | None = None) -> dict:
+    """Process due sequence sends. Called by scheduler (role=None) or manually (role=tl)."""
+    if user_role is not None:
+        _require_role(user_role, ["tl"])
+
+    client = db.get_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. Query due sends joined to active runs
+    due_rows = (client.table("sequence_step_sends")
+                .select("*, sequence_runs!inner(id, sequence_id, candidate_id, from_email, status)")
+                .eq("status", "scheduled")
+                .lte("scheduled_for", now_iso)
+                .eq("sequence_runs.status", "active")
+                .limit(50)
+                .execute().data)
+
+    sent_count = 0
+    fail_count = 0
+    errors = []
+
+    for send_row in due_rows:
+        send_id = send_row["id"]
+        run = send_row["sequence_runs"]
+        run_id = run["id"]
+        seq_id = run["sequence_id"]
+        cid = run["candidate_id"]
+        from_email = run["from_email"]
+
+        try:
+            # a. Fetch candidate
+            cand = db.get_candidate_by_id(cid) or {}
+            to_email = cand.get("email")
+            if not to_email:
+                raise ValueError(f"Candidate {cid} has no email")
+
+            # b. Fetch sequence + steps
+            seq = db.get_sequence_full(seq_id)
+            if not seq:
+                raise ValueError(f"Sequence {seq_id} not found")
+            steps = seq.get("steps") or []
+            step_id = send_row["step_id"]
+            step_pos = send_row["step_position"]
+            step = next((s for s in steps if s["id"] == step_id), None)
+            if not step:
+                raise ValueError(f"Step {step_id} not found in sequence")
+
+            # c. Render subject/body
+            sender = {"email": from_email, "name": from_email.split("@")[0].title()}
+            sched_link = seq.get("config", {}).get("scheduling_link", "")
+            if sched_link:
+                sender["scheduling_link"] = sched_link
+            subject = _render_template(step.get("subject_template", ""), cand, sender)
+            body = _render_template(step.get("body_template", ""), cand, sender)
+
+            # d. Send email
+            sent = outlook.send_email(
+                from_email=from_email,
+                to_email=to_email,
+                subject=subject,
+                body=body,
+            )
+
+            # e. Insert outreach_log
+            req_id = seq.get("requirement_id")
+            log_row = db.insert_outreach_log({
+                "candidate_id": cid,
+                "requirement_id": req_id,
+                "recruiter_email": from_email,
+                "outlook_message_id": sent.get("message_id"),
+                "outlook_thread_id": sent.get("thread_id"),
+                "email_subject": subject,
+                "sent_at": sent.get("sent_at"),
+                "sequence_run_id": run_id,
+                "sequence_step_id": step_id,
+            })
+
+            # f. Update sequence_step_sends → sent
+            client.table("sequence_step_sends").update({
+                "status": "sent",
+                "sent_at": sent.get("sent_at"),
+                "outreach_log_id": log_row["id"],
+            }).eq("id", send_id).execute()
+
+            # g. Insert sequence_run_events
+            client.table("sequence_run_events").insert({
+                "run_id": run_id,
+                "step_id": step_id,
+                "event_type": "sent",
+            }).execute()
+
+            # h. Check for next step
+            next_pos = step_pos + 1
+            next_step = next((s for s in steps if s.get("position") == next_pos), None)
+            if next_step:
+                wait_days = next_step.get("wait_days", 3)
+                next_send_at = (datetime.now(timezone.utc) + timedelta(days=wait_days)).isoformat()
+                client.table("sequence_step_sends").insert({
+                    "run_id": run_id,
+                    "step_id": next_step["id"],
+                    "step_position": next_pos,
+                    "status": "scheduled",
+                    "scheduled_for": next_send_at,
+                }).execute()
+                client.table("sequence_runs").update({
+                    "current_step_position": step_pos,
+                    "next_send_at": next_send_at,
+                }).eq("id", run_id).execute()
+            else:
+                # Sequence complete for this candidate
+                client.table("sequence_runs").update({
+                    "status": "completed",
+                    "current_step_position": step_pos,
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "next_send_at": None,
+                }).eq("id", run_id).execute()
+
+            sent_count += 1
+
+        except Exception as exc:
+            log.exception("sequence_tick send %s failed", send_id)
+            fail_count += 1
+            errors.append({"send_id": send_id, "error": str(exc)})
+            # Mark send as failed
+            try:
+                client.table("sequence_step_sends").update({
+                    "status": "failed",
+                    "error_message": str(exc)[:500],
+                }).eq("id", send_id).execute()
+            except Exception:
+                pass
+
+    return {
+        "ok": True,
+        "processed": len(due_rows),
+        "sent": sent_count,
+        "failed": fail_count,
+        "errors": errors,
+    }

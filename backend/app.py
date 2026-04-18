@@ -28,6 +28,7 @@ from flask import (
     Flask, request, redirect, url_for, session, Response,
     stream_with_context, send_file, jsonify
 )
+from werkzeug.security import check_password_hash
 import fitz  # PyMuPDF for PDF JD extraction
 from docx import Document
 from anthropic import Anthropic
@@ -37,7 +38,10 @@ from google.oauth2.service_account import Credentials
 DASHBOARD_DIST = Path(__file__).parent / "dashboard" / "dist"
 FRONTEND_DIR = Path(__file__).parent.parent  # Root of project (where index.html lives)
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ.get('SECRET_KEY', 'fallback-key')
+_secret = os.environ.get('SECRET_KEY')
+if not _secret:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+app.secret_key = _secret
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -77,21 +81,39 @@ SOURCE_RECRUITERS = {
 }
 
 RECRUITER_LOGINS = {
-    "devesh": {"password": "devesh27", "name": "Devesh Jhinga", "email": "dev@exceltechcomputers.com", "role": "recruiter"},
-    "manoj": {"password": "manoj64", "name": "Manoj Thakran", "email": "manoj@exceltechcomputers.com", "role": "recruiter"},
-    "raju": {"password": "raju18", "name": "Raju Akula", "email": "raju.akula@exceltechcomputers.com", "role": "tl"},
-    "atul": {"password": "atul93", "name": "Atul Kumar", "email": "atul@exceltechcomputers.com", "role": "recruiter"},
-    "rohit": {"password": "rohit45", "name": "Rohit Kumar", "email": "rohit@exceltechcomputers.com", "role": "recruiter"},
-    "raghav": {"password": "raghav72", "name": "Raghav Sharma", "email": "raghav@exceltechcomputers.com", "role": "recruiter"},
-    "priya": {"password": "priya36", "name": "Priya", "email": "priya@exceltechcomputers.com", "role": "recruiter"},
-    "narender": {"password": "narender81", "name": "Narender Kumar", "email": "narender@exceltechcomputers.com", "role": "recruiter"},
-    "recruit": {"password": "recruit59", "name": "Recruit Email", "email": "recruit@exceltechcomputers.com", "role": "recruiter"},
+    "devesh": {"password": "pbkdf2:sha256:1000000$zs3rmQ5dPLuicYIc$141877ac3b11225855d98268e900c5e0baaefd1a0b465e88b50e8fd985b1f1fb", "name": "Devesh Jhinga", "email": "dev@exceltechcomputers.com", "role": "recruiter"},
+    "manoj": {"password": "pbkdf2:sha256:1000000$CdnMd8zBFbMbRsrY$ccbbf73f8db12c1239d5df6d7971163340d2a75aa5814769ed323181a6294f2d", "name": "Manoj Thakran", "email": "manoj@exceltechcomputers.com", "role": "recruiter"},
+    "raju": {"password": "pbkdf2:sha256:1000000$04koQd6DOQdCncx9$2a8801c0e313d731cc5481c6d197385259a0ced33df13c2767d24d70c721ef6c", "name": "Raju Akula", "email": "raju.akula@exceltechcomputers.com", "role": "tl"},
+    "atul": {"password": "pbkdf2:sha256:1000000$fLS6nn9isnX3gFl7$c0ef42a3daaedff1e3cfc869b17f5e3add612d125751c91217cb07f1bf55a62d", "name": "Atul Kumar", "email": "atul@exceltechcomputers.com", "role": "recruiter"},
+    "rohit": {"password": "pbkdf2:sha256:1000000$mDxhtmr3c9xNKT2i$0d3afe96dd883f24f3c099318d081f233639af6e0ebb220b477c5191763bceb5", "name": "Rohit Kumar", "email": "rohit@exceltechcomputers.com", "role": "recruiter"},
+    "raghav": {"password": "pbkdf2:sha256:1000000$cUaxyIf2OWTcUk1T$aa7bff19b28193860183144f595687f44f785cc9fec5ddb5d54fcb7e2d689386", "name": "Raghav Sharma", "email": "raghav@exceltechcomputers.com", "role": "recruiter"},
+    "priya": {"password": "pbkdf2:sha256:1000000$NvRnlnZltFFRqUpI$5cbd59985fdb390003d1d7aef6ea7cb6d172c974e3d1af6131cc748badba7a31", "name": "Priya", "email": "priya@exceltechcomputers.com", "role": "recruiter"},
+    "narender": {"password": "pbkdf2:sha256:1000000$mfVcCE09yApnLLNp$dd179ca93a2fce1002e76ec2ae5090829c9ffc879b045bcb3dc5b4bed820cb8d", "name": "Narender Kumar", "email": "narender@exceltechcomputers.com", "role": "recruiter"},
+    "recruit": {"password": "pbkdf2:sha256:1000000$7bWtXpGERBVjVwTM$af6fd6c5bd8d97691abe495cd4e820e632dd96513337c079a4cd79939d5f88c4", "name": "Recruit Email", "email": "recruit@exceltechcomputers.com", "role": "recruiter"},
 }
 
 # ── AI agent core (formerly a separate FastAPI service on localhost:8001).
 # Now merged into this Flask process — see backend/ai_agents/core.py.
 from ai_agents import core as ai_core
 ai_core.init()
+
+# ── Background scheduler for sequence_tick ──
+if os.environ.get("ENABLE_SCHEDULER") == "1":
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler()
+    from ai_agents.config.cron import _cron_log
+    def _bg_sequence_tick(user_role=None):
+        return ai_core.sequence_tick(user_role)
+    _scheduler.add_job(
+        _bg_sequence_tick,
+        "interval",
+        minutes=5,
+        id="sequence_tick_cron",
+        misfire_grace_time=60,
+        max_instances=1,
+    )
+    _scheduler.start()
+    _cron_log("BackgroundScheduler started with sequence_tick every 5 min")
 
 
 def _ai_core_call(fn, *args, **kwargs):
@@ -466,7 +488,7 @@ def login():
         username = request.form.get("username", "").strip().lower()
         password = request.form.get("password", "")
         user = RECRUITER_LOGINS.get(username)
-        if user and user["password"] == password:
+        if user and check_password_hash(user["password"], password):
             session["logged_in"] = True
             session["version"] = SESSION_VERSION
             session["recruiter_name"] = user["name"]
@@ -3491,6 +3513,11 @@ def api_sequences_enroll(seq_id):
 
 @app.route("/internal/sequence-tick", methods=["POST"])
 def api_sequence_tick():
+    # Dual auth: API key header (for external cron) OR session (for manual TL trigger)
+    internal_key = os.environ.get("INTERNAL_API_KEY")
+    req_key = request.headers.get("X-Internal-Key")
+    if internal_key and req_key and req_key == internal_key:
+        return _ai_core_call(ai_core.sequence_tick, None)
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     return _ai_core_call(ai_core.sequence_tick,
@@ -3604,6 +3631,49 @@ def api_tl_reject():
     if session.get("recruiter_role") != "tl":
         return jsonify({"error": "TL only"}), 403
     return _ai_core_call(ai_core.tl_reject, request.get_json(silent=True), "tl")
+
+
+@app.route("/api/submissions/my")
+def api_submissions_my():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_my_submissions, email)
+
+
+@app.route("/api/submissions/create", methods=["POST"])
+def api_submissions_create():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_submission,
+                         request.get_json(silent=True), email)
+
+
+@app.route("/api/submissions/tl")
+def api_submissions_tl():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    if session.get("recruiter_role") != "tl":
+        return jsonify({"error": "TL only"}), 403
+    requirement_id = request.args.get("requirement_id") or None
+    return _ai_core_call(ai_core.get_tl_submissions, requirement_id)
+
+
+@app.route("/api/performance")
+def api_performance():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_performance, role, email)
+
+
+@app.route("/api/usage")
+def api_usage():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.get_usage)
 
 
 @app.route("/api/notifications")

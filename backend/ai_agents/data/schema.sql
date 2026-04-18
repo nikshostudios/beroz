@@ -133,23 +133,6 @@ create table submissions (
   remarks text
 );
 
--- Interview tracker
-create table interview_tracker (
-  id uuid primary key default gen_random_uuid(),
-  candidate_id uuid references candidates(id),
-  requirement_id uuid references requirements(id),
-  recruiter text,
-  interview_date date,
-  interview_time text,
-  status text,
-  end_client text,
-  placement_type text,
-  doj date,
-  package text,
-  sap_id text,
-  remarks text
-);
-
 -- GeBIZ submissions (Singapore tenders - one candidate can have multiple)
 create table gebiz_submissions (
   id uuid primary key default gen_random_uuid(),
@@ -221,7 +204,6 @@ alter table screenings enable row level security;
 alter table candidate_details enable row level security;
 alter table outreach_log enable row level security;
 alter table submissions enable row level security;
-alter table interview_tracker enable row level security;
 alter table gebiz_submissions enable row level security;
 alter table client_contacts enable row level security;
 alter table portal_credentials enable row level security;
@@ -257,6 +239,18 @@ create index if not exists idx_project_collaborators_user on project_collaborato
 
 alter table projects enable row level security;
 alter table project_collaborators enable row level security;
+
+-- ============================================================
+-- Phase 1 Redesign: New columns on candidates for submission form
+-- Run in Supabase SQL Editor if adding to an existing database:
+--   alter table candidates add column if not exists date_of_birth date;
+--   alter table candidates add column if not exists address_full text;
+--   alter table candidates add column if not exists current_company text;
+-- ============================================================
+
+alter table candidates add column if not exists date_of_birth date;
+alter table candidates add column if not exists address_full text;  -- City, State, Pin
+alter table candidates add column if not exists current_company text;
 
 -- ============================================================
 -- Phase 3: Candidate shortlists (per-user) + free-text notes

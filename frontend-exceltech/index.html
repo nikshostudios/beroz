@@ -1676,11 +1676,12 @@
         </a>
 
         <a class="nav-item" id="analytics-toggle" href="#">
-          <span class="material-icons-outlined">insert_chart_outlined</span> Analytics
+          <span class="material-icons-outlined">insert_chart_outlined</span> Performance
           <span class="material-icons-outlined expand-arrow">chevron_right</span>
         </a>
         <div class="nav-sub-items" id="analytics-sub">
           <a class="nav-sub-item" data-page="analytics" data-tab="pipeline" href="#">Pipeline</a>
+          <a class="nav-sub-item" data-page="analytics" data-tab="performance" href="#">Performance</a>
           <a class="nav-sub-item" data-page="analytics" data-tab="usage" href="#">Usage</a>
         </div>
 
@@ -1789,13 +1790,21 @@
         <div class="page" id="page-requirements">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:12px">
-              <h3 style="font-size:16px;font-weight:600;margin:0">Requirements Board</h3>
+              <h3 style="font-size:16px;font-weight:600;margin:0">Requirements</h3>
               <div class="scope-tabs" id="req-scope-tabs">
-                <button class="scope-tab active" data-scope="mine" type="button">My Requirements</button>
+                <button class="scope-tab active" data-scope="mine" type="button">Mine</button>
                 <button class="scope-tab" data-scope="all" type="button">All Open</button>
               </div>
             </div>
             <div style="display:flex;gap:8px">
+              <div class="view-toggle-btn" id="req-view-toggle" style="display:flex;border:1px solid var(--border-color);border-radius:var(--radius);overflow:hidden">
+                <button type="button" class="active" data-req-view="table" style="padding:6px 10px;border:none;background:var(--bg-card);cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px;color:var(--text-primary)">
+                  <span class="material-icons-outlined" style="font-size:15px">table_rows</span>
+                </button>
+                <button type="button" data-req-view="card" style="padding:6px 10px;border:none;background:transparent;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px;color:var(--text-secondary)">
+                  <span class="material-icons-outlined" style="font-size:15px">grid_view</span>
+                </button>
+              </div>
               <div class="market-tabs">
                 <div class="market-tab active" data-market="">All</div>
                 <div class="market-tab" data-market="IN">India</div>
@@ -1812,6 +1821,25 @@
           <div id="requirements-loading" class="loading-state">
             <div class="loading-spinner"></div> Loading requirements...
           </div>
+          <!-- Table view (default) -->
+          <div id="requirements-table-wrap" class="table-container" style="display:none">
+            <table id="requirements-table">
+              <thead>
+                <tr>
+                  <th style="width:32px"></th>
+                  <th>Role Title</th>
+                  <th>Client</th>
+                  <th>Market</th>
+                  <th>Status</th>
+                  <th>Assigned To</th>
+                  <th>Candidates</th>
+                  <th style="width:80px"></th>
+                </tr>
+              </thead>
+              <tbody id="requirements-tbody"></tbody>
+            </table>
+          </div>
+          <!-- Card view (toggle) -->
           <div id="requirements-list"></div>
           <div class="batch-action-bar hidden" id="batch-action-bar">
             <span class="material-icons-outlined" style="font-size:16px">check_circle</span>
@@ -2182,50 +2210,289 @@
           </div>
         </div>
 
-        <!-- SUBMISSIONS (TL only) -->
+        <!-- SUBMISSIONS (role-aware) -->
         <div class="page" id="page-submissions">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h3 style="font-size:16px;font-weight:600">Submission Queue</h3>
-            <button class="btn-secondary" id="btn-refresh-submissions">
-              <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
-            </button>
+
+          <!-- ── RECRUITER VIEW ── -->
+          <div id="sub-recruiter-view">
+            <!-- Landing: requirement cards -->
+            <div id="sub-rec-landing">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                <h3 style="font-size:16px;font-weight:600;margin:0">My Submissions</h3>
+                <button class="btn-secondary" id="btn-refresh-submissions">
+                  <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
+                </button>
+              </div>
+              <div id="sub-rec-loading" class="loading-state">
+                <div class="loading-spinner"></div> Loading...
+              </div>
+              <div id="sub-rec-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
+            </div>
+
+            <!-- Detail: submissions for one requirement -->
+            <div id="sub-rec-detail" style="display:none">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+                <button class="btn-secondary" id="sub-rec-back-btn" style="padding:6px 10px">
+                  <span class="material-icons-outlined" style="font-size:16px">arrow_back</span>
+                </button>
+                <div>
+                  <div id="sub-rec-detail-title" style="font-size:16px;font-weight:600"></div>
+                  <div id="sub-rec-detail-client" style="font-size:12px;color:var(--text-secondary)"></div>
+                </div>
+                <button class="btn-primary" id="sub-rec-add-btn" style="margin-left:auto">
+                  <span class="material-icons-outlined" style="font-size:16px">add</span> Add Submission
+                </button>
+              </div>
+              <div class="table-container">
+                <table>
+                  <thead><tr>
+                    <th>Candidate</th><th>Current CTC</th><th>Expected CTC</th>
+                    <th>Notice Period</th><th>Status</th><th>Submitted</th>
+                  </tr></thead>
+                  <tbody id="sub-rec-tbody"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
-          <div id="submissions-loading" class="loading-state">
+
+          <!-- ── TL VIEW ── -->
+          <div id="sub-tl-view" style="display:none">
+            <!-- Landing: all requirement cards -->
+            <div id="sub-tl-landing">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                <h3 style="font-size:16px;font-weight:600;margin:0">Submissions</h3>
+                <div style="display:flex;gap:8px">
+                  <select id="sub-tl-filter" style="padding:6px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;background:var(--bg-card);color:var(--text-primary)">
+                    <option value="">All</option>
+                    <option value="pending">Has Pending</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                  <button class="btn-secondary" id="btn-refresh-submissions">
+                    <span class="material-icons-outlined" style="font-size:16px">refresh</span>
+                  </button>
+                </div>
+              </div>
+              <div id="sub-tl-loading" class="loading-state">
+                <div class="loading-spinner"></div> Loading...
+              </div>
+              <div id="sub-tl-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px"></div>
+            </div>
+
+            <!-- Detail: submissions table + right panel -->
+            <div id="sub-tl-detail" style="display:none">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+                <button class="btn-secondary" id="sub-tl-back-btn" style="padding:6px 10px">
+                  <span class="material-icons-outlined" style="font-size:16px">arrow_back</span>
+                </button>
+                <div>
+                  <div id="sub-tl-detail-title" style="font-size:16px;font-weight:600"></div>
+                  <div id="sub-tl-detail-client" style="font-size:12px;color:var(--text-secondary)"></div>
+                </div>
+              </div>
+              <div style="display:flex;gap:0;height:calc(100vh - 200px);min-height:400px">
+                <!-- Left: submissions table -->
+                <div style="flex:1;overflow:auto;border:1px solid var(--border-color);border-radius:var(--radius);border-right:none;border-top-right-radius:0;border-bottom-right-radius:0">
+                  <table style="width:100%">
+                    <thead style="position:sticky;top:0;background:var(--bg-surface);z-index:1"><tr>
+                      <th>Candidate</th><th>Current CTC</th><th>Expected CTC</th>
+                      <th>Notice</th><th>By</th><th>Date</th><th>Status</th>
+                    </tr></thead>
+                    <tbody id="sub-tl-tbody"></tbody>
+                  </table>
+                </div>
+                <!-- Right: detail panel -->
+                <div id="sub-tl-panel" style="width:340px;flex-shrink:0;border:1px solid var(--border-color);border-radius:var(--radius);border-top-left-radius:0;border-bottom-left-radius:0;overflow:auto;display:none;padding:20px;background:var(--bg-card)">
+                  <div id="sub-tl-panel-content"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading for old flow (kept for compatibility) -->
+          <div id="submissions-loading" class="loading-state" style="display:none">
             <div class="loading-spinner"></div> Loading submissions...
           </div>
-          <div id="submissions-list"></div>
+          <div id="submissions-list" style="display:none"></div>
         </div>
 
-        <!-- ANALYTICS -->
+        <!-- Modal: Submit candidate (recruiter) -->
+        <div class="modal-overlay hidden" id="modal-submit-candidate">
+          <div class="modal" style="width:560px;max-width:95vw">
+            <div class="modal-header">
+              <h3 class="modal-title">Submit Candidate</h3>
+              <button class="modal-close" id="sub-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+              <!-- Step 1: Pick candidate -->
+              <div id="sub-step-1">
+                <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">Select shortlisted candidate</label>
+                <select id="sub-candidate-select" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  <option value="">— choose a candidate —</option>
+                </select>
+                <button class="btn-primary" id="sub-step-1-next" style="margin-top:16px;width:100%">Continue</button>
+              </div>
+              <!-- Step 2: Fill form -->
+              <div id="sub-step-2" style="display:none">
+                <input type="hidden" id="sub-form-req-id">
+                <input type="hidden" id="sub-form-cand-id">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">First Name *</label>
+                    <input type="text" id="sub-f-first-name" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Last Name *</label>
+                    <input type="text" id="sub-f-last-name" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Date of Birth</label>
+                    <input type="date" id="sub-f-dob" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Contact Number</label>
+                    <input type="text" id="sub-f-phone" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div style="grid-column:span 2">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Email ID</label>
+                    <input type="email" id="sub-f-email" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Total Experience (months)</label>
+                    <input type="text" id="sub-f-total-exp" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Relevant Experience (months)</label>
+                    <input type="text" id="sub-f-rel-exp" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div style="grid-column:span 2">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Complete Address (City, State, Pin)</label>
+                    <input type="text" id="sub-f-address" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Current CTC</label>
+                    <input type="text" id="sub-f-current-ctc" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Expected CTC</label>
+                    <input type="text" id="sub-f-expected-ctc" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Current Location</label>
+                    <input type="text" id="sub-f-current-loc" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Preferred Location</label>
+                    <input type="text" id="sub-f-pref-loc" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div style="grid-column:span 2">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Notice Period or LWD</label>
+                    <input type="text" id="sub-f-notice" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px" placeholder="e.g. 30 days, Immediate, Last Working Day: 2026-05-01">
+                  </div>
+                  <div style="grid-column:span 2">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Current Company</label>
+                    <input type="text" id="sub-f-company" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:20px">
+                  <button class="btn-secondary" id="sub-step-2-back" style="flex:1">Back</button>
+                  <button class="btn-primary" id="sub-step-2-submit" style="flex:2">Submit to TL</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: TL reject with reason -->
+        <div class="modal-overlay hidden" id="modal-tl-reject">
+          <div class="modal" style="width:420px">
+            <div class="modal-header">
+              <h3 class="modal-title">Reject Submission</h3>
+              <button class="modal-close" id="tl-reject-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+              <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">Rejection reason (shared with recruiter)</label>
+              <textarea id="tl-reject-reason" rows="4" style="width:100%;padding:8px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="e.g. Over-budget, skills mismatch, client paused hiring…"></textarea>
+              <button class="btn-danger" id="tl-reject-confirm-btn" style="width:100%;margin-top:12px">Confirm Rejection</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PERFORMANCE (was Analytics) -->
         <div class="page" id="page-analytics">
           <div class="tabs">
             <div class="tab active" data-analytics-tab="pipeline">Pipeline</div>
+            <div class="tab" data-analytics-tab="performance">Performance</div>
             <div class="tab" data-analytics-tab="usage">Usage</div>
           </div>
+
+          <!-- Pipeline tab -->
           <div id="analytics-pipeline">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div></div>
+              <select id="pipeline-req-filter" style="padding:6px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;background:var(--bg-card);color:var(--text-primary)">
+                <option value="">All Requirements</option>
+              </select>
+            </div>
             <div class="stats-grid" id="pipeline-stats"></div>
             <div class="card">
               <div class="card-title">
                 <span class="material-icons-outlined" style="font-size:18px">filter_alt</span>
-                Pipeline Funnel
+                Pipeline Funnel — Sourced → Placed
               </div>
               <div class="funnel" id="pipeline-funnel"></div>
             </div>
             <div id="pipeline-details"></div>
           </div>
+
+          <!-- Performance tab -->
+          <div id="analytics-performance" style="display:none">
+            <div class="stats-grid" id="perf-summary-stats"></div>
+            <!-- TL: recruiter breakdown table -->
+            <div id="perf-recruiter-section" style="display:none;margin-top:20px">
+              <div class="table-container">
+                <div class="table-header"><div class="table-header-title">Recruiter Breakdown</div></div>
+                <table><thead><tr><th>Recruiter</th><th>Total</th><th>Approved</th><th>Rejected</th><th>Rate</th></tr></thead>
+                <tbody id="perf-recruiter-tbody"></tbody></table>
+              </div>
+            </div>
+            <!-- Trend chart (both roles) -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title">Submissions Over Time (30 days)</div>
+              <div id="perf-trend-chart" style="padding:8px 0"></div>
+            </div>
+            <!-- Recruiter: recent verdicts -->
+            <div id="perf-verdicts-section" style="display:none;margin-top:16px">
+              <div class="card-title" style="margin-bottom:8px">Recent Verdicts (last 24 hrs)</div>
+              <div id="perf-verdicts-list"></div>
+            </div>
+          </div>
+
+          <!-- Usage tab -->
           <div id="analytics-usage" style="display:none">
             <div class="stats-grid">
               <div class="stat-card">
-                <div class="stat-label">API Calls Today</div>
+                <div class="stat-label">AI Screenings Today</div>
                 <div class="stat-value" id="usage-api-calls">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label">Tokens Used</div>
+                <div class="stat-label">Emails Sent Today</div>
                 <div class="stat-value" id="usage-tokens">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label">Est. Cost</div>
+                <div class="stat-label">Candidates Scored</div>
                 <div class="stat-value" id="usage-cost">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Total AI Screenings</div>
+                <div class="stat-value" id="usage-screenings-total">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Total Emails Sent</div>
+                <div class="stat-value" id="usage-emails-total">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Total Submissions</div>
+                <div class="stat-value" id="usage-submissions-total">--</div>
               </div>
             </div>
           </div>
@@ -3140,9 +3407,9 @@
       document.getElementById('settings-email').value = data.email;
       document.getElementById('settings-role-input').value = data.role === 'tl' ? 'Team Lead' : 'Recruiter';
 
-      // Show submissions nav + Clear All + Create button for TL
+      // Submissions nav is visible to everyone; Create/Wipe only for TL
+      document.getElementById('nav-submissions').style.display = '';
       if (data.role === 'tl') {
-        document.getElementById('nav-submissions').style.display = '';
         document.getElementById('btn-create-req').style.display = '';
         const wipeBtn = document.getElementById('btn-wipe-reqs');
         if (wipeBtn) wipeBtn.style.display = '';
@@ -3202,15 +3469,15 @@
 
     const pageTitles = {
       'all-projects': 'All Projects',
-      'requirements': 'Requirements Board',
+      'requirements': 'Requirements',
       'shortlist': 'Shortlist',
       'contacts': 'Contacts',
       'sequences': 'Sequences',
       'sequence-editor': 'Sequence Editor',
       'sequence-detail': 'Sequence Detail',
       'sequence-add-contacts': 'Add Contacts',
-      'submissions': 'Submission Queue',
-      'analytics': 'Analytics',
+      'submissions': 'Submissions',
+      'analytics': 'Performance',
       'integrations': 'Integrations',
       'search': 'Search',
       'settings': 'Settings'
@@ -3252,6 +3519,17 @@
         if (item.dataset.tab) {
           document.querySelectorAll('.nav-sub-item').forEach(s => s.classList.remove('active'));
           item.classList.add('active');
+          // Activate the analytics inner tab matching data-tab
+          const tabName = item.dataset.tab;
+          document.querySelectorAll('[data-analytics-tab]').forEach(t => t.classList.remove('active'));
+          const targetTab = document.querySelector(`[data-analytics-tab="${tabName}"]`);
+          if (targetTab) targetTab.classList.add('active');
+          ['analytics-pipeline', 'analytics-performance', 'analytics-usage'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = id === `analytics-${tabName}` ? '' : 'none';
+          });
+          if (tabName === 'usage') loadUsageStats();
+          if (tabName === 'performance') loadPerformance();
         }
       });
     });
@@ -3262,15 +3540,17 @@
       expandArrow.classList.toggle('rotated');
     });
 
-    // Analytics tab switching
+    // Analytics / Performance tab switching
     document.querySelectorAll('[data-analytics-tab]').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('[data-analytics-tab]').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         const tabName = tab.dataset.analyticsTab;
         document.getElementById('analytics-pipeline').style.display = tabName === 'pipeline' ? '' : 'none';
+        document.getElementById('analytics-performance').style.display = tabName === 'performance' ? '' : 'none';
         document.getElementById('analytics-usage').style.display = tabName === 'usage' ? '' : 'none';
         if (tabName === 'usage') loadUsageStats();
+        if (tabName === 'performance') loadPerformance();
       });
     });
 
@@ -3300,11 +3580,22 @@
       return assigned.map(e => byEmail.get(e) || e.split('@')[0]).join(', ');
     }
 
+    // Requirements view mode: 'table' (default) or 'card'
+    state.reqViewMode = state.reqViewMode || 'table';
+
     async function loadRequirements() {
       const listEl = document.getElementById('requirements-list');
+      const tableWrap = document.getElementById('requirements-table-wrap');
+      const tbody = document.getElementById('requirements-tbody');
       const loadingEl = document.getElementById('requirements-loading');
       loadingEl.style.display = '';
       listEl.innerHTML = '';
+      if (tbody) tbody.innerHTML = '';
+
+      // Show/hide views based on mode
+      const isTable = state.reqViewMode === 'table';
+      if (tableWrap) tableWrap.style.display = isTable ? '' : 'none';
+      listEl.style.display = isTable ? 'none' : '';
 
       try {
         // Requirements is global (TL-owned pool); do NOT scope by project_id.
@@ -3321,79 +3612,141 @@
           const msg = (state.requirementsScope === 'mine')
             ? 'No requirements assigned to you yet. Switch to "All Open" to see what the team is working on.'
             : 'No open requirements. Create one to get started.';
-          listEl.innerHTML = `<div class="empty-state"><span class="material-icons-outlined">assignment</span><p>${esc(msg)}</p></div>`;
+          const emptyHtml = `<div class="empty-state"><span class="material-icons-outlined">assignment</span><p>${esc(msg)}</p></div>`;
+          listEl.innerHTML = emptyHtml;
+          if (tableWrap) tableWrap.style.display = 'none';
+          listEl.style.display = '';
           return;
         }
 
         const isTL = state.user?.role === 'tl';
 
-        reqs.forEach(req => {
-          const market = req.market || '';
-          const marketTag = market === 'IN' ? '<span class="tag tag-india">India</span>' : market === 'SG' ? '<span class="tag tag-singapore">Singapore</span>' : '';
-          const statusTag = req.status === 'open' ? '<span class="tag tag-open"><span class="status-dot green"></span>Open</span>' : '<span class="tag tag-draft"><span class="status-dot gray"></span>' + (req.status || 'Unknown') + '</span>';
-          const skills = (req.skills_required || []).slice(0, 3).join(', ');
-          const assignedLabel = assignedToLabel(req);
-          const matchedCount = req.matched_count || 0;
-          const isSelected = state.selectedRequirements.has(req.id);
-          const card = document.createElement('div');
-          card.className = 'req-card' + (isSelected ? ' selected' : '');
-          card.dataset.reqId = req.id;
-          card.innerHTML = `
-            <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
-            <div class="req-card-header">
-              <div>
-                <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
-                <div class="req-card-client">${esc(req.client_name || '')} ${marketTag}</div>
-              </div>
-              ${statusTag}
-            </div>
-            <div class="req-card-meta">
-              ${skills ? `<span><span class="material-icons-outlined">code</span> ${esc(skills)}</span>` : ''}
-              ${req.location ? `<span><span class="material-icons-outlined">location_on</span> ${esc(req.location)}</span>` : ''}
-              ${req.experience_min ? `<span><span class="material-icons-outlined">work</span> ${req.experience_min}+ yrs</span>` : ''}
-              ${req.salary_budget ? `<span><span class="material-icons-outlined">payments</span> ${esc(req.salary_budget)}</span>` : ''}
-            </div>
-            <div class="req-card-actions">
-              ${matchedCount > 0 ? `
-                <a href="#" class="req-card-sourced" onclick="event.preventDefault();viewSourcedCandidates('${req.id}')">
-                  <span class="material-icons-outlined">group</span>
-                  Found ${matchedCount} candidate${matchedCount === 1 ? '' : 's'}
-                  <span class="material-icons-outlined" style="font-size:12px">arrow_forward</span>
-                </a>` : ''}
-              <button class="btn-secondary" onclick="viewRequirement('${req.id}')">
-                <span class="material-icons-outlined" style="font-size:16px">visibility</span> Details
-              </button>
-            </div>
-            <div class="req-card-footer">
-              <span class="req-card-assigned">
-                <span class="material-icons-outlined" style="font-size:14px">group</span>
-                Assigned to: <strong>${esc(assignedLabel)}</strong>
-              </span>
-              ${isTL ? `<button class="req-card-close" onclick="closeRequirement('${req.id}', this)">
-                <span class="material-icons-outlined" style="font-size:12px">archive</span> Close
-              </button>` : ''}
-            </div>
-          `;
-          listEl.appendChild(card);
-        });
-
-        // Bind checkbox changes after rendering
-        listEl.querySelectorAll('.req-card-check').forEach(cb => {
-          cb.addEventListener('change', (e) => {
-            e.stopPropagation();
-            const id = cb.dataset.reqId;
-            if (cb.checked) state.selectedRequirements.add(id);
-            else state.selectedRequirements.delete(id);
-            cb.closest('.req-card')?.classList.toggle('selected', cb.checked);
-            updateBatchActionBar();
+        if (isTable && tbody) {
+          // ── TABLE VIEW ──
+          reqs.forEach(req => {
+            const market = req.market || '';
+            const marketBadge = market === 'IN' ? '<span class="tag tag-india">India</span>' : market === 'SG' ? '<span class="tag tag-singapore">Singapore</span>' : `<span class="tag">${esc(market)}</span>`;
+            const statusBadge = req.status === 'open'
+              ? '<span class="tag tag-open"><span class="status-dot green"></span>Open</span>'
+              : `<span class="tag tag-draft"><span class="status-dot gray"></span>${esc(req.status || 'Unknown')}</span>`;
+            const assignedLabel = assignedToLabel(req);
+            const matchedCount = req.matched_count || 0;
+            const isSelected = state.selectedRequirements.has(req.id);
+            const tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.innerHTML = `
+              <td onclick="event.stopPropagation()">
+                <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
+              </td>
+              <td style="font-weight:500">${esc(req.role_title || 'Untitled')}</td>
+              <td>${esc(req.client_name || '')}</td>
+              <td>${marketBadge}</td>
+              <td>${statusBadge}</td>
+              <td>${esc(assignedLabel)}</td>
+              <td>${matchedCount > 0 ? `<a href="#" onclick="event.preventDefault();viewSourcedCandidates('${req.id}')" style="color:var(--brand-blue);text-decoration:none">${matchedCount} found</a>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+              <td>
+                <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="viewRequirement('${req.id}')">Details</button>
+                ${isTL ? `<button class="req-card-close" style="margin-left:4px" onclick="closeRequirement('${req.id}', this)"><span class="material-icons-outlined" style="font-size:12px">archive</span></button>` : ''}
+              </td>
+            `;
+            tr.addEventListener('click', () => viewRequirement(req.id));
+            tbody.appendChild(tr);
           });
-        });
+
+          tbody.querySelectorAll('.req-card-check').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+              e.stopPropagation();
+              const id = cb.dataset.reqId;
+              if (cb.checked) state.selectedRequirements.add(id);
+              else state.selectedRequirements.delete(id);
+              updateBatchActionBar();
+            });
+          });
+        } else {
+          // ── CARD VIEW ──
+          reqs.forEach(req => {
+            const market = req.market || '';
+            const marketTag = market === 'IN' ? '<span class="tag tag-india">India</span>' : market === 'SG' ? '<span class="tag tag-singapore">Singapore</span>' : '';
+            const statusTag = req.status === 'open' ? '<span class="tag tag-open"><span class="status-dot green"></span>Open</span>' : '<span class="tag tag-draft"><span class="status-dot gray"></span>' + (req.status || 'Unknown') + '</span>';
+            const skills = (req.skills_required || []).slice(0, 3).join(', ');
+            const assignedLabel = assignedToLabel(req);
+            const matchedCount = req.matched_count || 0;
+            const isSelected = state.selectedRequirements.has(req.id);
+            const card = document.createElement('div');
+            card.className = 'req-card' + (isSelected ? ' selected' : '');
+            card.dataset.reqId = req.id;
+            card.innerHTML = `
+              <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
+              <div class="req-card-header">
+                <div>
+                  <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
+                  <div class="req-card-client">${esc(req.client_name || '')} ${marketTag}</div>
+                </div>
+                ${statusTag}
+              </div>
+              <div class="req-card-meta">
+                ${skills ? `<span><span class="material-icons-outlined">code</span> ${esc(skills)}</span>` : ''}
+                ${req.location ? `<span><span class="material-icons-outlined">location_on</span> ${esc(req.location)}</span>` : ''}
+                ${req.experience_min ? `<span><span class="material-icons-outlined">work</span> ${req.experience_min}+ yrs</span>` : ''}
+                ${req.salary_budget ? `<span><span class="material-icons-outlined">payments</span> ${esc(req.salary_budget)}</span>` : ''}
+              </div>
+              <div class="req-card-actions">
+                ${matchedCount > 0 ? `
+                  <a href="#" class="req-card-sourced" onclick="event.preventDefault();viewSourcedCandidates('${req.id}')">
+                    <span class="material-icons-outlined">group</span>
+                    Found ${matchedCount} candidate${matchedCount === 1 ? '' : 's'}
+                    <span class="material-icons-outlined" style="font-size:12px">arrow_forward</span>
+                  </a>` : ''}
+                <button class="btn-secondary" onclick="viewRequirement('${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:16px">visibility</span> Details
+                </button>
+              </div>
+              <div class="req-card-footer">
+                <span class="req-card-assigned">
+                  <span class="material-icons-outlined" style="font-size:14px">group</span>
+                  Assigned to: <strong>${esc(assignedLabel)}</strong>
+                </span>
+                ${isTL ? `<button class="req-card-close" onclick="closeRequirement('${req.id}', this)">
+                  <span class="material-icons-outlined" style="font-size:12px">archive</span> Close
+                </button>` : ''}
+              </div>
+            `;
+            listEl.appendChild(card);
+          });
+
+          listEl.querySelectorAll('.req-card-check').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+              e.stopPropagation();
+              const id = cb.dataset.reqId;
+              if (cb.checked) state.selectedRequirements.add(id);
+              else state.selectedRequirements.delete(id);
+              cb.closest('.req-card')?.classList.toggle('selected', cb.checked);
+              updateBatchActionBar();
+            });
+          });
+        }
         updateBatchActionBar();
       } catch (err) {
         loadingEl.style.display = 'none';
         listEl.innerHTML = `<div class="empty-state"><p>Error loading requirements: ${esc(err.message)}</p></div>`;
       }
     }
+
+    // Requirements view toggle wiring
+    document.querySelectorAll('#req-view-toggle button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#req-view-toggle button').forEach(b => {
+          b.classList.remove('active');
+          b.style.background = 'transparent';
+          b.style.color = 'var(--text-secondary)';
+        });
+        btn.classList.add('active');
+        btn.style.background = 'var(--bg-card)';
+        btn.style.color = 'var(--text-primary)';
+        state.reqViewMode = btn.dataset.reqView;
+        loadRequirements();
+      });
+    });
 
     async function closeRequirement(reqId, btn) {
       if (!confirm('Close this requirement? It will no longer show in the open list.')) return;
@@ -4693,6 +5046,9 @@
     // ── Pipeline / Analytics ──
     // ══════════════════════════════════
 
+    // Store full pipeline data for the filter dropdown
+    let _pipelineAllData = [];
+
     async function loadPipeline() {
       const statsEl = document.getElementById('pipeline-stats');
       const funnelEl = document.getElementById('pipeline-funnel');
@@ -4700,161 +5056,598 @@
 
       try {
         const data = await api('/api/pipeline');
-        const pipeline = data?.pipeline || [];
+        _pipelineAllData = data?.pipeline || [];
 
-        // Aggregate stats
-        let totalReqs = pipeline.length;
-        let totalSourced = 0, totalShortlisted = 0, totalSubmitted = 0, totalApproved = 0;
-        pipeline.forEach(p => {
-          totalSourced += p.sourced || p.screened || 0;
-          totalShortlisted += p.shortlisted || 0;
-          totalSubmitted += p.submitted || 0;
-          totalApproved += p.approved || 0;
-        });
-
-        statsEl.innerHTML = `
-          <div class="stat-card"><div class="stat-label">Open Requirements</div><div class="stat-value">${totalReqs}</div></div>
-          <div class="stat-card"><div class="stat-label">Candidates Sourced</div><div class="stat-value">${totalSourced}</div></div>
-          <div class="stat-card"><div class="stat-label">Shortlisted</div><div class="stat-value">${totalShortlisted}</div></div>
-          <div class="stat-card"><div class="stat-label">Submitted to Client</div><div class="stat-value">${totalSubmitted}</div></div>
-        `;
-
-        funnelEl.innerHTML = `
-          <div class="funnel-step"><div class="funnel-value">${totalSourced}</div><div class="funnel-label">Sourced</div></div>
-          <div class="funnel-step"><div class="funnel-value">${totalShortlisted}</div><div class="funnel-label">Shortlisted</div></div>
-          <div class="funnel-step"><div class="funnel-value">${totalSubmitted}</div><div class="funnel-label">Submitted</div></div>
-          <div class="funnel-step"><div class="funnel-value">${totalApproved}</div><div class="funnel-label">Approved</div></div>
-        `;
-
-        // Per-requirement breakdown
-        detailsEl.innerHTML = '';
-        if (pipeline.length > 0) {
-          let tableHtml = `<div class="table-container" style="margin-top:16px">
-            <div class="table-header"><div class="table-header-title">Per-Requirement Breakdown</div></div>
-            <table><thead><tr><th>Role</th><th>Client</th><th>Sourced</th><th>Shortlisted</th><th>Submitted</th><th>Approved</th></tr></thead><tbody>`;
-          pipeline.forEach(p => {
-            tableHtml += `<tr>
-              <td style="font-weight:500">${esc(p.role_title || '')}</td>
-              <td>${esc(p.client_name || '')}</td>
-              <td>${p.sourced || p.screened || 0}</td>
-              <td>${p.shortlisted || 0}</td>
-              <td>${p.submitted || 0}</td>
-              <td>${p.approved || 0}</td>
-            </tr>`;
+        // Populate requirement filter dropdown
+        const filterSel = document.getElementById('pipeline-req-filter');
+        if (filterSel) {
+          filterSel.innerHTML = '<option value="">All Requirements</option>';
+          _pipelineAllData.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.requirement_id;
+            opt.textContent = `${p.role_title || 'Untitled'} — ${p.client_name || ''}`;
+            filterSel.appendChild(opt);
           });
-          tableHtml += '</tbody></table></div>';
-          detailsEl.innerHTML = tableHtml;
         }
+
+        renderPipelineView(_pipelineAllData);
       } catch (err) {
         statsEl.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
       }
     }
 
+    function renderPipelineView(pipeline) {
+      const statsEl = document.getElementById('pipeline-stats');
+      const funnelEl = document.getElementById('pipeline-funnel');
+      const detailsEl = document.getElementById('pipeline-details');
+
+      let totalReqs = pipeline.length;
+      let totalSourced = 0, totalShortlisted = 0, totalSubmitted = 0, totalApproved = 0, totalPlaced = 0;
+      pipeline.forEach(p => {
+        totalSourced += p.sourced || p.screened || 0;
+        totalShortlisted += p.shortlisted || 0;
+        totalSubmitted += p.submitted || 0;
+        totalApproved += p.approved || 0;
+        totalPlaced += p.placed || 0;
+      });
+
+      statsEl.innerHTML = `
+        <div class="stat-card"><div class="stat-label">Requirements</div><div class="stat-value">${totalReqs}</div></div>
+        <div class="stat-card"><div class="stat-label">Candidates Sourced</div><div class="stat-value">${totalSourced}</div></div>
+        <div class="stat-card"><div class="stat-label">Shortlisted</div><div class="stat-value">${totalShortlisted}</div></div>
+        <div class="stat-card"><div class="stat-label">Submitted to Client</div><div class="stat-value">${totalApproved}</div></div>
+        <div class="stat-card"><div class="stat-label">Placed</div><div class="stat-value">${totalPlaced}</div></div>
+      `;
+
+      funnelEl.innerHTML = `
+        <div class="funnel-step"><div class="funnel-value">${totalSourced}</div><div class="funnel-label">Sourced</div></div>
+        <div class="funnel-step"><div class="funnel-value">${totalShortlisted}</div><div class="funnel-label">Shortlisted</div></div>
+        <div class="funnel-step"><div class="funnel-value">${totalSubmitted}</div><div class="funnel-label">Submitted</div></div>
+        <div class="funnel-step"><div class="funnel-value">${totalApproved}</div><div class="funnel-label">Approved</div></div>
+        <div class="funnel-step"><div class="funnel-value">${totalPlaced}</div><div class="funnel-label">Placed</div></div>
+      `;
+
+      detailsEl.innerHTML = '';
+      if (pipeline.length > 0) {
+        let tableHtml = `<div class="table-container" style="margin-top:16px">
+          <div class="table-header"><div class="table-header-title">Per-Requirement Breakdown</div></div>
+          <table><thead><tr><th>Role</th><th>Client</th><th>Sourced</th><th>Shortlisted</th><th>Submitted</th><th>Approved</th><th>Placed</th></tr></thead><tbody>`;
+        pipeline.forEach(p => {
+          tableHtml += `<tr>
+            <td style="font-weight:500">${esc(p.role_title || '')}</td>
+            <td>${esc(p.client_name || '')}</td>
+            <td>${p.sourced || p.screened || 0}</td>
+            <td>${p.shortlisted || 0}</td>
+            <td>${p.submitted || 0}</td>
+            <td>${p.approved || 0}</td>
+            <td>${p.placed || 0}</td>
+          </tr>`;
+        });
+        tableHtml += '</tbody></table></div>';
+        detailsEl.innerHTML = tableHtml;
+      }
+    }
+
+    // Requirement filter wiring
+    document.getElementById('pipeline-req-filter')?.addEventListener('change', (e) => {
+      const reqId = e.target.value;
+      if (!reqId) {
+        renderPipelineView(_pipelineAllData);
+      } else {
+        renderPipelineView(_pipelineAllData.filter(p => p.requirement_id === reqId));
+      }
+    });
+
     async function loadUsageStats() {
       try {
-        const data = await api('/api/pipeline');
-        // Show basic stats from pipeline data
-        const pipeline = data?.pipeline || [];
-        document.getElementById('usage-api-calls').textContent = pipeline.length > 0 ? 'Active' : '0';
-        document.getElementById('usage-tokens').textContent = '--';
-        document.getElementById('usage-cost').textContent = '--';
+        const data = await api('/api/usage');
+        document.getElementById('usage-api-calls').textContent = data.ai_screenings_today ?? '--';
+        document.getElementById('usage-tokens').textContent = data.emails_sent_today ?? '--';
+        document.getElementById('usage-cost').textContent = data.candidates_scored_total ?? '--';
+        const screenTotal = document.getElementById('usage-screenings-total');
+        const emailTotal = document.getElementById('usage-emails-total');
+        const subTotal = document.getElementById('usage-submissions-total');
+        if (screenTotal) screenTotal.textContent = data.ai_screenings_total ?? '--';
+        if (emailTotal) emailTotal.textContent = data.emails_sent_total ?? '--';
+        if (subTotal) subTotal.textContent = data.submissions_processed_total ?? '--';
       } catch (err) {
         // Silently fail
       }
     }
 
-    // ══════════════════════════════════
-    // ── Submissions (TL Queue) ──
-    // ══════════════════════════════════
-
-    async function loadSubmissions() {
-      const list = document.getElementById('submissions-list');
-      const loading = document.getElementById('submissions-loading');
-      loading.style.display = '';
-      list.innerHTML = '';
+    // ── Performance tab ──
+    async function loadPerformance() {
+      const summaryEl = document.getElementById('perf-summary-stats');
+      const recSection = document.getElementById('perf-recruiter-section');
+      const recTbody = document.getElementById('perf-recruiter-tbody');
+      const trendEl = document.getElementById('perf-trend-chart');
+      const verdictsSection = document.getElementById('perf-verdicts-section');
+      const verdictsList = document.getElementById('perf-verdicts-list');
 
       try {
-        const data = await api('/api/tl/queue');
-        loading.style.display = 'none';
+        const data = await api('/api/performance');
+        const s = data?.summary || {};
+        summaryEl.innerHTML = `
+          <div class="stat-card"><div class="stat-label">Total Submitted</div><div class="stat-value">${s.total || 0}</div></div>
+          <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value" style="color:#059669">${s.approved || 0}</div></div>
+          <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-value" style="color:#b91c1c">${s.rejected || 0}</div></div>
+          <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value" style="color:#d97706">${s.pending || 0}</div></div>
+        `;
 
-        const queue = data?.queue || [];
-        if (queue.length === 0) {
-          list.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">fact_check</span><p>No pending submissions. Recruiters will submit candidates here for your review.</p></div>';
-          return;
+        // TL: recruiter breakdown table
+        if (data.by_recruiter && recSection && recTbody) {
+          recSection.style.display = '';
+          recTbody.innerHTML = '';
+          data.by_recruiter.forEach(r => {
+            const rate = r.total > 0 ? Math.round((r.approved / r.total) * 100) : 0;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="font-weight:500">${esc(r.name || r.email || '—')}</td>
+              <td>${r.total}</td>
+              <td style="color:#059669">${r.approved}</td>
+              <td style="color:#b91c1c">${r.rejected}</td>
+              <td>${rate}%</td>
+            `;
+            recTbody.appendChild(tr);
+          });
         }
 
-        const badge = document.getElementById('submissions-badge');
-        const pending = queue.filter(s => s.status === 'pending' || !s.status).length;
-        if (pending > 0) {
-          badge.textContent = pending;
-          badge.style.display = '';
+        // Trend chart (simple CSS bar chart)
+        if (trendEl && data.by_day?.length) {
+          const days = data.by_day;
+          const maxCount = Math.max(...days.map(d => d.count), 1);
+          let chartHtml = '<div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:24px;position:relative">';
+          days.forEach(d => {
+            const pct = Math.round((d.count / maxCount) * 100);
+            const label = d.date.slice(5); // MM-DD
+            chartHtml += `
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:20px" title="${d.date}: ${d.count}">
+                <div style="font-size:10px;color:var(--text-secondary)">${d.count || ''}</div>
+                <div style="width:100%;background:var(--brand-blue);border-radius:2px 2px 0 0;height:${Math.max(pct, d.count > 0 ? 4 : 0)}%;min-height:${d.count > 0 ? 3 : 0}px;transition:.2s"></div>
+                <div style="font-size:9px;color:var(--text-muted);writing-mode:vertical-rl;transform:rotate(180deg);margin-top:2px">${label}</div>
+              </div>`;
+          });
+          chartHtml += '</div>';
+          trendEl.innerHTML = chartHtml;
+        } else if (trendEl) {
+          trendEl.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;text-align:center;padding:20px">No submission data in the last 30 days.</p>';
         }
 
-        queue.forEach(sub => {
-          const statusTag = sub.status === 'approved' ? '<span class="tag tag-approved">Approved</span>' : sub.status === 'rejected' ? '<span class="tag tag-rejected">Rejected</span>' : '<span class="tag tag-pending">Pending Review</span>';
-          const card = document.createElement('div');
-          card.className = 'submission-card';
-          card.innerHTML = `
-            <div class="submission-card-header">
-              <div>
-                <div style="font-weight:600">${esc(sub.candidate_name || 'Unknown')}</div>
-                <div style="font-size:12px;color:var(--text-secondary)">${esc(sub.role_title || '')} | ${esc(sub.client_name || '')}</div>
+        // Recruiter: recent verdicts (24h window)
+        if (data.recent_verdicts !== undefined && verdictsSection && verdictsList) {
+          verdictsSection.style.display = '';
+          if (!data.recent_verdicts.length) {
+            verdictsList.innerHTML = '<p style="color:var(--text-secondary);font-size:13px">No verdicts in the last 24 hours.</p>';
+          } else {
+            verdictsList.innerHTML = data.recent_verdicts.map(v => `
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-color)">
+                ${v.verdict === 'approved'
+                  ? '<span class="material-icons-outlined" style="color:#059669;font-size:18px">check_circle</span>'
+                  : '<span class="material-icons-outlined" style="color:#b91c1c;font-size:18px">cancel</span>'}
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:500">${v.verdict === 'approved' ? 'Approved' : 'Rejected'}</div>
+                  <div style="font-size:11px;color:var(--text-secondary)">${v.decided_at ? new Date(v.decided_at).toLocaleString() : ''}</div>
+                </div>
               </div>
-              <div style="display:flex;align-items:center;gap:8px">
-                ${sub.score ? `<span class="score-badge ${(sub.score || 0) >= 8 ? 'score-high' : 'score-mid'}">${sub.score}/10</span>` : ''}
-                ${statusTag}
-              </div>
-            </div>
-            <div style="font-size:12px;color:var(--text-secondary)">
-              Submitted by: ${esc(sub.recruiter_name || sub.submitted_by_recruiter || 'Unknown')}
-            </div>
-            ${!sub.status || sub.status === 'pending' ? `
-            <div class="submission-card-actions">
-              <button class="btn-primary" onclick="approveSubmission('${sub.id}')">
-                <span class="material-icons-outlined" style="font-size:16px">check</span> Approve & Send
-              </button>
-              <button class="btn-danger" onclick="rejectSubmission('${sub.id}')">
-                <span class="material-icons-outlined" style="font-size:16px">close</span> Reject
-              </button>
-            </div>` : ''}
-          `;
-          list.appendChild(card);
-        });
+            `).join('');
+          }
+        }
       } catch (err) {
-        loading.style.display = 'none';
-        list.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
+        summaryEl.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
       }
     }
 
-    async function approveSubmission(subId) {
+    // ══════════════════════════════════
+    // ── Submissions (dual-role) ──
+    // ══════════════════════════════════
+
+    // Track currently selected submission requirement for TL detail view
+    let _subTlCurrentReqId = null;
+    let _subTlCurrentSubId = null;
+    let _subRecCurrentReqId = null;
+    let _subRecCurrentReqData = null;
+
+    function statusBadge(status) {
+      if (status === 'approved') return '<span class="tag tag-open"><span class="status-dot green"></span>Approved</span>';
+      if (status === 'rejected') return '<span class="tag" style="background:#fee2e2;color:#b91c1c"><span class="status-dot" style="background:#b91c1c"></span>Rejected</span>';
+      return '<span class="tag tag-draft" style="background:#fef3c7;color:#92400e"><span class="status-dot" style="background:#d97706"></span>Pending</span>';
+    }
+
+    async function loadSubmissions() {
+      const isTL = state.user?.role === 'tl';
+      document.getElementById('sub-recruiter-view').style.display = isTL ? 'none' : '';
+      document.getElementById('sub-tl-view').style.display = isTL ? '' : 'none';
+      // Always show landing (reset any drilled view)
+      document.getElementById('sub-rec-landing').style.display = isTL ? 'none' : '';
+      document.getElementById('sub-rec-detail').style.display = 'none';
+      document.getElementById('sub-tl-landing').style.display = isTL ? '' : 'none';
+      document.getElementById('sub-tl-detail').style.display = 'none';
+
+      if (isTL) {
+        await loadTlSubmissionsLanding();
+      } else {
+        await loadRecruiterSubmissionsLanding();
+      }
+    }
+
+    // ── Recruiter: landing ──
+    async function loadRecruiterSubmissionsLanding() {
+      const loadingEl = document.getElementById('sub-rec-loading');
+      const cardsEl = document.getElementById('sub-rec-cards');
+      loadingEl.style.display = '';
+      cardsEl.innerHTML = '';
+      try {
+        const data = await api('/api/submissions/my');
+        loadingEl.style.display = 'none';
+        const groups = data?.groups || [];
+        if (!groups.length) {
+          cardsEl.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="material-icons-outlined">assignment</span><p>No requirements assigned to you yet.</p></div>';
+          return;
+        }
+        groups.forEach(g => {
+          const req = g.requirement || {};
+          const subs = g.submissions || [];
+          const pending = subs.filter(s => s.status === 'pending').length;
+          const approved = subs.filter(s => s.status === 'approved').length;
+          const rejected = subs.filter(s => s.status === 'rejected').length;
+          const card = document.createElement('div');
+          card.className = 'req-card';
+          card.style.cursor = 'pointer';
+          card.innerHTML = `
+            <div class="req-card-header">
+              <div>
+                <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
+                <div class="req-card-client">${esc(req.client_name || '')} <span class="tag">${esc(req.market || '')}</span></div>
+              </div>
+            </div>
+            <div class="req-card-meta" style="margin-top:8px">
+              <span style="font-size:12px">Submitted: <strong>${subs.length}</strong></span>
+              ${pending ? `<span style="color:#d97706;font-size:12px">${pending} pending</span>` : ''}
+              ${approved ? `<span style="color:#059669;font-size:12px">${approved} approved</span>` : ''}
+              ${rejected ? `<span style="color:#b91c1c;font-size:12px">${rejected} rejected</span>` : ''}
+            </div>
+          `;
+          card.addEventListener('click', () => openRecruiterDetail(req.id, req, subs));
+          cardsEl.appendChild(card);
+        });
+      } catch (err) {
+        loadingEl.style.display = 'none';
+        cardsEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><p>Error: ${esc(err.message)}</p></div>`;
+      }
+    }
+
+    function openRecruiterDetail(reqId, req, subs) {
+      _subRecCurrentReqId = reqId;
+      _subRecCurrentReqData = req;
+      document.getElementById('sub-rec-landing').style.display = 'none';
+      document.getElementById('sub-rec-detail').style.display = '';
+      document.getElementById('sub-rec-detail-title').textContent = req.role_title || '';
+      document.getElementById('sub-rec-detail-client').textContent = req.client_name || '';
+      renderRecruiterSubsTable(subs);
+    }
+
+    function renderRecruiterSubsTable(subs) {
+      const tbody = document.getElementById('sub-rec-tbody');
+      tbody.innerHTML = '';
+      if (!subs.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="text-align:center;padding:24px;color:var(--text-secondary)">No submissions yet. Click "Add Submission" to submit a candidate.</td></tr>';
+        return;
+      }
+      subs.forEach(s => {
+        // Hide rejected rows older than 24h
+        const rejectedAt = s.final_status === 'rejected_by_tl' ? (s.tl_approved_at || s.submitted_at) : null;
+        if (rejectedAt) {
+          const msSince = Date.now() - new Date(rejectedAt).getTime();
+          if (msSince > 86400000) return; // 24 hours
+        }
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="font-weight:500">${esc(s.candidate_name || '—')}</td>
+          <td>${esc(s.current_ctc || '—')}</td>
+          <td>${esc(s.expected_ctc || '—')}</td>
+          <td>${esc(s.notice_period || '—')}</td>
+          <td>${statusBadge(s.status)}</td>
+          <td style="font-size:12px;color:var(--text-secondary)">${s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : '—'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('sub-rec-back-btn')?.addEventListener('click', () => {
+      document.getElementById('sub-rec-detail').style.display = 'none';
+      document.getElementById('sub-rec-landing').style.display = '';
+      loadRecruiterSubmissionsLanding();
+    });
+
+    document.getElementById('sub-rec-add-btn')?.addEventListener('click', async () => {
+      // Load shortlisted candidates for this requirement
+      const modal = document.getElementById('modal-submit-candidate');
+      const select = document.getElementById('sub-candidate-select');
+      select.innerHTML = '<option value="">Loading…</option>';
+      modal.classList.remove('hidden');
+      document.getElementById('sub-step-1').style.display = '';
+      document.getElementById('sub-step-2').style.display = 'none';
+      try {
+        const data = await api('/api/shortlists');
+        const candidates = data?.candidates || [];
+        select.innerHTML = '<option value="">— choose a candidate —</option>';
+        candidates.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.dataset.name = c.name || '';
+          opt.dataset.phone = c.phone || '';
+          opt.dataset.email = c.email || '';
+          opt.dataset.ctc = c.current_ctc || '';
+          opt.dataset.ectc = c.expected_ctc || '';
+          opt.dataset.notice = c.notice_period || '';
+          opt.dataset.loc = c.current_location || '';
+          opt.dataset.ploc = c.preferred_location || '';
+          opt.dataset.totalExp = c.total_experience || '';
+          opt.dataset.relExp = c.relevant_experience || '';
+          opt.dataset.company = c.current_company || '';
+          opt.dataset.address = c.address_full || '';
+          opt.dataset.dob = c.date_of_birth || '';
+          opt.textContent = c.name + (c.current_job_title ? ` — ${c.current_job_title}` : '');
+          select.appendChild(opt);
+        });
+      } catch {
+        select.innerHTML = '<option value="">Error loading candidates</option>';
+      }
+    });
+
+    document.getElementById('sub-step-1-next')?.addEventListener('click', () => {
+      const select = document.getElementById('sub-candidate-select');
+      const opt = select.selectedOptions[0];
+      if (!opt || !opt.value) { alert('Please select a candidate.'); return; }
+      document.getElementById('sub-form-cand-id').value = opt.value;
+      document.getElementById('sub-form-req-id').value = _subRecCurrentReqId;
+      // Pre-fill form
+      const fullName = (opt.dataset.name || '').trim();
+      const parts = fullName.split(' ');
+      document.getElementById('sub-f-first-name').value = parts[0] || '';
+      document.getElementById('sub-f-last-name').value = parts.slice(1).join(' ') || '';
+      document.getElementById('sub-f-phone').value = opt.dataset.phone || '';
+      document.getElementById('sub-f-email').value = opt.dataset.email || '';
+      document.getElementById('sub-f-current-ctc').value = opt.dataset.ctc || '';
+      document.getElementById('sub-f-expected-ctc').value = opt.dataset.ectc || '';
+      document.getElementById('sub-f-notice').value = opt.dataset.notice || '';
+      document.getElementById('sub-f-current-loc').value = opt.dataset.loc || '';
+      document.getElementById('sub-f-pref-loc').value = opt.dataset.ploc || '';
+      document.getElementById('sub-f-total-exp').value = opt.dataset.totalExp || '';
+      document.getElementById('sub-f-rel-exp').value = opt.dataset.relExp || '';
+      document.getElementById('sub-f-company').value = opt.dataset.company || '';
+      document.getElementById('sub-f-address').value = opt.dataset.address || '';
+      document.getElementById('sub-f-dob').value = opt.dataset.dob || '';
+      document.getElementById('sub-step-1').style.display = 'none';
+      document.getElementById('sub-step-2').style.display = '';
+    });
+
+    document.getElementById('sub-step-2-back')?.addEventListener('click', () => {
+      document.getElementById('sub-step-2').style.display = 'none';
+      document.getElementById('sub-step-1').style.display = '';
+    });
+
+    document.getElementById('sub-step-2-submit')?.addEventListener('click', async () => {
+      const btn = document.getElementById('sub-step-2-submit');
+      const candId = document.getElementById('sub-form-cand-id').value;
+      const reqId = document.getElementById('sub-form-req-id').value;
+      const firstName = document.getElementById('sub-f-first-name').value.trim();
+      const lastName = document.getElementById('sub-f-last-name').value.trim();
+      if (!firstName) { alert('First name is required.'); return; }
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      try {
+        await api('/api/submissions/create', {
+          method: 'POST',
+          body: {
+            candidate_id: candId,
+            requirement_id: reqId,
+            name: [firstName, lastName].filter(Boolean).join(' '),
+            phone: document.getElementById('sub-f-phone').value,
+            email: document.getElementById('sub-f-email').value,
+            date_of_birth: document.getElementById('sub-f-dob').value || null,
+            address_full: document.getElementById('sub-f-address').value,
+            current_company: document.getElementById('sub-f-company').value,
+            total_experience: document.getElementById('sub-f-total-exp').value,
+            relevant_experience: document.getElementById('sub-f-rel-exp').value,
+            current_ctc: document.getElementById('sub-f-current-ctc').value,
+            expected_ctc: document.getElementById('sub-f-expected-ctc').value,
+            current_location: document.getElementById('sub-f-current-loc').value,
+            preferred_location: document.getElementById('sub-f-pref-loc').value,
+            notice_period: document.getElementById('sub-f-notice').value,
+          }
+        });
+        document.getElementById('modal-submit-candidate').classList.add('hidden');
+        // Reload the detail view
+        const data = await api('/api/submissions/my');
+        const groups = data?.groups || [];
+        const g = groups.find(g => g.requirement?.id === _subRecCurrentReqId);
+        if (g) renderRecruiterSubsTable(g.submissions || []);
+      } catch (err) {
+        alert('Submission failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit to TL';
+      }
+    });
+
+    document.getElementById('sub-modal-close')?.addEventListener('click', () => {
+      document.getElementById('modal-submit-candidate').classList.add('hidden');
+    });
+
+    // ── TL: landing ──
+    async function loadTlSubmissionsLanding() {
+      const loadingEl = document.getElementById('sub-tl-loading');
+      const cardsEl = document.getElementById('sub-tl-cards');
+      loadingEl.style.display = '';
+      cardsEl.innerHTML = '';
+      try {
+        const data = await api('/api/submissions/tl');
+        loadingEl.style.display = 'none';
+        let groups = data?.groups || [];
+        // Apply filter
+        const filterVal = document.getElementById('sub-tl-filter')?.value;
+        if (filterVal === 'pending') groups = groups.filter(g => g.submissions.some(s => s.status === 'pending'));
+        if (filterVal === 'closed') groups = groups.filter(g => (g.requirement?.status || 'open') === 'closed');
+
+        // Update badge
+        const totalPending = (data?.groups || []).reduce((n, g) => n + g.submissions.filter(s => s.status === 'pending').length, 0);
+        const badge = document.getElementById('submissions-badge');
+        if (totalPending > 0) { badge.textContent = totalPending; badge.style.display = ''; }
+        else { badge.style.display = 'none'; }
+
+        if (!groups.length) {
+          cardsEl.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="material-icons-outlined">fact_check</span><p>No submissions found.</p></div>';
+          return;
+        }
+        groups.forEach(g => {
+          const req = g.requirement || {};
+          const subs = g.submissions || [];
+          const pending = subs.filter(s => s.status === 'pending').length;
+          const card = document.createElement('div');
+          card.className = 'req-card';
+          card.style.cursor = 'pointer';
+          card.innerHTML = `
+            <div class="req-card-header">
+              <div>
+                <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
+                <div class="req-card-client">${esc(req.client_name || '')} <span class="tag">${esc(req.market || '')}</span></div>
+              </div>
+              ${pending ? `<span class="tag" style="background:#fef3c7;color:#92400e">${pending} pending</span>` : ''}
+            </div>
+            <div class="req-card-meta" style="margin-top:8px;font-size:12px">
+              Total: <strong>${subs.length}</strong> · Approved: <strong>${subs.filter(s=>s.status==='approved').length}</strong> · Rejected: <strong>${subs.filter(s=>s.status==='rejected').length}</strong>
+            </div>
+          `;
+          card.addEventListener('click', () => openTlDetail(req, subs));
+          cardsEl.appendChild(card);
+        });
+      } catch (err) {
+        loadingEl.style.display = 'none';
+        cardsEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><p>Error: ${esc(err.message)}</p></div>`;
+      }
+    }
+
+    document.getElementById('sub-tl-filter')?.addEventListener('change', loadTlSubmissionsLanding);
+
+    function openTlDetail(req, subs) {
+      _subTlCurrentReqId = req.id;
+      document.getElementById('sub-tl-landing').style.display = 'none';
+      document.getElementById('sub-tl-detail').style.display = '';
+      document.getElementById('sub-tl-detail-title').textContent = req.role_title || '';
+      document.getElementById('sub-tl-detail-client').textContent = req.client_name || '';
+      renderTlSubsTable(subs);
+    }
+
+    function renderTlSubsTable(subs) {
+      const tbody = document.getElementById('sub-tl-tbody');
+      tbody.innerHTML = '';
+      if (!subs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-secondary)">No submissions for this requirement yet.</td></tr>';
+        return;
+      }
+      // Sort newest first
+      const sorted = [...subs].sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+      sorted.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.innerHTML = `
+          <td style="font-weight:500">${esc(s.candidate_name || '—')}</td>
+          <td>${esc(s.current_ctc || '—')}</td>
+          <td>${esc(s.expected_ctc || '—')}</td>
+          <td>${esc(s.notice_period || '—')}</td>
+          <td>${esc(s.recruiter_name || s.submitted_by_recruiter || '—')}</td>
+          <td style="font-size:12px;color:var(--text-secondary)">${s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : '—'}</td>
+          <td>${statusBadge(s.status)}</td>
+        `;
+        tr.addEventListener('click', () => openTlPanel(s));
+        if (_subTlCurrentSubId === s.id) tr.style.background = 'var(--bg-hover, rgba(60,92,207,0.05))';
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openTlPanel(sub) {
+      _subTlCurrentSubId = sub.id;
+      const panel = document.getElementById('sub-tl-panel');
+      const content = document.getElementById('sub-tl-panel-content');
+      panel.style.display = '';
+      content.innerHTML = `
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">${esc(sub.candidate_name || 'Candidate')}</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">Submitted by ${esc(sub.recruiter_name || sub.submitted_by_recruiter || '—')} · ${sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : ''}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:13px">
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Current CTC</div><strong>${esc(sub.current_ctc || '—')}</strong></div>
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Expected CTC</div><strong>${esc(sub.expected_ctc || '—')}</strong></div>
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Notice Period</div><strong>${esc(sub.notice_period || '—')}</strong></div>
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Location</div><strong>${esc(sub.current_location || '—')}</strong></div>
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Experience</div><strong>${esc(sub.total_experience || '—')}</strong></div>
+          <div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Current Company</div><strong>${esc(sub.current_company || '—')}</strong></div>
+          <div style="grid-column:span 2"><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Email</div><strong>${esc(sub.email || '—')}</strong></div>
+          <div style="grid-column:span 2"><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Phone</div><strong>${esc(sub.phone || '—')}</strong></div>
+        </div>
+        ${sub.tl_feedback ? `<div style="background:#fef3c7;border-radius:var(--radius);padding:10px;font-size:12px;margin-bottom:12px"><strong>Previous feedback:</strong> ${esc(sub.tl_feedback)}</div>` : ''}
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:500;margin-bottom:4px">Note</div>
+          <textarea id="tl-panel-note" rows="3" style="width:100%;padding:7px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="Internal note…"></textarea>
+        </div>
+        ${sub.status === 'pending' ? `
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary" style="flex:1" onclick="tlApproveFromPanel('${sub.id}')">
+            <span class="material-icons-outlined" style="font-size:15px">check</span> Approve & Send
+          </button>
+          <button class="btn-danger" style="flex:1" onclick="openTlRejectModal('${sub.id}')">
+            <span class="material-icons-outlined" style="font-size:15px">close</span> Reject
+          </button>
+        </div>` : `<div style="text-align:center;padding:8px;color:var(--text-secondary);font-size:13px">${statusBadge(sub.status)}</div>`}
+      `;
+    }
+
+    window.tlApproveFromPanel = async function(subId) {
       const clientEmail = prompt('Enter client email to send the profile to:');
       if (!clientEmail) return;
+      const emailSubject = prompt('Email subject:', 'Candidate Profile Submission') || 'Candidate Profile Submission';
       try {
         await api('/api/tl/approve-and-send', {
           method: 'POST',
-          body: { submission_id: subId, tl_email: state.user.email, client_email: clientEmail }
+          body: { submission_id: subId, tl_email: state.user.email, client_email: clientEmail, email_subject: emailSubject }
         });
-        alert('Submission approved and sent to client.');
-        loadSubmissions();
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
+        alert('Approved and sent to client.');
+        const data = await api('/api/submissions/tl', {});
+        // Refresh current detail view
+        const g = (data?.groups || []).find(g => g.requirement?.id === _subTlCurrentReqId);
+        if (g) { renderTlSubsTable(g.submissions); openTlPanel(g.submissions.find(s => s.id === subId) || g.submissions[0]); }
+      } catch (err) { alert('Error: ' + err.message); }
+    };
 
-    async function rejectSubmission(subId) {
-      const feedback = prompt('Enter feedback for the recruiter:');
-      if (feedback === null) return;
+    window.openTlRejectModal = function(subId) {
+      _subTlCurrentSubId = subId;
+      document.getElementById('tl-reject-reason').value = '';
+      document.getElementById('modal-tl-reject').classList.remove('hidden');
+    };
+
+    document.getElementById('tl-reject-modal-close')?.addEventListener('click', () => {
+      document.getElementById('modal-tl-reject').classList.add('hidden');
+    });
+
+    document.getElementById('tl-reject-confirm-btn')?.addEventListener('click', async () => {
+      const reason = document.getElementById('tl-reject-reason').value.trim();
+      if (!reason) { alert('Please enter a rejection reason.'); return; }
+      const btn = document.getElementById('tl-reject-confirm-btn');
+      btn.disabled = true; btn.textContent = 'Rejecting…';
       try {
-        await api('/api/tl/reject', {
-          method: 'POST',
-          body: { submission_id: subId, feedback }
-        });
-        alert('Submission rejected.');
-        loadSubmissions();
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
+        await api('/api/tl/reject', { method: 'POST', body: { submission_id: _subTlCurrentSubId, feedback: reason } });
+        document.getElementById('modal-tl-reject').classList.add('hidden');
+        const data = await api('/api/submissions/tl');
+        const g = (data?.groups || []).find(g => g.requirement?.id === _subTlCurrentReqId);
+        if (g) { renderTlSubsTable(g.submissions); document.getElementById('sub-tl-panel').style.display = 'none'; }
+      } catch (err) { alert('Error: ' + err.message); }
+      finally { btn.disabled = false; btn.textContent = 'Confirm Rejection'; }
+    });
+
+    document.getElementById('sub-tl-back-btn')?.addEventListener('click', () => {
+      document.getElementById('sub-tl-detail').style.display = 'none';
+      document.getElementById('sub-tl-landing').style.display = '';
+      loadTlSubmissionsLanding();
+    });
 
     document.getElementById('btn-refresh-submissions')?.addEventListener('click', loadSubmissions);
 
