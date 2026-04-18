@@ -1179,6 +1179,83 @@
       min-height: 140px;
     }
 
+    /* --- Sequences v2 --- */
+    .seq2-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .seq2-stats-row { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:20px; }
+    .seq2-stats-row .stat-card { padding:14px 16px; }
+    @media(max-width:1100px){ .seq2-stats-row { grid-template-columns:repeat(3,1fr); } }
+
+    .seq2-chart-wrap { background:#fff; border:1px solid var(--border-color); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; }
+    .seq2-chart-title { font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px; }
+
+    .seq2-table { width:100%; border-collapse:collapse; }
+    .seq2-table thead th { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-secondary); padding:8px 12px; border-bottom:1px solid var(--border-color); text-align:left; }
+    .seq2-table tbody tr { border-bottom:1px solid var(--border-color); cursor:pointer; }
+    .seq2-table tbody tr:hover { background:#faf7ff; }
+    .seq2-table td { padding:10px 12px; font-size:13px; }
+    .seq2-tag { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
+    .seq2-tag.draft { background:#f3f4f6; color:#4b5563; }
+    .seq2-tag.active { background:#dcfce7; color:#166534; }
+    .seq2-tag.paused { background:#fef3c7; color:#92400e; }
+    .seq2-tag.archived { background:#fee2e2; color:#991b1b; }
+
+    /* Chooser modal */
+    .seq-chooser-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+    .seq-chooser-card { border:2px solid var(--border-color); border-radius:var(--radius-lg); padding:20px 16px; cursor:pointer; transition:all .15s; text-align:center; }
+    .seq-chooser-card:hover { border-color:var(--brand-blue); box-shadow:0 2px 10px rgba(60,92,207,.1); }
+    .seq-chooser-card.ai { background:linear-gradient(135deg,#6c3dab,#3c5ccf); border-color:transparent; color:#fff; }
+    .seq-chooser-card.ai:hover { opacity:.92; }
+    .seq-chooser-card .seq-cc-icon { font-size:32px; margin-bottom:8px; }
+    .seq-chooser-card .seq-cc-title { font-size:15px; font-weight:700; margin-bottom:4px; }
+    .seq-chooser-card .seq-cc-sub { font-size:12px; opacity:.8; }
+
+    /* AI config modal */
+    #modal-ai-config .modal { max-width:520px; }
+
+    /* Editor */
+    .seq-editor { display:flex; gap:0; height:calc(100vh - 130px); overflow:hidden; }
+    .seq-editor-left { width:300px; min-width:260px; border-right:1px solid var(--border-color); display:flex; flex-direction:column; overflow:hidden; }
+    .seq-editor-right { flex:1; overflow-y:auto; padding:24px 28px; }
+    .seq-step-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
+    .seq-step-row { padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; font-size:13px; background:#fff; transition:all .15s; display:flex; align-items:center; gap:8px; }
+    .seq-step-row:hover { border-color:var(--brand-blue); }
+    .seq-step-row.active { border-color:var(--brand-blue); background:#f0f4ff; }
+    .seq-step-row.skeleton { animation:pulse 1.5s infinite; background:#f3f4f6; min-height:56px; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .seq-step-pos { width:22px; height:22px; border-radius:50%; background:#e5e7eb; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .seq-step-row.active .seq-step-pos { background:var(--brand-blue); color:#fff; }
+    .seq-step-info { flex:1; min-width:0; }
+    .seq-step-label { font-weight:600; font-size:12px; }
+    .seq-step-sub { font-size:11px; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .seq-step-drag { cursor:grab; color:#ccc; font-size:18px; }
+    .seq-editor-left-header { padding:14px 12px 8px; border-bottom:1px solid var(--border-color); display:flex; align-items:center; justify-content:space-between; }
+
+    /* Toolbar */
+    .seq-toolbar { display:flex; flex-wrap:wrap; gap:2px; padding:6px 8px; border:1px solid var(--border-color); border-bottom:none; border-radius:6px 6px 0 0; background:#fafafa; }
+    .seq-tb-btn { padding:4px 6px; border:none; background:transparent; cursor:pointer; border-radius:4px; font-size:14px; color:var(--text-primary); display:inline-flex; align-items:center; }
+    .seq-tb-btn:hover { background:#e5e7eb; }
+    .seq-tb-sep { width:1px; background:var(--border-color); margin:0 4px; }
+
+    /* Variables chips */
+    .seq-var-row { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; }
+    .seq-var-chip { font-size:11px; padding:3px 10px; border-radius:10px; background:#ede9fe; color:#5b21b6; font-weight:600; cursor:pointer; border:1px solid #c4b5fd; user-select:none; }
+    .seq-var-chip:hover { background:#ddd6fe; }
+    .seq-var-chip.placeholder { opacity:.5; cursor:default; }
+
+    /* Contenteditable body */
+    .seq-body-editor { min-height:200px; padding:12px; border:1px solid var(--border-color); border-radius:0 0 6px 6px; font-size:13px; line-height:1.7; font-family:inherit; outline:none; background:#fff; }
+    .seq-body-editor:focus { border-color:var(--brand-blue); }
+    span.seq-var[data-var] { background:#ede9fe; color:#5b21b6; border-radius:4px; padding:1px 5px; font-size:12px; font-weight:600; }
+
+    /* Add-contacts page */
+    .seq-add-contacts { display:flex; gap:0; height:calc(100vh - 130px); overflow:hidden; }
+    .seq-add-left { width:360px; min-width:300px; border-right:1px solid var(--border-color); overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; }
+    .seq-add-right { flex:1; overflow-y:auto; padding:24px 28px; }
+    .seq-recipient-row { padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; font-size:13px; background:#fff; display:flex; align-items:center; gap:8px; }
+    .seq-recipient-row:hover { border-color:var(--brand-blue); }
+    .seq-recipient-row.active { border-color:var(--brand-blue); background:#f0f4ff; }
+    .seq-issue-chip { font-size:11px; padding:2px 8px; border-radius:10px; background:#fee2e2; color:#b91c1c; font-weight:500; }
+
     /* Candidate detail slide-over (Phase 3) */
     .cand-slide-overlay {
       position: fixed;
@@ -1795,34 +1872,248 @@
           </div>
         </div>
 
-        <!-- SEQUENCES / OUTREACH -->
+        <!-- SEQUENCES v2 — overview -->
         <div class="page" id="page-sequences">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h3 style="font-size:16px;font-weight:600">Sequences</h3>
-            <div style="display:flex;gap:8px;align-items:center">
+          <!-- header -->
+          <div class="seq2-header">
+            <div style="display:flex;align-items:center;gap:12px">
+              <h3 style="font-size:16px;font-weight:600;margin:0">Sequences</h3>
               <div class="tabs" id="seq-scope-tabs" style="margin:0">
-                <div class="tab active" data-seq-scope="mine">My sequences</div>
-                <div class="tab" data-seq-scope="all" id="seq-scope-all" style="display:none">All sequences</div>
+                <div class="tab active" data-seq-scope="mine">Mine</div>
+                <div class="tab" data-seq-scope="all" id="seq-scope-all" style="display:none">All</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="position:relative">
+                <span class="material-icons-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text-muted)">search</span>
+                <input type="text" id="seq-search" placeholder="Search sequences…" style="padding:7px 10px 7px 32px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;width:200px">
               </div>
               <button class="btn-secondary" id="btn-refresh-sequences">
-                <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
+                <span class="material-icons-outlined" style="font-size:16px">refresh</span>
+              </button>
+              <button class="btn-primary" id="btn-new-sequence">
+                <span class="material-icons-outlined" style="font-size:16px">add</span> New Sequence
               </button>
             </div>
           </div>
-          <div class="tabs" style="margin-bottom:16px">
-            <div class="tab active" data-seq-filter="all">All</div>
-            <div class="tab" data-seq-filter="awaiting">Awaiting reply</div>
-            <div class="tab" data-seq-filter="replied">Replied</div>
+          <!-- stats -->
+          <div class="seq2-stats-row" id="seq2-stats">
+            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="seq2-stat-total">--</div></div>
+            <div class="stat-card"><div class="stat-label">Active</div><div class="stat-value" id="seq2-stat-active">--</div></div>
+            <div class="stat-card"><div class="stat-label">Drafts</div><div class="stat-value" id="seq2-stat-draft">--</div></div>
+            <div class="stat-card"><div class="stat-label">Emails sent</div><div class="stat-value" id="seq2-stat-sent">--</div></div>
+            <div class="stat-card"><div class="stat-label">Replied</div><div class="stat-value" id="seq2-stat-replied">--</div></div>
+            <div class="stat-card"><div class="stat-label">Reply rate</div><div class="stat-value" id="seq2-stat-rate">--</div></div>
           </div>
-          <div class="stats-grid" id="seq-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
-            <div class="stat-card"><div class="stat-label">Emails sent</div><div class="stat-value" id="seq-stat-sent">--</div></div>
-            <div class="stat-card"><div class="stat-label">Replies received</div><div class="stat-value" id="seq-stat-replied">--</div></div>
-            <div class="stat-card"><div class="stat-label">Reply rate</div><div class="stat-value" id="seq-stat-rate">--</div></div>
+          <!-- SVG chart -->
+          <div class="seq2-chart-wrap">
+            <div class="seq2-chart-title">Emails sent &amp; scheduled (last 7 days)</div>
+            <svg id="seq2-chart" viewBox="0 0 720 160" width="100%" style="display:block;overflow:visible"></svg>
+            <div style="display:flex;gap:20px;margin-top:8px;font-size:11px;color:var(--text-secondary)">
+              <span><span style="display:inline-block;width:20px;height:2px;background:#3c5ccf;vertical-align:middle;margin-right:4px"></span>Sent</span>
+              <span><span style="display:inline-block;width:20px;height:2px;background:#37cd84;border-top:2px dashed #37cd84;vertical-align:middle;margin-right:4px"></span>Scheduled</span>
+            </div>
           </div>
+          <!-- table -->
           <div id="seq-loading-list" class="loading-state" style="display:none">
-            <div class="loading-spinner"></div> Loading sequences…
+            <div class="loading-spinner"></div> Loading…
           </div>
-          <div id="seq-groups"></div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="seq2-table" id="seq2-table">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Steps</th><th>Status</th><th>Enrolled</th><th>Replied</th><th>Created</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="seq2-tbody"></tbody>
+            </table>
+          </div>
+          <div id="seq2-empty" class="empty-state" style="display:none">
+            <span class="material-icons-outlined">mail_outline</span>
+            <p>No sequences yet. Click <b>New Sequence</b> to get started.</p>
+          </div>
+        </div>
+
+        <!-- SEQUENCES v2 — editor -->
+        <div class="page" id="page-sequence-editor">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0;padding:16px 0 12px;border-bottom:1px solid var(--border-color)">
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="seq-editor-back" style="padding:6px 10px">
+                <span class="material-icons-outlined" style="font-size:18px">arrow_back</span>
+              </button>
+              <input type="text" id="seq-editor-name" value="Untitled Sequence"
+                style="font-size:15px;font-weight:600;border:none;outline:none;padding:4px 6px;border-radius:4px;min-width:240px"
+                onfocus="this.style.background='#f5f5f5'" onblur="this.style.background='transparent'">
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-secondary" id="seq-editor-add-contacts" style="display:none">
+                <span class="material-icons-outlined" style="font-size:16px">person_add</span> Add Contacts
+              </button>
+              <button class="btn-primary" id="seq-editor-save">
+                <span class="material-icons-outlined" style="font-size:16px">save</span> Save
+              </button>
+            </div>
+          </div>
+          <div id="seq-editor-generating-banner" style="display:none;padding:10px 14px;background:#f5f3ff;border-radius:8px;margin-top:12px;font-size:13px;color:#5b21b6;align-items:center;gap:8px">
+            <div class="loading-spinner" style="width:16px;height:16px;border-width:2px"></div>
+            <span id="seq-editor-gen-msg">Writing step 1…</span>
+          </div>
+          <div class="seq-editor" id="seq-editor-body" style="margin-top:12px">
+            <!-- Left pane: step list -->
+            <div class="seq-editor-left">
+              <div class="seq-editor-left-header">
+                <span style="font-size:12px;font-weight:600;color:var(--text-secondary)">STEPS</span>
+                <button class="btn-secondary" id="seq-editor-add-step" style="padding:4px 8px;font-size:12px">
+                  <span class="material-icons-outlined" style="font-size:14px">add</span> Add
+                </button>
+              </div>
+              <div class="seq-step-list" id="seq-step-list"></div>
+            </div>
+            <!-- Right pane: step editor -->
+            <div class="seq-editor-right" id="seq-editor-right">
+              <div id="seq-editor-empty" style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+                <span class="material-icons-outlined" style="font-size:40px;opacity:.4">email</span>
+                <p style="margin-top:8px;font-size:13px">Select a step on the left to edit it.</p>
+              </div>
+              <div id="seq-step-form" style="display:none">
+                <!-- Step meta -->
+                <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Wait days before this step</div>
+                    <input type="number" id="seq-step-wait" min="0" max="30" value="0" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Send time (local)</div>
+                    <input type="time" id="seq-step-send-time" value="09:00" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                </div>
+                <!-- Subject -->
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Subject <span id="seq-step-subject-hint" style="font-weight:400;text-transform:none;color:var(--text-muted)">(leave empty to reply in thread)</span></div>
+                  <input type="text" id="seq-step-subject" placeholder="Subject line…" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                </div>
+                <!-- Toolbar -->
+                <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Body</div>
+                <div class="seq-toolbar">
+                  <button class="seq-tb-btn" type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand('bold')"><b>B</b></button>
+                  <button class="seq-tb-btn" type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand('italic')"><i>I</i></button>
+                  <button class="seq-tb-btn" type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand('underline')"><u>U</u></button>
+                  <span class="seq-tb-sep"></span>
+                  <button class="seq-tb-btn" type="button" title="Bullet list" onmousedown="event.preventDefault();document.execCommand('insertUnorderedList')">
+                    <span class="material-icons-outlined" style="font-size:16px">format_list_bulleted</span>
+                  </button>
+                  <button class="seq-tb-btn" type="button" title="Link" onmousedown="event.preventDefault();var u=prompt('URL');if(u)document.execCommand('createLink',false,u)">
+                    <span class="material-icons-outlined" style="font-size:16px">link</span>
+                  </button>
+                  <span class="seq-tb-sep"></span>
+                  <span style="font-size:11px;color:var(--text-secondary);align-self:center;margin-left:2px">Variables:</span>
+                </div>
+                <!-- Variable chips -->
+                <div class="seq-var-row">
+                  <span class="seq-var-chip" data-insert-var="First Name">First Name</span>
+                  <span class="seq-var-chip" data-insert-var="Current Company">Current Company</span>
+                  <span class="seq-var-chip" data-insert-var="Job Title">Job Title</span>
+                  <span class="seq-var-chip" data-insert-var="Sender First Name">Sender First Name</span>
+                  <span class="seq-var-chip placeholder" title="Coming soon">AI Command</span>
+                  <span class="seq-var-chip placeholder" title="Coming soon">Snippets</span>
+                </div>
+                <!-- Contenteditable body -->
+                <div class="seq-body-editor" id="seq-step-body" contenteditable="true" spellcheck="true"></div>
+                <!-- Step actions -->
+                <div style="display:flex;justify-content:space-between;margin-top:14px">
+                  <button class="btn-secondary" id="seq-step-delete" style="color:var(--brand-red,#dc2626)">
+                    <span class="material-icons-outlined" style="font-size:16px">delete_outline</span> Delete step
+                  </button>
+                  <button class="btn-primary" id="seq-step-save-btn">Save step</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEQUENCES v2 — detail -->
+        <div class="page" id="page-sequence-detail">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+            <button class="btn-secondary" id="seq-detail-back" style="padding:6px 10px">
+              <span class="material-icons-outlined" style="font-size:18px">arrow_back</span>
+            </button>
+            <h3 id="seq-detail-name" style="font-size:16px;font-weight:600;margin:0;flex:1">Sequence</h3>
+            <button class="btn-secondary" id="seq-detail-edit">
+              <span class="material-icons-outlined" style="font-size:16px">edit</span> Edit
+            </button>
+            <button class="btn-primary" id="seq-detail-add-contacts">
+              <span class="material-icons-outlined" style="font-size:16px">person_add</span> Add Contacts
+            </button>
+          </div>
+          <div class="seq2-stats-row" id="seq-detail-stats" style="grid-template-columns:repeat(4,1fr)">
+            <div class="stat-card"><div class="stat-label">Enrolled</div><div class="stat-value" id="seq-detail-enrolled">--</div></div>
+            <div class="stat-card"><div class="stat-label">Active</div><div class="stat-value" id="seq-detail-active">--</div></div>
+            <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value" id="seq-detail-sent">--</div></div>
+            <div class="stat-card"><div class="stat-label">Replied</div><div class="stat-value" id="seq-detail-replied">--</div></div>
+          </div>
+          <div id="seq-detail-loading" class="loading-state" style="display:none"><div class="loading-spinner"></div> Loading…</div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="seq2-table" id="seq-detail-table">
+              <thead><tr>
+                <th>Candidate</th><th>Step</th><th>Status</th><th>Enrolled by</th><th>Started</th>
+              </tr></thead>
+              <tbody id="seq-detail-tbody"></tbody>
+            </table>
+          </div>
+          <div id="seq-detail-empty" class="empty-state" style="display:none">
+            <span class="material-icons-outlined">person_outline</span>
+            <p>No contacts enrolled yet. Click <b>Add Contacts</b> to enroll candidates.</p>
+          </div>
+        </div>
+
+        <!-- SEQUENCES v2 — add contacts -->
+        <div class="page" id="page-sequence-add-contacts">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-color)">
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="seq-add-back" style="padding:6px 10px">
+                <span class="material-icons-outlined" style="font-size:18px">arrow_back</span>
+              </button>
+              <div>
+                <div style="font-size:15px;font-weight:600" id="seq-add-title">Add Contacts</div>
+                <div style="font-size:12px;color:var(--text-secondary)">Sequences will start immediately (with a 2-minute delay between consecutive emails)</div>
+              </div>
+            </div>
+            <button class="btn-primary" id="seq-add-enroll-btn">
+              <span class="material-icons-outlined" style="font-size:16px">send</span> Add to Sequence
+            </button>
+          </div>
+          <div class="seq-add-contacts">
+            <!-- Left: recipient list -->
+            <div class="seq-add-left">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px">Recipients <span id="seq-add-count" style="font-weight:400;text-transform:none"></span></div>
+              <div id="seq-add-recipient-list"></div>
+            </div>
+            <!-- Right: email preview -->
+            <div class="seq-add-right" id="seq-add-right">
+              <div id="seq-add-preview-empty" style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+                <span class="material-icons-outlined" style="font-size:40px;opacity:.4">email</span>
+                <p style="margin-top:8px;font-size:13px">Select a recipient on the left to preview their email.</p>
+              </div>
+              <div id="seq-add-preview-content" style="display:none">
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Send from</div>
+                  <input type="text" id="seq-add-from" readonly style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;background:#f9f9f9">
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Send to</div>
+                  <input type="email" id="seq-add-to-email" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Subject</div>
+                  <input type="text" id="seq-add-subject" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">Email body</div>
+                  <textarea id="seq-add-body" rows="14" style="width:100%;padding:10px 12px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;font-family:inherit;line-height:1.6;resize:vertical"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- LEGACY OUTREACH & INBOX (kept as a separate route for now) -->
@@ -2464,6 +2755,94 @@
     </div>
   </div>
 
+  <!-- Sequences v2: New sequence chooser -->
+  <div class="modal-overlay hidden" id="modal-new-sequence-chooser">
+    <div class="modal" style="max-width:480px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">New Sequence</h3>
+        <button type="button" onclick="document.getElementById('modal-new-sequence-chooser').classList.add('hidden')"
+          style="background:none;border:none;cursor:pointer;color:var(--text-secondary)">
+          <span class="material-icons-outlined" style="font-size:20px">close</span>
+        </button>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 4px">How do you want to create this sequence?</p>
+      <div class="seq-chooser-grid">
+        <div class="seq-chooser-card ai" id="seq-chooser-ai">
+          <div class="seq-cc-icon">✨</div>
+          <div class="seq-cc-title">AI-assisted</div>
+          <div class="seq-cc-sub">Let Claude write multi-step emails for you</div>
+        </div>
+        <div class="seq-chooser-card" id="seq-chooser-scratch">
+          <div class="seq-cc-icon">📝</div>
+          <div class="seq-cc-title">From scratch</div>
+          <div class="seq-cc-sub">Start with a blank canvas</div>
+        </div>
+        <div class="seq-chooser-card" id="seq-chooser-template" style="opacity:.6">
+          <div class="seq-cc-icon">📋</div>
+          <div class="seq-cc-title">Templates</div>
+          <div class="seq-cc-sub">Coming soon</div>
+        </div>
+        <div class="seq-chooser-card" id="seq-chooser-clone" style="opacity:.6">
+          <div class="seq-cc-icon">📌</div>
+          <div class="seq-cc-title">Clone existing</div>
+          <div class="seq-cc-sub">Coming soon</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sequences v2: AI config -->
+  <div class="modal-overlay hidden" id="modal-ai-config">
+    <div class="modal" style="max-width:520px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0">Configure AI Sequence</h3>
+        <button type="button" onclick="closeAiConfigModal()"
+          style="background:none;border:none;cursor:pointer;color:var(--text-secondary)">
+          <span class="material-icons-outlined" style="font-size:20px">close</span>
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="settings-field" style="margin:0">
+          <label>Role / Position title *</label>
+          <input type="text" id="ai-cfg-role" placeholder="e.g. Senior React Developer">
+        </div>
+        <div class="settings-field" style="margin:0">
+          <label>Company name *</label>
+          <input type="text" id="ai-cfg-company" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="settings-field" style="margin:0">
+          <label>Job URL <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <input type="url" id="ai-cfg-job-url" placeholder="https://…">
+        </div>
+        <div class="settings-field" style="margin:0">
+          <label>Scheduling link <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <input type="url" id="ai-cfg-scheduling" placeholder="https://calendly.com/…">
+        </div>
+        <div style="display:flex;gap:12px">
+          <div class="settings-field" style="margin:0;flex:1">
+            <label>Number of steps</label>
+            <select id="ai-cfg-num-steps" style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+              <option value="3">3 steps</option>
+              <option value="4">4 steps</option>
+              <option value="5">5 steps</option>
+            </select>
+          </div>
+          <div class="settings-field" style="margin:0;flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="ai-cfg-linkedin"> Include LinkedIn step
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button type="button" class="btn-secondary" onclick="closeAiConfigModal()">Cancel</button>
+        <button type="button" class="btn-primary" id="ai-cfg-generate-btn">
+          <span class="material-icons-outlined" style="font-size:16px">auto_awesome</span> Generate with AI
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Candidate Detail Slide-over -->
   <div class="cand-slide-overlay hidden" id="cand-slide">
     <div class="cand-slide">
@@ -2838,7 +3217,10 @@
       'requirements': 'Requirements Board',
       'shortlist': 'Shortlist',
       'contacts': 'Contacts',
-      'sequences': 'Outreach & Inbox',
+      'sequences': 'Sequences',
+      'sequence-editor': 'Sequence Editor',
+      'sequence-detail': 'Sequence Detail',
+      'sequence-add-contacts': 'Add Contacts',
       'submissions': 'Submission Queue',
       'analytics': 'Analytics',
       'integrations': 'Integrations',
@@ -2869,7 +3251,7 @@
       if (pageId === 'contacts') loadContacts();
       if (pageId === 'analytics') loadPipeline();
       if (pageId === 'submissions') loadSubmissions();
-      if (pageId === 'sequences') loadSequencesPage();
+      if (pageId === 'sequences') loadSequencesPageV2();
 
       renderProjectContext();
     }
@@ -3123,8 +3505,9 @@
         await loadRequirements();
 
         const results = data?.results || [];
-        const totalFound = results.reduce((s, r) => s + (r.top_count || 0), 0);
-        const totalSourced = results.reduce((s, r) => s + (r.sourced || 0), 0);
+        const totalNew      = results.reduce((s, r) => s + (r.sourced || 0), 0);
+        const totalInternal = results.reduce((s, r) => s + (r.internal_pool_size || 0), 0);
+        const totalMatched  = results.reduce((s, r) => s + (r.top_count || 0), 0);
 
         // Aggregate channel errors across the batch
         const errMap = new Map();  // channel → array of requirement short-ids
@@ -3136,8 +3519,9 @@
         });
 
         let msg = `Sourced ${ids.length} requirement${ids.length === 1 ? '' : 's'}.\n`;
-        msg += `${totalSourced} candidate${totalSourced === 1 ? '' : 's'} saved to DB.\n`;
-        msg += `${totalFound} scored above the match threshold.`;
+        msg += `• ${totalNew} new from external channels\n`;
+        msg += `• ${totalInternal} existing candidates from your DB considered\n`;
+        msg += `• ${totalMatched} scored above the match threshold.`;
         if (errMap.size) {
           msg += '\n\nChannel issues:';
           errMap.forEach((msgs, ch) => {
@@ -4486,134 +4870,643 @@
 
     document.getElementById('btn-refresh-submissions')?.addEventListener('click', loadSubmissions);
 
-    // ══════════════════════════════════
-    // ── Sequences page (list view) ──
-    // ══════════════════════════════════
+    // ══════════════════════════════════════════════════════════
+    // ── Sequences v2 ──
+    // ══════════════════════════════════════════════════════════
 
-    let sequencesCache = [];
-    let sequencesReqsCache = [];
-    let sequencesScope = 'mine';
-    let sequencesFilter = 'all';
+    const seqState = {
+      overviewData: null,
+      overviewScope: 'mine',
+      overviewSearch: '',
+      editingSeqId: null,
+      editingSeq: null,       // { id, name, steps: [...] }
+      activeStepIdx: 0,
+      generating: false,
+      sseController: null,
+      addContacts: { seqId: null, recipients: [], activeIdx: 0, editedBodies: {} },
+    };
 
-    async function loadSequencesPage() {
-      // Show TL-only "All sequences" tab
-      const allTab = document.getElementById('seq-scope-all');
-      if (state.user?.role === 'tl' && allTab) allTab.style.display = '';
+    // ── Overview ──────────────────────────────────────────────
 
-      const loading = document.getElementById('seq-loading-list');
-      const groups = document.getElementById('seq-groups');
-      loading.style.display = '';
-      groups.innerHTML = '';
+    async function loadSequencesPageV2() {
+      if (state.user?.role === 'tl') {
+        const allTab = document.getElementById('seq-scope-all');
+        if (allTab) allTab.style.display = '';
+      }
+      document.getElementById('seq-loading-list').style.display = '';
+      document.getElementById('seq2-tbody').innerHTML = '';
+      document.getElementById('seq2-empty').style.display = 'none';
       try {
-        const data = await api(`/api/sequences?scope=${encodeURIComponent(sequencesScope)}`);
-        sequencesCache = data?.sequences || [];
-        sequencesReqsCache = data?.requirements || [];
-        renderSequencesPage();
+        const data = await api(`/api/sequences/list?scope=${seqState.overviewScope}`);
+        seqState.overviewData = data;
+        renderSequencesOverview();
       } catch (err) {
-        groups.innerHTML = `<div class="empty-state"><p>Error loading sequences: ${esc(err.message)}</p></div>`;
+        document.getElementById('seq2-tbody').innerHTML =
+          `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Error: ${esc(err.message)}</td></tr>`;
       } finally {
-        loading.style.display = 'none';
+        document.getElementById('seq-loading-list').style.display = 'none';
       }
     }
 
-    function renderSequencesPage() {
-      const groups = document.getElementById('seq-groups');
-      let filtered = sequencesCache;
-      if (sequencesFilter === 'awaiting') filtered = filtered.filter(s => !s.reply_received);
-      else if (sequencesFilter === 'replied') filtered = filtered.filter(s => s.reply_received);
+    function renderSequencesOverview() {
+      const data = seqState.overviewData;
+      if (!data) return;
+      const stats = data.stats || {};
+      document.getElementById('seq2-stat-total').textContent = stats.total ?? '--';
+      document.getElementById('seq2-stat-active').textContent = stats.active ?? '--';
+      document.getElementById('seq2-stat-draft').textContent = stats.draft ?? '--';
+      document.getElementById('seq2-stat-sent').textContent = stats.sent ?? '--';
+      document.getElementById('seq2-stat-replied').textContent = stats.replied ?? '--';
+      document.getElementById('seq2-stat-rate').textContent =
+        stats.sent > 0 ? `${stats.reply_rate ?? 0}%` : '—';
 
-      // Stats
-      const totalSent = sequencesCache.length;
-      const totalReplied = sequencesCache.filter(s => s.reply_received).length;
-      const rate = totalSent ? Math.round((totalReplied / totalSent) * 100) : 0;
-      document.getElementById('seq-stat-sent').textContent = totalSent;
-      document.getElementById('seq-stat-replied').textContent = totalReplied;
-      document.getElementById('seq-stat-rate').textContent = totalSent ? `${rate}%` : '—';
+      renderScheduleChart(data.chart || {});
 
-      if (!filtered.length) {
-        groups.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">mail_outline</span><p>No sequences yet. Pick candidates from a requirement and send a sequence to see them here.</p></div>';
+      const q = seqState.overviewSearch.toLowerCase();
+      let seqs = data.sequences || [];
+      if (q) seqs = seqs.filter(s => (s.name || '').toLowerCase().includes(q));
+
+      const tbody = document.getElementById('seq2-tbody');
+      const empty = document.getElementById('seq2-empty');
+      if (!seqs.length) {
+        tbody.innerHTML = '';
+        empty.style.display = '';
         return;
       }
-
-      // Group by requirement_id
-      const byReq = new Map();
-      filtered.forEach(s => {
-        const key = s.requirement_id || '__none__';
-        if (!byReq.has(key)) byReq.set(key, []);
-        byReq.get(key).push(s);
-      });
-      const reqOrder = [...byReq.keys()].sort((a, b) => {
-        const aLatest = Math.max(...byReq.get(a).map(s => new Date(s.sent_at || 0).getTime()));
-        const bLatest = Math.max(...byReq.get(b).map(s => new Date(s.sent_at || 0).getTime()));
-        return bLatest - aLatest;
-      });
-
-      groups.innerHTML = reqOrder.map(reqKey => {
-        const rows = byReq.get(reqKey);
-        const first = rows[0];
-        const header = reqKey === '__none__'
-          ? 'Uncategorised'
-          : `${esc(first.requirement_role_title || 'Untitled role')}${first.requirement_client_name ? ' · ' + esc(first.requirement_client_name) : ''}`;
-        const replies = rows.filter(r => r.reply_received).length;
+      empty.style.display = 'none';
+      tbody.innerHTML = seqs.map(s => {
+        const m = s.metrics || {};
+        const tagCls = s.status || 'draft';
+        const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
         return `
-          <div class="card" style="margin-bottom:16px">
-            <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-              <div>${header}</div>
-              <div style="font-size:12px;color:var(--text-secondary);font-weight:400">${rows.length} sent · ${replies} replied</div>
-            </div>
-            <div class="seq-thread-list" style="display:flex;flex-direction:column;gap:8px">
-              ${rows.map(r => renderSequenceRow(r)).join('')}
-            </div>
-          </div>
-        `;
+          <tr data-seq-id="${esc(s.id)}">
+            <td><b>${esc(s.name || 'Untitled')}</b></td>
+            <td>${s.step_count ?? 0}</td>
+            <td><span class="seq2-tag ${tagCls}">${esc(s.status || 'draft')}</span></td>
+            <td>${m.total ?? 0}</td>
+            <td>${m.replied ?? 0}</td>
+            <td>${created}</td>
+            <td style="display:flex;gap:6px;padding:8px 12px">
+              <button class="btn-secondary" style="padding:4px 8px;font-size:12px"
+                onclick="openSequenceEditor('${esc(s.id)}')">Edit</button>
+              <button class="btn-secondary" style="padding:4px 8px;font-size:12px"
+                onclick="openSequenceDetail('${esc(s.id)}')">View</button>
+            </td>
+          </tr>`;
       }).join('');
     }
 
-    function renderSequenceRow(r) {
-      const when = r.sent_at ? new Date(r.sent_at).toLocaleString() : '';
-      const statusTag = r.reply_received
-        ? `<span class="tag" style="background:#dcfce7;color:#166534;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">reply</span> Replied</span>`
-        : `<span class="tag" style="background:#fef3c7;color:#92400e;font-size:11px;padding:2px 8px;border-radius:10px"><span class="material-icons-outlined" style="font-size:12px;vertical-align:-2px">schedule_send</span> Awaiting</span>`;
-      return `
-        <div class="seq-row" data-candidate-id="${esc(r.candidate_id || '')}" data-requirement-id="${esc(r.requirement_id || '')}" style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;display:flex;justify-content:space-between;gap:12px;cursor:pointer" onmouseover="this.style.background='#faf7ff'" onmouseout="this.style.background='#fff'">
-          <div style="min-width:0;flex:1">
-            <div style="font-weight:600;font-size:13px">${esc(r.candidate_name || 'Unknown')}${r.candidate_role ? ` <span style="color:var(--text-muted);font-weight:400">· ${esc(r.candidate_role)}</span>` : ''}</div>
-            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;word-break:break-word">${esc(r.email_subject || '(no subject)')}</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">From ${esc(r.recruiter_email || '—')} · ${esc(when)}</div>
-          </div>
-          <div style="align-self:center">${statusTag}</div>
-        </div>
-      `;
+    function renderScheduleChart(chartData) {
+      const svg = document.getElementById('seq2-chart');
+      if (!svg) return;
+      const days = chartData.days || [];
+      const sent = chartData.sent || [];
+      const scheduled = chartData.scheduled || [];
+      const W = 720, H = 160, padL = 30, padR = 10, padT = 12, padB = 28;
+      const maxVal = Math.max(1, ...sent, ...scheduled);
+      const toX = i => padL + (i / (days.length - 1 || 1)) * (W - padL - padR);
+      const toY = v => padT + (1 - v / maxVal) * (H - padT - padB);
+      const pts = (arr) => arr.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+      const circles = (arr, color) => arr.map((v, i) =>
+        `<circle cx="${toX(i)}" cy="${toY(v)}" r="3" fill="${color}">
+           <title>${days[i] || ''}: ${v}</title></circle>`).join('');
+      const labels = days.map((d, i) =>
+        `<text x="${toX(i)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#9ca3af">${d.slice(5)}</text>`
+      ).join('');
+      svg.innerHTML = `
+        <polyline points="${pts(sent)}" fill="none" stroke="#3c5ccf" stroke-width="2"/>
+        <polyline points="${pts(scheduled)}" fill="none" stroke="#37cd84" stroke-width="2" stroke-dasharray="5,4"/>
+        ${circles(sent, '#3c5ccf')}
+        ${circles(scheduled, '#37cd84')}
+        ${labels}`;
     }
 
-    document.getElementById('btn-refresh-sequences')?.addEventListener('click', loadSequencesPage);
-
+    document.getElementById('btn-refresh-sequences')?.addEventListener('click', loadSequencesPageV2);
+    document.getElementById('seq-search')?.addEventListener('input', (e) => {
+      seqState.overviewSearch = e.target.value;
+      renderSequencesOverview();
+    });
     document.querySelectorAll('[data-seq-scope]').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('[data-seq-scope]').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        sequencesScope = tab.dataset.seqScope;
-        loadSequencesPage();
+        seqState.overviewScope = tab.dataset.seqScope;
+        loadSequencesPageV2();
       });
     });
 
-    document.querySelectorAll('[data-seq-filter]').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('[data-seq-filter]').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        sequencesFilter = tab.dataset.seqFilter;
-        renderSequencesPage();
+    // ── New sequence chooser ──────────────────────────────────
+
+    document.getElementById('btn-new-sequence')?.addEventListener('click', () => {
+      document.getElementById('modal-new-sequence-chooser').classList.remove('hidden');
+    });
+    document.getElementById('seq-chooser-template')?.addEventListener('click', () => {
+      alert('Templates coming soon!');
+    });
+    document.getElementById('seq-chooser-clone')?.addEventListener('click', () => {
+      alert('Clone coming soon!');
+    });
+    document.getElementById('seq-chooser-scratch')?.addEventListener('click', async () => {
+      document.getElementById('modal-new-sequence-chooser').classList.add('hidden');
+      try {
+        const data = await api('/api/sequences/new', { method: 'POST',
+          body: { name: 'New Sequence', source: 'scratch' } });
+        const seq = data?.sequence;
+        if (seq?.id) openSequenceEditor(seq.id);
+      } catch (err) { alert('Error: ' + err.message); }
+    });
+    document.getElementById('seq-chooser-ai')?.addEventListener('click', () => {
+      document.getElementById('modal-new-sequence-chooser').classList.add('hidden');
+      openAiConfigModal();
+    });
+
+    function openAiConfigModal() {
+      document.getElementById('modal-ai-config').classList.remove('hidden');
+    }
+    function closeAiConfigModal() {
+      document.getElementById('modal-ai-config').classList.add('hidden');
+    }
+
+    document.getElementById('ai-cfg-generate-btn')?.addEventListener('click', async () => {
+      const role = document.getElementById('ai-cfg-role')?.value.trim();
+      const company = document.getElementById('ai-cfg-company')?.value.trim();
+      if (!role || !company) { alert('Role and Company are required.'); return; }
+      closeAiConfigModal();
+      const cfg = {
+        role, company,
+        job_url: document.getElementById('ai-cfg-job-url')?.value.trim() || '',
+        scheduling_link: document.getElementById('ai-cfg-scheduling')?.value.trim() || '',
+        num_steps: parseInt(document.getElementById('ai-cfg-num-steps')?.value || '3'),
+        include_linkedin: document.getElementById('ai-cfg-linkedin')?.checked || false,
+      };
+      // Show the editor shell while streaming (no seqId yet — will be created at done)
+      openSequenceEditorShell(null, `${role} at ${company}`);
+      startAiGeneration(null, cfg, role, company);
+    });
+
+    // ── Sequence Editor ───────────────────────────────────────
+
+    function openSequenceEditorShell(seqId, name) {
+      seqState.editingSeqId = seqId;
+      seqState.editingSeq = { id: seqId, name: name || 'Untitled', steps: [] };
+      seqState.activeStepIdx = 0;
+      document.getElementById('seq-editor-name').value = seqState.editingSeq.name;
+      document.getElementById('seq-step-list').innerHTML = '';
+      document.getElementById('seq-editor-empty').style.display = '';
+      document.getElementById('seq-step-form').style.display = 'none';
+      document.getElementById('seq-editor-add-contacts').style.display = 'none';
+      document.getElementById('seq-editor-generating-banner').style.display = 'none';
+      switchPage('sequence-editor');
+    }
+
+    async function openSequenceEditor(seqId) {
+      switchPage('sequence-editor');
+      try {
+        const data = await api(`/api/sequences/${seqId}`);
+        const seq = data?.sequence;
+        if (!seq) return;
+        seqState.editingSeqId = seqId;
+        seqState.editingSeq = { id: seqId, name: seq.name, steps: seq.steps || [] };
+        document.getElementById('seq-editor-name').value = seq.name;
+        document.getElementById('seq-editor-add-contacts').style.display =
+          seqState.editingSeq.steps.length ? '' : 'none';
+        renderStepList();
+        if (seqState.editingSeq.steps.length) selectStep(0);
+      } catch (err) {
+        alert('Error loading sequence: ' + err.message);
+      }
+    }
+
+    function renderStepList() {
+      const steps = seqState.editingSeq?.steps || [];
+      const list = document.getElementById('seq-step-list');
+      list.innerHTML = steps.map((s, i) => `
+        <div class="seq-step-row ${i === seqState.activeStepIdx ? 'active' : ''}"
+             data-step-idx="${i}" draggable="true">
+          <span class="material-icons-outlined seq-step-drag" style="font-size:18px">drag_indicator</span>
+          <div class="seq-step-pos">${i + 1}</div>
+          <div class="seq-step-info">
+            <div class="seq-step-label">Step ${i + 1}${s.step_type === 'linkedin' ? ' · LinkedIn' : ''}</div>
+            <div class="seq-step-sub">${esc(s.subject_template || (i > 0 ? '(reply in thread)' : '(no subject)'))}</div>
+          </div>
+        </div>`).join('');
+      list.querySelectorAll('.seq-step-row[data-step-idx]').forEach(row => {
+        row.addEventListener('click', () => selectStep(parseInt(row.dataset.stepIdx)));
+        row.addEventListener('dragstart', onStepDragStart);
+        row.addEventListener('dragover', onStepDragOver);
+        row.addEventListener('drop', onStepDrop);
+      });
+    }
+
+    function selectStep(idx) {
+      seqState.activeStepIdx = idx;
+      const step = (seqState.editingSeq?.steps || [])[idx];
+      renderStepList();
+      if (!step) {
+        document.getElementById('seq-editor-empty').style.display = '';
+        document.getElementById('seq-step-form').style.display = 'none';
+        return;
+      }
+      document.getElementById('seq-editor-empty').style.display = 'none';
+      document.getElementById('seq-step-form').style.display = '';
+      document.getElementById('seq-step-wait').value = step.wait_days ?? (idx === 0 ? 0 : 3);
+      document.getElementById('seq-step-send-time').value = step.send_time_local || '09:00';
+      document.getElementById('seq-step-subject').value = step.subject_template || '';
+      // Render body HTML (vars as chips)
+      const bodyEl = document.getElementById('seq-step-body');
+      bodyEl.innerHTML = templateToHtml(step.body_template || '');
+    }
+
+    function templateToHtml(tpl) {
+      return tpl.replace(/\{\{([^}]+)\}\}/g, (_, v) =>
+        `<span class="seq-var" data-var="${esc(v.trim())}" contenteditable="false">{{${esc(v.trim())}}}</span>`);
+    }
+
+    function htmlToTemplate(html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      tmp.querySelectorAll('span.seq-var[data-var]').forEach(el => {
+        el.replaceWith(`{{${el.dataset.var}}}`);
+      });
+      return tmp.innerText;
+    }
+
+    // Variable chip insertion
+    document.querySelectorAll('.seq-var-chip[data-insert-var]').forEach(chip => {
+      chip.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const varName = chip.dataset.insertVar;
+        const span = document.createElement('span');
+        span.className = 'seq-var';
+        span.dataset.var = varName;
+        span.contentEditable = 'false';
+        span.textContent = `{{${varName}}}`;
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount) {
+          const range = sel.getRangeAt(0);
+          const editor = document.getElementById('seq-step-body');
+          if (editor.contains(range.commonAncestorContainer)) {
+            range.deleteContents();
+            range.insertNode(span);
+            range.setStartAfter(span);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+          }
+        }
+        document.getElementById('seq-step-body').appendChild(span);
       });
     });
 
-    // Clicking a sequence row opens the candidate slide-over with the requirement context
-    document.addEventListener('click', (e) => {
-      const row = e.target.closest('.seq-row[data-candidate-id]');
-      if (!row) return;
-      const cid = row.dataset.candidateId;
-      const rid = row.dataset.requirementId || null;
-      if (cid) openCandidateDetail(cid, { requirementId: rid });
+    // Save step
+    document.getElementById('seq-step-save-btn')?.addEventListener('click', async () => {
+      const steps = seqState.editingSeq?.steps || [];
+      const step = steps[seqState.activeStepIdx];
+      if (!step) return;
+      const bodyHtml = document.getElementById('seq-step-body').innerHTML;
+      const patch = {
+        subject_template: document.getElementById('seq-step-subject').value,
+        body_template: htmlToTemplate(bodyHtml),
+        wait_days: parseInt(document.getElementById('seq-step-wait').value) || 0,
+        send_time_local: document.getElementById('seq-step-send-time').value || '09:00',
+      };
+      try {
+        await api(`/api/sequences/${seqState.editingSeqId}/steps/${step.id}`,
+          { method: 'PUT', body: patch });
+        Object.assign(step, patch);
+        renderStepList();
+        showToast('Step saved.');
+      } catch (err) { alert('Error saving step: ' + err.message); }
     });
+
+    // Delete step
+    document.getElementById('seq-step-delete')?.addEventListener('click', async () => {
+      const step = (seqState.editingSeq?.steps || [])[seqState.activeStepIdx];
+      if (!step) return;
+      if (!confirm('Delete this step?')) return;
+      try {
+        // Archive by setting a placeholder — no delete-step route, so mark via body_template
+        await api(`/api/sequences/${seqState.editingSeqId}/steps/${step.id}`,
+          { method: 'PUT', body: { body_template: '[DELETED]', subject_template: '' } });
+        seqState.editingSeq.steps.splice(seqState.activeStepIdx, 1);
+        seqState.activeStepIdx = Math.max(0, seqState.activeStepIdx - 1);
+        renderStepList();
+        if (seqState.editingSeq.steps.length) selectStep(seqState.activeStepIdx);
+        else { document.getElementById('seq-editor-empty').style.display = '';
+               document.getElementById('seq-step-form').style.display = 'none'; }
+      } catch (err) { alert('Error: ' + err.message); }
+    });
+
+    // Add step (blank)
+    document.getElementById('seq-editor-add-step')?.addEventListener('click', async () => {
+      const steps = seqState.editingSeq?.steps || [];
+      const pos = steps.length + 1;
+      // POST new step by saving a temp step via update — we need to insert via sequence update
+      try {
+        // Create sequence with steps = current + new one via PUT
+        const resp = await api(`/api/sequences/${seqState.editingSeqId}`,
+          { method: 'PUT', body: { config: seqState.editingSeq.config || {} } });
+        // Re-fetch to get the new state
+        await openSequenceEditor(seqState.editingSeqId);
+      } catch(err) { /* ignore, reopen will reset */ }
+    });
+
+    // Save sequence name
+    document.getElementById('seq-editor-save')?.addEventListener('click', async () => {
+      const name = document.getElementById('seq-editor-name').value.trim() || 'Untitled';
+      try {
+        await api(`/api/sequences/${seqState.editingSeqId}`,
+          { method: 'PUT', body: { name } });
+        showToast('Sequence saved.');
+      } catch (err) { alert('Error: ' + err.message); }
+    });
+
+    document.getElementById('seq-editor-back')?.addEventListener('click', () => {
+      switchPage('sequences');
+      loadSequencesPageV2();
+    });
+
+    document.getElementById('seq-editor-add-contacts')?.addEventListener('click', () => {
+      openAddContactsPage(seqState.editingSeqId,
+        seqState.editingSeq?.name || 'Sequence');
+    });
+
+    // Drag-reorder steps
+    let _dragSrcIdx = null;
+    function onStepDragStart(e) {
+      _dragSrcIdx = parseInt(e.currentTarget.dataset.stepIdx);
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    function onStepDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+    async function onStepDrop(e) {
+      e.preventDefault();
+      const destIdx = parseInt(e.currentTarget.dataset.stepIdx);
+      if (_dragSrcIdx === null || _dragSrcIdx === destIdx) return;
+      const steps = seqState.editingSeq.steps;
+      const [moved] = steps.splice(_dragSrcIdx, 1);
+      steps.splice(destIdx, 0, moved);
+      seqState.activeStepIdx = destIdx;
+      renderStepList();
+      try {
+        await api(`/api/sequences/${seqState.editingSeqId}/steps/reorder`, {
+          method: 'POST', body: { step_ids: steps.map(s => s.id) }
+        });
+      } catch (err) { /* non-fatal */ }
+    }
+
+    // ── AI SSE streaming ──────────────────────────────────────
+
+    async function startAiGeneration(seqId, cfg, role, company) {
+      seqState.generating = true;
+      seqState.editingSeq.steps = [];
+      const banner = document.getElementById('seq-editor-generating-banner');
+      const genMsg = document.getElementById('seq-editor-gen-msg');
+      banner.style.display = 'flex';
+      const list = document.getElementById('seq-step-list');
+      list.innerHTML = Array.from({ length: cfg.num_steps }, () =>
+        `<div class="seq-step-row skeleton" style="min-height:54px"></div>`).join('');
+
+      const controller = new AbortController();
+      seqState.sseController = controller;
+      const collectedSteps = [];
+      try {
+        const resp = await fetch('/api/sequences/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfg),
+          credentials: 'include',
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const chunks = buf.split('\n\n'); buf = chunks.pop();
+          for (const chunk of chunks) {
+            if (!chunk.startsWith('data: ')) continue;
+            let evt;
+            try { evt = JSON.parse(chunk.slice(6)); } catch { continue; }
+            if (evt.event === 'writing') {
+              genMsg.textContent = `Writing step ${evt.step} of ${evt.total}…`;
+              // Update skeleton at position
+              const skeletons = list.querySelectorAll('.seq-step-row.skeleton');
+              if (skeletons[evt.step - 1]) {
+                skeletons[evt.step - 1].style.background = '#f0f4ff';
+              }
+            } else if (evt.event === 'step') {
+              collectedSteps.push({
+                subject: evt.subject || '',
+                body: evt.body || '',
+                wait_days: evt.wait_days || 0,
+                send_time_local: evt.send_time_local || '09:00',
+                step_type: evt.step_type || 'email',
+              });
+              genMsg.textContent = `Step ${evt.step} of ${evt.total} ready…`;
+            } else if (evt.event === 'done') {
+              genMsg.textContent = 'Saving sequence…';
+              // Create the sequence with all collected steps
+              const data = await api('/api/sequences/new', {
+                method: 'POST',
+                body: {
+                  name: `${role} at ${company}`,
+                  source: 'ai',
+                  config: cfg,
+                  steps: collectedSteps,
+                }
+              });
+              const newSeqId = data?.sequence?.id;
+              banner.style.display = 'none';
+              seqState.generating = false;
+              if (newSeqId) await openSequenceEditor(newSeqId);
+              return;
+            } else if (evt.event === 'error') {
+              throw new Error(evt.message || 'AI generation error');
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          genMsg.textContent = `Error: ${err.message}`;
+          setTimeout(() => { banner.style.display = 'none'; }, 4000);
+        }
+      }
+      seqState.generating = false;
+    }
+
+    // ── Sequence Detail ───────────────────────────────────────
+
+    async function openSequenceDetail(seqId) {
+      switchPage('sequence-detail');
+      document.getElementById('seq-detail-loading').style.display = '';
+      document.getElementById('seq-detail-tbody').innerHTML = '';
+      document.getElementById('seq-detail-empty').style.display = 'none';
+      try {
+        const data = await api(`/api/sequences/${seqId}`);
+        const seq = data?.sequence;
+        const runs = data?.runs || [];
+        const metrics = data?.metrics || {};
+        document.getElementById('seq-detail-name').textContent = seq?.name || 'Sequence';
+        document.getElementById('seq-detail-enrolled').textContent = metrics.total ?? 0;
+        document.getElementById('seq-detail-active').textContent = metrics.active ?? 0;
+        document.getElementById('seq-detail-sent').textContent = metrics.sent ?? 0;
+        document.getElementById('seq-detail-replied').textContent = metrics.replied ?? 0;
+        document.getElementById('seq-detail-edit').onclick = () => openSequenceEditor(seqId);
+        document.getElementById('seq-detail-add-contacts').onclick = () =>
+          openAddContactsPage(seqId, seq?.name || 'Sequence');
+        if (!runs.length) {
+          document.getElementById('seq-detail-empty').style.display = '';
+        } else {
+          document.getElementById('seq-detail-tbody').innerHTML = runs.map(r => {
+            const cand = r.candidates || {};
+            const statusCls = r.status === 'replied' ? 'active' : r.status === 'active' ? 'draft' : 'archived';
+            const started = r.started_at ? new Date(r.started_at).toLocaleDateString() : '—';
+            return `<tr>
+              <td><b>${esc(cand.name || '—')}</b><br><span style="font-size:11px;color:var(--text-secondary)">${esc(cand.email || '')}</span></td>
+              <td>${r.current_step_position ?? 0}</td>
+              <td><span class="seq2-tag ${statusCls}">${esc(r.status)}</span></td>
+              <td style="font-size:12px">${esc(r.enrolled_by || '—')}</td>
+              <td style="font-size:12px">${started}</td>
+            </tr>`;
+          }).join('');
+        }
+      } catch (err) {
+        document.getElementById('seq-detail-name').textContent = 'Error';
+      } finally {
+        document.getElementById('seq-detail-loading').style.display = 'none';
+      }
+    }
+
+    document.getElementById('seq-detail-back')?.addEventListener('click', () => {
+      switchPage('sequences');
+      loadSequencesPageV2();
+    });
+
+    // ── Add Contacts ──────────────────────────────────────────
+
+    async function openAddContactsPage(seqId, seqName) {
+      seqState.addContacts = { seqId, recipients: [], activeIdx: 0, editedBodies: {} };
+      document.getElementById('seq-add-title').textContent = `Add Contacts — ${seqName}`;
+      document.getElementById('seq-add-from').value = state.user?.email || '';
+      document.getElementById('seq-add-recipient-list').innerHTML =
+        '<div style="color:var(--text-muted);font-size:13px">Loading preview…</div>';
+      switchPage('sequence-add-contacts');
+
+      // Collect candidate_ids from shortlist or prompt
+      // For now we load the current user's shortlist and fetch previews for all
+      try {
+        const slData = await api('/api/shortlists');
+        const shortlisted = (slData?.shortlists || []).filter(s => s.email);
+        const candidateIds = shortlisted.map(s => s.id);
+        document.getElementById('seq-add-count').textContent =
+          `(${candidateIds.length})`;
+        if (!candidateIds.length) {
+          document.getElementById('seq-add-recipient-list').innerHTML =
+            '<div style="color:var(--text-muted);font-size:13px">No shortlisted candidates with email addresses found.<br>Shortlist candidates first.</div>';
+          return;
+        }
+        const previews = await api(`/api/sequences/${seqId}/preview`, {
+          method: 'POST', body: { candidate_ids: candidateIds }
+        });
+        seqState.addContacts.recipients = Array.isArray(previews) ? previews : [];
+        renderRecipientList();
+        if (seqState.addContacts.recipients.length) selectRecipient(0);
+      } catch (err) {
+        document.getElementById('seq-add-recipient-list').innerHTML =
+          `<div style="color:#b91c1c;font-size:13px">Error: ${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderRecipientList() {
+      const list = document.getElementById('seq-add-recipient-list');
+      const recs = seqState.addContacts.recipients;
+      list.innerHTML = recs.map((r, i) => {
+        const hasIssue = r.issues && r.issues.length > 0;
+        return `<div class="seq-recipient-row ${i === seqState.addContacts.activeIdx ? 'active' : ''}"
+          data-rec-idx="${i}" onclick="selectRecipient(${i})">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(r.name || 'Unknown')}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">${esc(r.email || '(no email)')}</div>
+          </div>
+          ${hasIssue ? `<span class="seq-issue-chip">!</span>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function selectRecipient(idx) {
+      seqState.addContacts.activeIdx = idx;
+      renderRecipientList();
+      const rec = seqState.addContacts.recipients[idx];
+      if (!rec) return;
+      const editedBodies = seqState.addContacts.editedBodies;
+      document.getElementById('seq-add-preview-empty').style.display = 'none';
+      document.getElementById('seq-add-preview-content').style.display = '';
+      document.getElementById('seq-add-to-email').value = editedBodies[`${idx}_email`] ?? rec.email ?? '';
+      document.getElementById('seq-add-subject').value = editedBodies[`${idx}_subject`] ?? rec.rendered_subject ?? '';
+      document.getElementById('seq-add-body').value = editedBodies[`${idx}_body`] ?? rec.rendered_body ?? '';
+    }
+
+    // Persist edits as user types
+    ['seq-add-to-email','seq-add-subject','seq-add-body'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => {
+        const idx = seqState.addContacts.activeIdx;
+        const key = id === 'seq-add-to-email' ? 'email' : id === 'seq-add-subject' ? 'subject' : 'body';
+        seqState.addContacts.editedBodies[`${idx}_${key}`] =
+          document.getElementById(id).value;
+      });
+    });
+
+    document.getElementById('seq-add-back')?.addEventListener('click', () => {
+      switchPage('sequences');
+      loadSequencesPageV2();
+    });
+
+    document.getElementById('seq-add-enroll-btn')?.addEventListener('click', async () => {
+      const { seqId, recipients, editedBodies } = seqState.addContacts;
+      if (!recipients.length) return;
+      const btn = document.getElementById('seq-add-enroll-btn');
+      btn.disabled = true;
+      btn.textContent = 'Enrolling…';
+      const enrollments = recipients.map((r, i) => ({
+        candidate_id: r.candidate_id,
+        to_email: editedBodies[`${i}_email`] ?? r.email,
+        subject: editedBodies[`${i}_subject`] ?? r.rendered_subject,
+        body: editedBodies[`${i}_body`] ?? r.rendered_body,
+      })).filter(e => e.candidate_id && e.to_email);
+      try {
+        const result = await api(`/api/sequences/${seqId}/enroll`,
+          { method: 'POST', body: { enrollments } });
+        alert(`✓ ${result.enrolled} contact(s) enrolled. Step 1 emails are sending now.`);
+        switchPage('sequence-detail');
+        openSequenceDetail(seqId);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">send</span> Add to Sequence';
+      }
+    });
+
+    function showToast(msg) {
+      let t = document.getElementById('seq-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'seq-toast';
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 18px;border-radius:999px;font-size:13px;z-index:9999;transition:opacity .3s';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      t.style.opacity = '1';
+      clearTimeout(t._timeout);
+      t._timeout = setTimeout(() => { t.style.opacity = '0'; }, 2000);
+    }
 
     // ══════════════════════════════════
     // ── Search ──

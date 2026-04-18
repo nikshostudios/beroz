@@ -21,9 +21,10 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -437,6 +438,22 @@ async def _run_process_inbox(recruiter_email: str | None) -> dict:
                     )
                     if matched:
                         db.mark_reply_received(matched["id"])
+                        # Halt sequence run if this outreach is part of one
+                        seq_run_id = matched.get("sequence_run_id")
+                        if seq_run_id:
+                            try:
+                                db.get_client().table("sequence_runs").update({
+                                    "status": "replied",
+                                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                                }).eq("id", seq_run_id).execute()
+                                db.get_client().table("sequence_step_sends").update(
+                                    {"status": "skipped"}
+                                ).eq("run_id", seq_run_id).eq("status", "scheduled").execute()
+                                db.get_client().table("sequence_run_events").insert({
+                                    "run_id": seq_run_id, "event_type": "replied",
+                                }).execute()
+                            except Exception:
+                                log.exception("halt sequence run %s on reply failed", seq_run_id)
                         result = _call_claude(
                             "claude-haiku-4-5-20251001",
                             AGENTS.get("followup", ""),
@@ -770,7 +787,8 @@ def wipe_all_requirements(user_role: str, user_email: str) -> dict:
 DEFAULT_SOURCE_CAP_PER_REQ = 5
 
 
-async def _source_and_score_capped(req_id: str, cap: int) -> dict:
+async def _source_and_score_capped(req_id: str, cap: int,
+                                   _return_pool: bool = False) -> dict:
     """Source candidates for one requirement, score, persist match_scores, and
     report how many ended up above threshold.
 
@@ -843,7 +861,7 @@ async def _source_and_score_capped(req_id: str, cap: int) -> dict:
     except Exception:
         top = []
 
-    return {
+    result = {
         "requirement_id": req_id,
         "sourced": external_sourced_count,
         "internal_pool_size": len(internal_pool),
@@ -851,6 +869,9 @@ async def _source_and_score_capped(req_id: str, cap: int) -> dict:
         "top_count": min(len(top), cap),
         "channel_errors": channel_errors,
     }
+    if _return_pool:
+        result["_pool"] = pool
+    return result
 
 
 def source_requirements_batch(payload: Any, user_role: str,
@@ -1387,20 +1408,30 @@ def source_requirement(req_id: str, user_role: str, user_email: str) -> dict:
     if not requirement:
         raise CoreError(404, "Requirement not found")
     try:
-        source_results = _run_async(sourcing.run_all_sources(requirement))
+        summary = _run_async(
+            _source_and_score_capped(req_id, DEFAULT_SOURCE_CAP_PER_REQ,
+                                     _return_pool=True))
     except Exception as e:
-        log.exception("run_all_sources crashed for %s", req_id)
+        log.exception("_source_and_score_capped crashed for %s", req_id)
         raise CoreError(500, f"Sourcing failed: {e}")
     linkedin_str = sourcing.generate_linkedin_search_string(requirement)
-    just_sourced = source_results.pop("upserted_candidates", [])
-    _run_in_background(_screen_candidates, req_id, requirement, just_sourced)
+    pool = summary.pop("_pool", [])
+    _run_in_background(_screen_candidates, req_id, requirement, pool)
+    ext = summary["sourced"]
+    internal = summary["internal_pool_size"]
+    matched = summary["top_count"]
     return {
-        "sourced": source_results.get("total_unique", 0),
+        "sourced": ext,
+        "internal_pool_size": internal,
+        "top_count": matched,
+        "channel_errors": summary.get("channel_errors", {}),
         "screened": "in_progress",
         "shortlisted": "in_progress",
         "linkedin_search_string": linkedin_str,
-        "message": (f"Sourced {source_results.get('total_unique', 0)} candidates. "
-                    f"Screening {len(just_sourced)} in background."),
+        "message": (
+            f"Sourced {ext} new + {internal} from DB considered. "
+            f"{matched} matched above threshold."
+        ),
     }
 
 
@@ -1943,3 +1974,542 @@ def delete_project(project_id: str, user_role: str, user_email: str) -> dict:
         raise CoreError(403, "Only the project creator can delete this project")
     db.delete_project(project_id)
     return {"deleted": project_id}
+
+
+# ══════════════════════════════════════════════════════════════
+# ── Sequences v2 — multi-step builder + AI streaming + enroll
+# ══════════════════════════════════════════════════════════════
+
+SEQUENCE_V2_SYSTEM = """\
+You are an expert IT recruiter. You are drafting ONE email at a specific \
+position in a multi-step sequence to a passive candidate. You will be given \
+the full context (role, company, scheduling link), the position of this step, \
+and the full drafts of all previous steps.
+
+Rules:
+- Under 150 words
+- Warm, concrete, plain. No marketing fluff. No emoji.
+- Use {{First Name}} placeholder wherever the candidate's first name goes.
+- You MAY use: {{Current Company}}, {{Job Title}}, {{Sender First Name}}.
+- Step 1 is a cold intro. Step 2+ are short follow-ups in the same thread \
+  (leave subject empty — reply in thread).
+- Return ONLY JSON — no backticks, no preamble:
+  {"subject":"...","body":"...","wait_days":<int>,"send_time_local":"HH:MM"}
+"""
+
+# Suggested wait cadence used as a fallback if Claude returns nonsense
+_WAIT_CADENCE = {1: 0, 2: 3, 3: 2, 4: 3, 5: 5}
+
+
+def _validate_ai_config(payload: dict) -> dict:
+    required = ["role", "company"]
+    for f in required:
+        if not (payload.get(f) or "").strip():
+            raise CoreError(422, f"'{f}' is required for AI generation")
+    num_steps = int(payload.get("num_steps") or 3)
+    if num_steps not in (3, 4, 5):
+        num_steps = 3
+    return {
+        "role": payload["role"].strip(),
+        "company": payload["company"].strip(),
+        "job_url": payload.get("job_url", ""),
+        "company_url": payload.get("company_url", ""),
+        "scheduling_link": payload.get("scheduling_link", ""),
+        "num_steps": num_steps,
+        "include_linkedin": bool(payload.get("include_linkedin")),
+        "timezone": payload.get("timezone", "Asia/Kolkata"),
+    }
+
+
+def _build_step_user_prompt(cfg: dict, pos: int, total: int,
+                            prior: list[dict], sender_email: str) -> str:
+    ctx = (
+        f"Role: {cfg['role']}\n"
+        f"Company: {cfg['company']}\n"
+    )
+    if cfg.get("job_url"):
+        ctx += f"Job URL: {cfg['job_url']}\n"
+    if cfg.get("scheduling_link"):
+        ctx += f"Scheduling link: {cfg['scheduling_link']}\n"
+    ctx += f"Sender email: {sender_email}\n"
+    ctx += f"\nYou are writing step {pos} of {total}.\n"
+    if prior:
+        ctx += "\nPrevious steps already drafted:\n"
+        for i, s in enumerate(prior, 1):
+            ctx += (f"\nStep {i}:\n"
+                    f"  Subject: {s.get('subject', '(empty)')}\n"
+                    f"  Body: {s.get('body', '')[:300]}\n"
+                    f"  Wait days: {s.get('wait_days', 0)}\n")
+    return ctx
+
+
+def _fallback_step(cfg: dict, pos: int) -> dict:
+    if pos == 1:
+        return {
+            "subject": f"Opportunity: {cfg['role']} at {cfg['company']}",
+            "body": (
+                f"Hi {{{{First Name}}}},\n\n"
+                f"I'm reaching out about a {cfg['role']} opportunity at "
+                f"{cfg['company']}. Your background looks like a strong match "
+                f"— would you be open to a short chat?\n\nBest,\n{{{{Sender First Name}}}}"
+            ),
+            "wait_days": 0,
+            "send_time_local": "09:00",
+        }
+    return {
+        "subject": "",
+        "body": (
+            f"Hi {{{{First Name}}}},\n\nJust following up on my earlier note "
+            f"about the {cfg['role']} role at {cfg['company']}. "
+            f"Would love to connect — happy to keep it brief.\n\nBest,\n{{{{Sender First Name}}}}"
+        ),
+        "wait_days": _WAIT_CADENCE.get(pos, 3),
+        "send_time_local": "09:00",
+    }
+
+
+def _sanitise_step(step: dict, pos: int) -> dict:
+    wait = step.get("wait_days")
+    if not isinstance(wait, int) or wait < 0 or wait > 30:
+        wait = _WAIT_CADENCE.get(pos, 3) if pos > 1 else 0
+    send_time = step.get("send_time_local", "09:00")
+    if not re.match(r"^\d{2}:\d{2}$", str(send_time)):
+        send_time = "09:00"
+    return {
+        "subject": step.get("subject", ""),
+        "body": step.get("body", ""),
+        "wait_days": wait,
+        "send_time_local": send_time,
+    }
+
+
+def _linkedin_step(cfg: dict, pos: int) -> dict:
+    return {
+        "subject": "",
+        "body": (
+            f"Hi {{{{First Name}}}}, I also sent you a LinkedIn connection request "
+            f"— I'd love to connect there too if email isn't the best channel. "
+            f"({cfg['role']} at {cfg['company']})"
+        ),
+        "wait_days": 1,
+        "send_time_local": "10:00",
+        "step_type": "linkedin",
+    }
+
+
+def _sse(obj: dict) -> str:
+    return f"data: {json.dumps(obj)}\n\n"
+
+
+def generate_sequence_stream(payload: dict, user_role: str, user_email: str):
+    """SSE generator — yields data: lines for the streaming endpoint."""
+    _require_role(user_role, ["recruiter", "tl"])
+    try:
+        cfg = _validate_ai_config(payload)
+    except CoreError as e:
+        yield _sse({"event": "error", "message": e.message})
+        return
+    total = cfg["num_steps"]
+    prior: list[dict] = []
+    yield _sse({"event": "start", "total": total, "config": cfg})
+    for pos in range(1, total + 1):
+        yield _sse({"event": "writing", "step": pos, "total": total})
+        try:
+            raw = _call_claude(
+                "claude-haiku-4-5-20251001",
+                SEQUENCE_V2_SYSTEM,
+                _build_step_user_prompt(cfg, pos, total, prior, user_email),
+                max_tokens=900, endpoint=f"/sequences/generate:step{pos}",
+            )
+            step = _parse_llm_json(raw) or _fallback_step(cfg, pos)
+        except Exception:
+            log.exception("step %s generation failed", pos)
+            step = _fallback_step(cfg, pos)
+        step = _sanitise_step(step, pos)
+        prior.append(step)
+        yield _sse({"event": "step", "step": pos, "total": total, **step})
+    if cfg.get("include_linkedin"):
+        yield _sse({
+            "event": "step",
+            "step": total + 1, "total": total + 1,
+            **_linkedin_step(cfg, total + 1),
+        })
+    yield _sse({"event": "done"})
+
+
+# ── Variable substitution ──────────────────────────────────────
+
+VAR_MAP = {
+    "First Name":        lambda c, s: _first_name(c.get("name")),
+    "Current Company":   lambda c, s: c.get("current_employer") or "your current company",
+    "Job Title":         lambda c, s: c.get("current_job_title") or "your role",
+    "Education":         lambda c, s: c.get("highest_education") or "your background",
+    "Sender First Name": lambda c, s: _first_name(s.get("name")),
+    "Sender Email":      lambda c, s: s.get("email", ""),
+    "Scheduling Link":   lambda c, s: s.get("scheduling_link", ""),
+}
+_VAR_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+
+
+def _render_template(tpl: str, candidate: dict, sender: dict) -> str:
+    return _VAR_RE.sub(
+        lambda m: VAR_MAP.get(
+            m.group(1).strip(), lambda c, s: m.group(0)
+        )(candidate, sender),
+        tpl or "",
+    )
+
+
+# ── CRUD ──────────────────────────────────────────────────────
+
+def create_sequence(payload: dict, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    name = (payload.get("name") or "").strip()
+    if not name:
+        name = f"New Sequence — {datetime.now().strftime('%b %d')}"
+    source = payload.get("source", "scratch")
+    if source not in ("ai", "template", "scratch", "clone"):
+        source = "scratch"
+    seq = db.insert_sequence({
+        "name": name,
+        "created_by": user_email,
+        "status": "draft",
+        "source": source,
+        "config": payload.get("config") or {},
+        "project_id": payload.get("project_id") or None,
+        "requirement_id": payload.get("requirement_id") or None,
+    })
+    steps_data = payload.get("steps") or []
+    steps = []
+    if steps_data:
+        rows = [{
+            "sequence_id": seq["id"],
+            "position": i + 1,
+            "step_type": s.get("step_type", "email"),
+            "wait_days": s.get("wait_days", 0),
+            "send_time_local": s.get("send_time_local", "09:00"),
+            "subject_template": s.get("subject", ""),
+            "body_template": s.get("body", ""),
+            "reply_in_same_thread": i > 0,
+        } for i, s in enumerate(steps_data)]
+        steps = db.insert_sequence_steps(rows)
+    seq["steps"] = steps
+    return {"sequence": seq}
+
+
+def list_sequences_v2(user_role: str, user_email: str,
+                      scope: str = "mine") -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    seqs = db.list_sequences_for_user(user_email, user_role if scope == "all" else "recruiter")
+    # Enrich each sequence with run metrics
+    result = []
+    total_sent = total_replied = 0
+    for seq in seqs:
+        metrics = {}
+        try:
+            metrics = db.count_sequence_metrics(seq["id"])
+        except Exception:
+            pass
+        total_sent += metrics.get("sent", 0)
+        total_replied += metrics.get("replied", 0)
+        # Step count
+        try:
+            step_count = len((db.get_client().table("sequence_steps")
+                              .select("id").eq("sequence_id", seq["id"])
+                              .execute().data) or [])
+        except Exception:
+            step_count = 0
+        result.append({
+            **seq,
+            "metrics": metrics,
+            "step_count": step_count,
+        })
+    stats = {
+        "total": len(result),
+        "sent": total_sent,
+        "replied": total_replied,
+        "reply_rate": round((total_replied / total_sent * 100) if total_sent else 0),
+        "active": sum(1 for s in result if s.get("status") == "active"),
+        "draft": sum(1 for s in result if s.get("status") == "draft"),
+    }
+    # Build 7-day chart data from sequence_step_sends
+    chart = _build_chart_data()
+    return {"stats": stats, "chart": chart, "sequences": result}
+
+
+def _build_chart_data() -> dict:
+    """Aggregate sent/scheduled counts over the last 7 days."""
+    today = datetime.now(timezone.utc).date()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+    sent_map: dict[str, int] = {d: 0 for d in days}
+    sched_map: dict[str, int] = {d: 0 for d in days}
+    try:
+        since = days[0] + "T00:00:00Z"
+        sends = (db.get_client().table("sequence_step_sends")
+                 .select("status, sent_at, scheduled_for")
+                 .gte("created_at", since).execute().data) or []
+        for row in sends:
+            if row["status"] == "sent" and row.get("sent_at"):
+                d = row["sent_at"][:10]
+                if d in sent_map:
+                    sent_map[d] += 1
+            elif row["status"] == "scheduled" and row.get("scheduled_for"):
+                d = row["scheduled_for"][:10]
+                if d in sched_map:
+                    sched_map[d] += 1
+    except Exception:
+        pass
+    return {
+        "days": days,
+        "sent": [sent_map[d] for d in days],
+        "scheduled": [sched_map[d] for d in days],
+    }
+
+
+def get_sequence_detail(seq_id: str, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    try:
+        runs = (db.get_client().table("sequence_runs")
+                .select(
+                    "id, candidate_id, status, current_step_position, "
+                    "started_at, next_send_at, enrolled_by, "
+                    "candidates(id, name, email, current_job_title)"
+                )
+                .eq("sequence_id", seq_id)
+                .order("created_at", desc=True)
+                .execute().data) or []
+    except Exception:
+        runs = []
+    metrics = {}
+    try:
+        metrics = db.count_sequence_metrics(seq_id)
+    except Exception:
+        pass
+    return {"sequence": seq, "runs": runs, "metrics": metrics}
+
+
+def update_sequence(seq_id: str, patch: dict,
+                    user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    allowed = {k: v for k, v in patch.items()
+               if k in ("name", "status", "config")}
+    if not allowed:
+        raise CoreError(422, "Nothing to update")
+    if "status" in allowed and allowed["status"] not in (
+            "draft", "active", "paused", "archived"):
+        raise CoreError(422, "Invalid status")
+    updated = db.update_sequence_row(seq_id, allowed)
+    return {"sequence": updated}
+
+
+def update_step(seq_id: str, step_id: str, patch: dict,
+                user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    allowed_keys = {"subject_template", "body_template",
+                    "wait_days", "send_time_local", "step_type"}
+    allowed = {k: v for k, v in patch.items() if k in allowed_keys}
+    if not allowed:
+        raise CoreError(422, "Nothing to update")
+    updated = db.update_step_row(step_id, allowed)
+    db.update_sequence_row(seq_id, {})  # bump updated_at
+    return {"step": updated}
+
+
+def reorder_steps(seq_id: str, ordered_step_ids: list[str],
+                  user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    client = db.get_client()
+    # Set positions to negatives to dodge unique constraint, then set final
+    for i, sid in enumerate(ordered_step_ids):
+        client.table("sequence_steps").update({"position": -(i + 1)}).eq("id", sid).execute()
+    for i, sid in enumerate(ordered_step_ids):
+        client.table("sequence_steps").update({"position": i + 1}).eq("id", sid).execute()
+    db.update_sequence_row(seq_id, {})
+    return {"reordered": True}
+
+
+def delete_sequence(seq_id: str, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    db.archive_sequence(seq_id)
+    return {"archived": seq_id}
+
+
+def preview_step1_for_candidates(seq_id: str, payload: dict,
+                                  user_role: str, user_email: str) -> list[dict]:
+    _require_role(user_role, ["recruiter", "tl"])
+    candidate_ids = (payload or {}).get("candidate_ids") or []
+    if not candidate_ids:
+        raise CoreError(422, "candidate_ids required")
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    if not seq.get("steps"):
+        raise CoreError(422, "Sequence has no steps")
+    step1 = seq["steps"][0]
+    # Fetch user info for sender substitution
+    sender = {"email": user_email, "name": user_email.split("@")[0].title()}
+    sched = seq.get("config", {}).get("scheduling_link", "")
+    if sched:
+        sender["scheduling_link"] = sched
+    cands = (db.get_client().table("candidates")
+             .select("id, name, email, current_job_title, current_employer")
+             .in_("id", candidate_ids).execute().data) or []
+    results = []
+    for c in cands:
+        issues = []
+        if not c.get("email"):
+            issues.append("no_email")
+        rendered_subject = _render_template(step1.get("subject_template", ""), c, sender)
+        rendered_body = _render_template(step1.get("body_template", ""), c, sender)
+        results.append({
+            "candidate_id": c["id"],
+            "name": c.get("name"),
+            "email": c.get("email"),
+            "issues": issues,
+            "rendered_subject": rendered_subject,
+            "rendered_body": rendered_body,
+        })
+    return results
+
+
+def enroll_candidates(seq_id: str, payload: dict,
+                      user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    enrollments = (payload or {}).get("enrollments") or []
+    if not enrollments:
+        raise CoreError(422, "enrollments list required")
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    steps = seq.get("steps") or []
+    if not steps:
+        raise CoreError(422, "Sequence has no steps")
+    step1 = steps[0]
+    sender = {"email": user_email, "name": user_email.split("@")[0].title()}
+    sched = seq.get("config", {}).get("scheduling_link", "")
+    if sched:
+        sender["scheduling_link"] = sched
+
+    client = db.get_client()
+    now_utc = datetime.now(timezone.utc)
+    results = []
+    for idx, enroll in enumerate(enrollments):
+        cid = enroll.get("candidate_id")
+        to_email = enroll.get("to_email")
+        if not cid or not to_email:
+            results.append({"candidate_id": cid, "enrolled": False,
+                            "error": "missing candidate_id or to_email"})
+            continue
+        try:
+            cand = db.get_candidate_by_id(cid) or {}
+            subject = enroll.get("subject") or _render_template(
+                step1.get("subject_template", ""), cand, sender)
+            body = enroll.get("body") or _render_template(
+                step1.get("body_template", ""), cand, sender)
+            # Stagger sends: candidate i sends at T + 2*i minutes
+            send_at = now_utc + timedelta(minutes=2 * idx)
+            # Enroll run (upsert — skip if already enrolled)
+            existing_run = (client.table("sequence_runs")
+                            .select("id, status")
+                            .eq("sequence_id", seq_id)
+                            .eq("candidate_id", cid)
+                            .execute().data)
+            if existing_run:
+                results.append({"candidate_id": cid, "enrolled": False,
+                                "error": "already enrolled"})
+                continue
+            run_row = (client.table("sequence_runs").insert({
+                "sequence_id": seq_id,
+                "candidate_id": cid,
+                "from_email": user_email,
+                "status": "active",
+                "current_step_position": 1,
+                "started_at": now_utc.isoformat(),
+                "enrolled_by": user_email,
+            }).execute().data[0])
+            run_id = run_row["id"]
+            # Send step 1 via Graph
+            sent = outlook.send_email(
+                from_email=user_email,
+                to_email=to_email,
+                subject=subject,
+                body=body,
+            )
+            # outreach_log row (inbox scanner depends on this)
+            req_id = seq.get("requirement_id")
+            log_row = db.insert_outreach_log({
+                "candidate_id": cid,
+                "requirement_id": req_id,
+                "recruiter_email": user_email,
+                "outlook_message_id": sent.get("message_id"),
+                "outlook_thread_id": sent.get("thread_id"),
+                "email_subject": subject,
+                "sent_at": sent.get("sent_at"),
+                "sequence_run_id": run_id,
+                "sequence_step_id": step1["id"],
+            })
+            # sequence_step_sends — step 1 sent
+            client.table("sequence_step_sends").insert({
+                "run_id": run_id,
+                "step_id": step1["id"],
+                "step_position": 1,
+                "outreach_log_id": log_row["id"],
+                "status": "sent",
+                "scheduled_for": sent.get("sent_at"),
+                "sent_at": sent.get("sent_at"),
+            }).execute()
+            # sequence_run_events
+            client.table("sequence_run_events").insert({
+                "run_id": run_id, "step_id": step1["id"],
+                "event_type": "sent",
+            }).execute()
+            # Schedule step 2 if it exists (Phase D will actually send it)
+            if len(steps) > 1:
+                step2 = steps[1]
+                wait_days = step2.get("wait_days", 3)
+                next_send = (now_utc + timedelta(days=wait_days)).isoformat()
+                client.table("sequence_step_sends").insert({
+                    "run_id": run_id,
+                    "step_id": step2["id"],
+                    "step_position": 2,
+                    "status": "scheduled",
+                    "scheduled_for": next_send,
+                }).execute()
+                client.table("sequence_runs").update({
+                    "next_send_at": next_send,
+                    "current_step_position": 1,
+                }).eq("id", run_id).execute()
+            results.append({
+                "candidate_id": cid, "enrolled": True,
+                "run_id": run_id, "sent_at": sent.get("sent_at"),
+            })
+        except Exception as exc:
+            log.exception("enroll candidate %s failed", cid)
+            results.append({"candidate_id": cid, "enrolled": False, "error": str(exc)})
+    # Activate sequence if it was draft
+    if seq.get("status") == "draft" and any(r["enrolled"] for r in results):
+        try:
+            db.update_sequence_row(seq_id, {"status": "active"})
+        except Exception:
+            pass
+    return {
+        "enrolled": sum(1 for r in results if r.get("enrolled")),
+        "results": results,
+    }
+
+
+# Phase D stub — scheduler tick will be wired here later
+def sequence_tick(user_role: str) -> dict:
+    _require_role(user_role, ["tl"])
+    return {"ok": True, "skipped": "phase_d"}
