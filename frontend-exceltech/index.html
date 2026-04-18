@@ -4762,7 +4762,8 @@
       return html + '</tbody></table></div>';
     }
 
-    function renderSearchResults(candidates, softCriteria) {
+    function renderSearchResults(candidates, softCriteria, opts) {
+      const withCheckboxes = opts?.withCheckboxes || false;
       if (!candidates?.length) {
         return '<div class="empty-state"><p>No matching candidates. Try loosening the filters.</p></div>';
       }
@@ -4783,33 +4784,39 @@
           </div>
         </div>`;
       let html = `<div class="card" id="search-results-card">${toggleHtml}`;
-      if (mode === 'synopsis') html += renderSynopsisGrid(candidates);
-      else if (mode === 'table') html += renderTableView(candidates, softCriteria || []);
-      else                      html += renderClassicCards(candidates);
+      if (mode === 'synopsis') html += renderSynopsisGrid(candidates, withCheckboxes);
+      else if (mode === 'table') html += renderTableView(candidates, softCriteria || [], withCheckboxes);
+      else                      html += renderClassicCards(candidates, withCheckboxes);
       return html + '</div>';
     }
 
     function setSearchViewMode(mode) {
       state.searchViewMode = mode;
       localStorage.setItem('searchViewMode', mode);
-      // Re-render results in place using last search data
       const card = document.getElementById('search-results-card');
-      if (!card || !state._lastSearchData) return;
+      if (!card) return;
       const wrapper = card.parentElement;
-      const newHtml = renderSearchResults(state._lastSearchData.candidates || [], state._lastSearchData.soft_criteria || []);
+      const withCheckboxes = !!state.searchRequirementContext;
+      const pool = state.sourcedCandidates || state._lastSearchData?.candidates || [];
+      const softCriteria = state._lastSearchData?.soft_criteria || [];
+      if (!pool.length) return;
+      const newHtml = renderSearchResults(pool, softCriteria, { withCheckboxes });
       const tmp = document.createElement('div');
       tmp.innerHTML = newHtml;
       wrapper.replaceChild(tmp.firstElementChild, card);
+      if (withCheckboxes) wireSelectionCheckboxes(wrapper);
     }
 
-    function renderSynopsisGrid(candidates) {
+    function renderSynopsisGrid(candidates, withCheckboxes) {
       let html = '<div class="synopsis-grid">';
       candidates.forEach(c => {
         const initials = getInitials(c.name || 'Unknown');
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
         const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
-        html += `<div class="person-card person-card-synopsis" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer">
-          <div class="person-card-header">
+        const cb = withCheckboxes ? `<input type="checkbox" class="seq-cand-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:10px">` : '';
+        html += `<div class="person-card person-card-synopsis" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer;position:relative">
+          ${cb}
+          <div class="person-card-header"${withCheckboxes ? ' style="padding-left:24px"' : ''}>
             <div class="person-avatar">${initials}</div>
             <div style="flex:1;min-width:0">
               <div class="person-name">${esc(c.name || 'Unknown')}</div>
@@ -4825,16 +4832,19 @@
       return html + '</div>';
     }
 
-    function renderTableView(candidates, softCriteria) {
+    function renderTableView(candidates, softCriteria, withCheckboxes) {
       const criteria = (softCriteria || []).map(sc => typeof sc === 'string' ? sc : (sc.criterion || sc.name || String(sc)));
       let html = '<div class="table-container"><table><thead><tr>';
+      if (withCheckboxes) html += '<th style="width:32px"></th>';
       html += '<th>Name</th><th>Profiles</th><th>Job Title</th><th>Company</th><th>Match</th>';
       criteria.forEach(cr => { html += `<th style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(cr)}">${esc(cr.length > 12 ? cr.slice(0, 12) + '…' : cr)}</th>`; });
       html += '</tr></thead><tbody>';
       candidates.forEach(c => {
         const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
         const matches = c.criterion_matches || {};
-        html += `<tr class="search-table-row" data-candidate-id="${esc(c.id || '')}">
+        html += `<tr class="search-table-row" data-candidate-id="${esc(c.id || '')}">`;
+        if (withCheckboxes) html += `<td><input type="checkbox" class="seq-cand-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()"></td>`;
+        html += `
           <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
           <td>
             ${c.linkedin_url ? `<a href="${esc(c.linkedin_url)}" target="_blank" onclick="event.stopPropagation()" title="LinkedIn"><span class="material-icons-outlined" style="font-size:16px;color:#0a66c2">link</span></a>` : ''}
@@ -4852,13 +4862,15 @@
       return html + '</tbody></table></div>';
     }
 
-    function renderClassicCards(candidates) {
+    function renderClassicCards(candidates, withCheckboxes) {
       let html = '<div class="shortlist-grid">';
       candidates.forEach(c => {
         const initials = getInitials(c.name || 'Unknown');
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
-        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer">
-          <div class="person-card-header">
+        const cb = withCheckboxes ? `<input type="checkbox" class="seq-cand-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:10px">` : '';
+        html += `<div class="person-card" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer;position:relative">
+          ${cb}
+          <div class="person-card-header"${withCheckboxes ? ' style="padding-left:24px"' : ''}>
             <div class="person-avatar">${initials}</div>
             <div style="flex:1;min-width:0">
               <div class="person-name">${esc(c.name || 'Unknown')}</div>

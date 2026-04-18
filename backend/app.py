@@ -6,6 +6,7 @@ Recruitment Agent — Flask Web App
 Production-ready web interface for resume parsing and screening.
 """
 
+import io
 import os
 import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -109,8 +110,31 @@ def _ai_core_call(fn, *args, **kwargs):
 # this is the line that would have caught the original FastAPI-never-deployed
 # bug on day one. Keep this pattern for any future external service.
 try:
-    ai_core.db.get_client().table("requirements").select("id").limit(1).execute()
-    app.logger.info("[startup] Supabase reachable")
+    _supabase = ai_core.db.get_client()
+    _critical_tables = (
+        "requirements",
+        "candidate_details",
+        "candidate_shortlists",
+        "candidate_notes",
+        "submissions",
+        "outreach_log",
+    )
+    _missing_tables = []
+    for _table in _critical_tables:
+        try:
+            _supabase.table(_table).select("id").limit(1).execute()
+        except Exception as _table_err:
+            _missing_tables.append((_table, _table_err))
+    if _missing_tables:
+        _details = "; ".join(
+            f"{_table}: {_err}" for _table, _err in _missing_tables
+        )
+        app.logger.error(
+            "[startup] Supabase reachable but schema is incomplete: %s",
+            _details,
+        )
+    else:
+        app.logger.info("[startup] Supabase reachable and critical tables present")
 except Exception as _e:
     app.logger.error("[startup] Supabase unreachable: %s — DB-backed routes will fail", _e)
 
@@ -3221,6 +3245,74 @@ def api_candidate_add_note(candidate_id):
     return _ai_core_call(ai_core.add_note_to_candidate,
                          candidate_id, request.get_json(silent=True),
                          role, email)
+
+
+@app.route("/api/candidates/export/pdf", methods=["POST"])
+def api_candidates_export_pdf():
+    """Generate a multi-page PDF with one page per selected candidate."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    body = request.get_json(silent=True) or {}
+    candidate_ids = body.get("candidate_ids") or []
+    if not candidate_ids:
+        return jsonify({"error": "No candidate IDs provided"}), 400
+    try:
+        doc = fitz.open()
+        role = session.get("recruiter_role", "recruiter")
+        email_addr = session.get("recruiter_email", "")
+        for cid in candidate_ids:
+            try:
+                detail = ai_core.get_candidate_detail(cid, role, email_addr)
+                cand = detail.get("candidate") or {}
+            except Exception:
+                cand = {}
+            if not cand:
+                continue
+            page = doc.new_page(width=595, height=842)  # A4
+            y = 60
+            name = cand.get("name") or "Unknown"
+            page.insert_text((50, y), name, fontsize=18, fontname="helv", color=(0.1, 0.1, 0.1))
+            y += 28
+            title = cand.get("current_job_title") or ""
+            employer = cand.get("current_employer") or ""
+            if title or employer:
+                page.insert_text((50, y), f"{title}{' @ ' + employer if employer else ''}", fontsize=12, color=(0.4, 0.4, 0.4))
+                y += 20
+            email = cand.get("email") or ""
+            location = cand.get("current_location") or ""
+            experience = cand.get("total_experience") or ""
+            contact_line = "  |  ".join(filter(None, [email, location, experience]))
+            if contact_line:
+                page.insert_text((50, y), contact_line, fontsize=10, color=(0.5, 0.5, 0.5))
+                y += 18
+            y += 8
+            page.draw_line((50, y), (545, y), color=(0.85, 0.85, 0.85), width=0.5)
+            y += 16
+            reasoning = cand.get("reasoning") or ""
+            if reasoning:
+                page.insert_text((50, y), "Summary", fontsize=11, fontname="helv", color=(0.3, 0.2, 0.6))
+                y += 18
+                words = reasoning.split()
+                line, lines = [], []
+                for w in words:
+                    line.append(w)
+                    if len(" ".join(line)) > 85:
+                        lines.append(" ".join(line[:-1]))
+                        line = [w]
+                if line:
+                    lines.append(" ".join(line))
+                for ln in lines:
+                    page.insert_text((50, y), ln, fontsize=10, color=(0.2, 0.2, 0.2))
+                    y += 15
+                    if y > 780:
+                        break
+        buf = io.BytesIO(doc.tobytes())
+        doc.close()
+        buf.seek(0)
+        return send_file(buf, mimetype="application/pdf",
+                         as_attachment=True, download_name="candidates.pdf")
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/candidates/<candidate_id>/submit-to-tl", methods=["POST"])
