@@ -1884,30 +1884,21 @@ def list_projects(user_email: str) -> dict:
 
 def create_project(payload: Any, user_role: str, user_email: str) -> dict:
     """Create a Project. No role gate — any logged-in user can create.
-    Body: { title (required), access_level ('shared'|'private', default 'shared'),
-            collaborators: [email,...] (optional) }."""
+    Body: { title (required) }. New projects are always private to the creator;
+    access_level/collaborators can be changed later via update_project()."""
     if not isinstance(payload, dict):
         raise CoreError(422, "request body must be a JSON object")
     title = (payload.get("title") or "").strip()
     if not title:
         raise CoreError(422, "Project title is required")
-    access = payload.get("access_level") or "shared"
-    if access not in ("shared", "private"):
-        raise CoreError(422, "access_level must be 'shared' or 'private'")
-    collabs = payload.get("collaborators") or []
-    if not isinstance(collabs, list):
-        raise CoreError(422, "collaborators must be a list of emails")
 
     proj = db.insert_project({
         "title": title,
-        "access_level": access,
+        "access_level": "private",
         "status": "active",
         "created_by": user_email,
     })
-    clean_collabs = [e.strip() for e in collabs
-                     if isinstance(e, str) and e.strip() and e.strip() != user_email]
-    db.insert_project_collaborators(proj["id"], clean_collabs)
-    proj["collaborators"] = clean_collabs
+    proj["collaborators"] = []
     proj["progress"] = 0
     proj["requirements_count"] = 0
     return {"project": proj}

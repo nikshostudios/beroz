@@ -2701,18 +2701,6 @@
           <label>Project Title <span style="color:var(--brand-red)">*</span></label>
           <input type="text" id="cp-title" placeholder="e.g. HCL — Senior Engineers" required>
         </div>
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Access Level</label>
-          <div class="radio-group">
-            <label class="radio-option"><input type="radio" name="cp-access" value="shared" checked> Shared</label>
-            <label class="radio-option"><input type="radio" name="cp-access" value="private"> Private</label>
-          </div>
-        </div>
-        <div class="settings-field" style="margin-bottom:0">
-          <label>Collaborators (optional)</label>
-          <select id="cp-collaborators" multiple size="5" style="min-height:96px"></select>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Hold ⌘/Ctrl to pick multiple</div>
-        </div>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" onclick="document.getElementById('modal-create-project').classList.add('hidden')">Cancel</button>
           <button type="submit" class="btn-primary" id="btn-submit-project">
@@ -6351,9 +6339,6 @@
     document.getElementById('create-project-btn').addEventListener('click', () => {
       closeAllDropdowns();
       cpTitle.value = '';
-      document.querySelector('input[name="cp-access"][value="shared"]').checked = true;
-      const sel = document.getElementById('cp-collaborators');
-      if (sel) Array.from(sel.options).forEach(o => o.selected = false);
       cpModal.classList.remove('hidden');
       setTimeout(() => cpTitle.focus(), 0);
     });
@@ -6372,15 +6357,12 @@
         setTimeout(() => { cpTitle.style.borderColor = ''; }, 1500);
         return;
       }
-      const access = document.querySelector('input[name="cp-access"]:checked').value;
-      const collabs = Array.from(document.getElementById('cp-collaborators').selectedOptions)
-                          .map(o => o.value);
       btn.disabled = true;
       btn.innerHTML = '<div class="loading-spinner"></div> Creating...';
       try {
         const resp = await api('/api/projects/create', {
           method: 'POST',
-          body: { title, access_level: access, collaborators: collabs }
+          body: { title }
         });
         const proj = resp?.project;
         if (proj) {
