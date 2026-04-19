@@ -62,7 +62,7 @@ SCREEN_PROFILE_DIR = SCRIPT_DIR / "screen_profile_tmp"
 ALLOWED_RESUME_EXT = {".pdf", ".docx", ".doc"}
 ALLOWED_JD_EXT = {".txt", ".pdf"}
 
-SESSION_VERSION = "4"
+SESSION_VERSION = "5"
 
 CREDENTIALS_FILE = SCRIPT_DIR / "credentials.json"
 SOURCE_TMP_DIR = SCRIPT_DIR / "source_tmp"
