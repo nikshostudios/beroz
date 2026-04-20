@@ -3368,6 +3368,17 @@ def api_list_shortlists():
     return _ai_core_call(ai_core.list_user_shortlists, role, email)
 
 
+@app.route("/api/shortlists/delete", methods=["POST"])
+def api_delete_shortlists():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+    return _ai_core_call(ai_core.delete_user_shortlists,
+                         role, email, payload.get("shortlist_ids") or [])
+
+
 # ── Sequences (Phase 4) ──
 
 @app.route("/api/sequences/draft", methods=["POST"])

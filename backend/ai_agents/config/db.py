@@ -321,6 +321,17 @@ def list_shortlists_for_user(user_email: str) -> list[dict]:
     return rows
 
 
+def delete_shortlists(user_email: str, shortlist_ids: list[str]) -> int:
+    if not shortlist_ids:
+        return 0
+    res = (get_client().table("candidate_shortlists")
+           .delete()
+           .in_("id", shortlist_ids)
+           .eq("user_email", user_email)
+           .execute())
+    return len(res.data or [])
+
+
 def add_candidate_note(candidate_id: str, user_email: str, content: str) -> dict:
     return (get_client().table("candidate_notes")
             .insert({"candidate_id": candidate_id,

@@ -670,6 +670,40 @@ def run_search(payload: dict, market: str | None) -> dict:
         candidates = db.search_candidates_broad(
             market=market, location=location, limit=200)
 
+    # Pull live Apollo results, upsert to DB (gets them an id), then merge
+    apollo_skills = must_skills or [sc["label"] for sc in soft_criteria[:3] if sc.get("label")]
+    apollo_db_rows: list[dict] = []
+    if apollo_skills and (os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API")):
+        try:
+            apollo_raw = asyncio.run(
+                sourcing.source_apollo(apollo_skills, location or "", market or "IN")
+            )
+            for ac in apollo_raw:
+                clean = {k: v for k, v in ac.items() if not k.startswith("_")}
+                try:
+                    if clean.get("email"):
+                        row = db.upsert_candidate_by_email(clean)
+                    elif clean.get("name"):
+                        row = db.upsert_candidate_by_name(clean)
+                    else:
+                        continue
+                    if row and row.get("id"):
+                        apollo_db_rows.append(row)
+                except Exception as upsert_err:
+                    log.warning("Apollo upsert failed: %s", upsert_err)
+        except Exception as e:
+            log.warning("Apollo search failed during run_search: %s", e)
+
+    existing_emails = {c["email"] for c in candidates if c.get("email")}
+    existing_names  = {c["name"]  for c in candidates if c.get("name")}
+    for row in apollo_db_rows:
+        if row.get("email") and row["email"] not in existing_emails:
+            candidates.append(row)
+            existing_emails.add(row["email"])
+        elif row.get("name") and row["name"] not in existing_names:
+            candidates.append(row)
+            existing_names.add(row["name"])
+
     candidates = _apply_python_filters(candidates, filters)
 
     scored = _score_candidates_for_search(candidates, filters, soft_criteria)
@@ -1240,6 +1274,16 @@ def list_user_shortlists(user_role: str, user_email: str) -> dict:
             "latest_requirement_id": sub.get("requirement_id") if sub else None,
         })
     return {"shortlists": out, "count": len(out)}
+
+
+def delete_user_shortlists(user_role: str, user_email: str,
+                           shortlist_ids: list[str]) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    ids = [s for s in (shortlist_ids or []) if isinstance(s, str)]
+    if not ids:
+        raise CoreError(422, "shortlist_ids required")
+    deleted = db.delete_shortlists(user_email, ids)
+    return {"deleted": deleted}
 
 
 def get_requirement_candidates(req_id: str, user_role: str,

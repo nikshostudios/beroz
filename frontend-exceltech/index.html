@@ -1965,6 +1965,9 @@
             <div class="table-header">
               <div class="table-header-title" id="contacts-title">All Contacts</div>
               <div class="table-header-actions">
+                <button class="btn-secondary" id="btn-delete-contacts" style="display:none;color:#b42318;border-color:#fecdca">
+                  <span class="material-icons-outlined" style="font-size:16px">delete_outline</span> Delete selected
+                </button>
                 <button class="btn-secondary" id="btn-refresh-contacts">
                   <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
                 </button>
@@ -1976,6 +1979,7 @@
             <table id="contacts-table" style="display:none">
               <thead>
                 <tr>
+                  <th style="width:32px"><input type="checkbox" id="contacts-select-all"></th>
                   <th>Name</th>
                   <th>Skills</th>
                   <th>Experience</th>
@@ -5198,6 +5202,34 @@
     // ── Contacts ──
     // ══════════════════════════════════
 
+    const _contactsSelected = new Set();
+
+    function updateContactsSelectionUI() {
+      const btn = document.getElementById('btn-delete-contacts');
+      const all = document.getElementById('contacts-select-all');
+      const boxes = document.querySelectorAll('.contact-select');
+      const total = boxes.length;
+      const n = _contactsSelected.size;
+      if (n > 0) {
+        btn.style.display = '';
+        btn.innerHTML = `<span class="material-icons-outlined" style="font-size:16px">delete_outline</span> Delete selected (${n})`;
+      } else {
+        btn.style.display = 'none';
+      }
+      if (all) {
+        if (n === 0) {
+          all.checked = false;
+          all.indeterminate = false;
+        } else if (n === total) {
+          all.checked = true;
+          all.indeterminate = false;
+        } else {
+          all.checked = false;
+          all.indeterminate = true;
+        }
+      }
+    }
+
     async function loadContacts() {
       const loading = document.getElementById('contacts-loading');
       const table = document.getElementById('contacts-table');
@@ -5205,6 +5237,8 @@
       loading.style.display = '';
       table.style.display = 'none';
       tbody.innerHTML = '';
+      _contactsSelected.clear();
+      updateContactsSelectionUI();
 
       try {
         const data = await api('/api/shortlists');
@@ -5225,11 +5259,12 @@
           tr.style.cursor = 'pointer';
           tr.dataset.candidateId = c.id || '';
           tr.addEventListener('click', (e) => {
-            if (e.target.closest('a, button')) return;
+            if (e.target.closest('a, button, input')) return;
             if (c.id) openCandidateDetail(c.id);
           });
           const marketTag = c.market === 'IN' ? '<span class="tag tag-india">IN</span>' : c.market === 'SG' ? '<span class="tag tag-singapore">SG</span>' : '';
           tr.innerHTML = `
+            <td onclick="event.stopPropagation()"><input type="checkbox" class="contact-select" data-id="${esc(c.shortlist_id || '')}"></td>
             <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
             <td>${esc((c.skills || []).slice(0, 3).join(', '))}</td>
             <td>${c.total_experience ? esc(c.total_experience) : '—'}</td>
@@ -5239,6 +5274,7 @@
           `;
           tbody.appendChild(tr);
         });
+        updateContactsSelectionUI();
       } catch (err) {
         loading.style.display = 'none';
         loading.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
@@ -5246,6 +5282,39 @@
     }
 
     document.getElementById('btn-refresh-contacts').addEventListener('click', loadContacts);
+
+    document.getElementById('contacts-tbody').addEventListener('change', (e) => {
+      const cb = e.target.closest('.contact-select');
+      if (!cb) return;
+      const id = cb.dataset.id;
+      if (!id) return;
+      if (cb.checked) _contactsSelected.add(id);
+      else _contactsSelected.delete(id);
+      updateContactsSelectionUI();
+    });
+
+    document.getElementById('contacts-select-all').addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      _contactsSelected.clear();
+      document.querySelectorAll('.contact-select').forEach(cb => {
+        cb.checked = checked;
+        if (checked && cb.dataset.id) _contactsSelected.add(cb.dataset.id);
+      });
+      updateContactsSelectionUI();
+    });
+
+    document.getElementById('btn-delete-contacts').addEventListener('click', async () => {
+      const ids = [..._contactsSelected];
+      if (!ids.length) return;
+      if (!confirm(`Remove ${ids.length} contact${ids.length === 1 ? '' : 's'} from your list?`)) return;
+      try {
+        await api('/api/shortlists/delete', { method: 'POST', body: JSON.stringify({ shortlist_ids: ids }) });
+        showToast(`Removed ${ids.length} contact${ids.length === 1 ? '' : 's'}.`);
+        await loadContacts();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+      }
+    });
 
     // ══════════════════════════════════
     // ── Pipeline / Analytics ──
