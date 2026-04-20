@@ -38,7 +38,7 @@ def _print_header(title: str) -> None:
 
 
 async def test_apollo() -> None:
-    _print_header("Apollo.io  —  POST https://api.apollo.io/v1/mixed_people/search")
+    _print_header("Apollo.io  —  POST https://api.apollo.io/v1/mixed_people/api_search")
     key = (os.environ.get("APOLLO_API_KEY")
            or os.environ.get("APOLLO_API") or "").strip()
     if not key:
@@ -52,7 +52,7 @@ async def test_apollo() -> None:
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                "https://api.apollo.io/v1/mixed_people/search",
+                "https://api.apollo.io/v1/mixed_people/api_search",
                 headers={"X-Api-Key": key, "Cache-Control": "no-cache",
                          "Content-Type": "application/json"},
                 json={

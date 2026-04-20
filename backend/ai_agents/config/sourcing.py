@@ -24,6 +24,39 @@ log = logging.getLogger(__name__)
 
 # ── Apollo.io Professional API ─────────────────────────────────
 
+def _normalize_apollo_people(people: list[dict],
+                             match_skills: list[str],
+                             market: str) -> list[dict]:
+    """Map raw Apollo `people` payload to our candidate dict shape.
+
+    `match_skills` is the list of skills the search was built from — we use
+    them to opportunistically tag candidates whose title contains a known
+    skill, so downstream skill-overlap filters and the screener have
+    something to bite on.
+    """
+    results = []
+    for person in people:
+        person_skills = []
+        if person.get("title"):
+            person_skills.append(person["title"])
+        title_lower = (person.get("title") or "").lower()
+        for s in match_skills:
+            if s and s.lower() in title_lower:
+                person_skills.append(s)
+        person_skills = list(dict.fromkeys(person_skills)) or list(match_skills)
+        results.append({
+            "name": person.get("name", ""),
+            "email": person.get("email"),
+            "linkedin_url": person.get("linkedin_url"),
+            "current_job_title": person.get("title"),
+            "current_employer": (person.get("organization") or {}).get("name"),
+            "skills": person_skills,
+            "source": "apollo",
+            "market": market,
+        })
+    return results
+
+
 async def source_apollo(skills: list[str], location: str,
                         market: str) -> list[dict]:
     """Search Apollo.io People Search API for passive candidates.
@@ -39,7 +72,7 @@ async def source_apollo(skills: list[str], location: str,
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            "https://api.apollo.io/v1/mixed_people/search",
+            "https://api.apollo.io/v1/mixed_people/api_search",
             headers={"X-Api-Key": api_key,
                      "Cache-Control": "no-cache",
                      "Content-Type": "application/json"},
@@ -53,30 +86,56 @@ async def source_apollo(skills: list[str], location: str,
             raise RuntimeError(
                 f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
 
-    results = []
-    for person in resp.json().get("people", []):
-        # Build skills from keywords/title for DB skill matching
-        person_skills = []
-        if person.get("title"):
-            person_skills.append(person["title"])
-        # Match any of the searched skills that appear in their title/headline
-        title_lower = (person.get("title") or "").lower()
-        for s in skills:
-            if s.lower() in title_lower:
-                person_skills.append(s)
-        # Deduplicate
-        person_skills = list(dict.fromkeys(person_skills)) or skills
-        results.append({
-            "name": person.get("name", ""),
-            "email": person.get("email"),
-            "linkedin_url": person.get("linkedin_url"),
-            "current_job_title": person.get("title"),
-            "current_employer": person.get("organization", {}).get("name"),
-            "skills": person_skills,
-            "source": "apollo",
-            "market": market,
-        })
-    return results
+    return _normalize_apollo_people(resp.json().get("people", []), skills, market)
+
+
+async def source_apollo_structured(params: dict, market: str) -> list[dict]:
+    """Apollo search using pre-built structured params from the boolean_builder
+    agent (instead of raw skills + location).
+
+    `params` shape (all keys optional):
+        {
+          "q_keywords": "ServiceNow JavaScript ITSM",
+          "person_titles": ["ServiceNow Developer"],
+          "person_locations": ["Bangalore, India"],
+          "person_seniorities": ["senior"]
+        }
+    """
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
+    if not api_key:
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
+
+    default_loc = "Singapore" if market == "SG" else "India"
+    body = {
+        "q_keywords": params.get("q_keywords", ""),
+        "per_page": 50,
+    }
+    if params.get("person_titles"):
+        body["person_titles"] = list(params["person_titles"])[:4]
+    body["person_locations"] = list(
+        params.get("person_locations") or [default_loc]
+    )
+    if params.get("person_seniorities"):
+        body["person_seniorities"] = list(params["person_seniorities"])
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.apollo.io/v1/mixed_people/api_search",
+            headers={"X-Api-Key": api_key,
+                     "Cache-Control": "no-cache",
+                     "Content-Type": "application/json"},
+            json=body,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
+
+    # Use person_titles as the match-skills hint so downstream tagging keeps
+    # working; fall back to keywords split.
+    hint = list(params.get("person_titles") or
+                (params.get("q_keywords") or "").split())
+    return _normalize_apollo_people(resp.json().get("people", []), hint, market)
 
 
 
