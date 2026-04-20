@@ -670,14 +670,24 @@ def run_search(payload: dict, market: str | None) -> dict:
         candidates = db.search_candidates_broad(
             market=market, location=location, limit=200)
 
-    # Pull live Apollo results, upsert to DB (gets them an id), then merge
-    apollo_skills = must_skills or [sc["label"] for sc in soft_criteria[:3] if sc.get("label")]
+    # Pull live Apollo results, upsert to DB (gets them an id), then merge.
+    # Fall back to title_keywords (always populated by the parser) when the
+    # query mentions a role but no explicit skills, e.g. "network engineer".
+    title_keywords = filters.get("title_keywords") or []
+    apollo_skills = (
+        must_skills
+        or title_keywords[:4]
+        or [sc["criterion"] for sc in soft_criteria[:3] if sc.get("criterion")]
+    )
     apollo_db_rows: list[dict] = []
     if apollo_skills and (os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API")):
         try:
+            log.info("Apollo live search starting: skills=%s location=%s market=%s",
+                     apollo_skills, location, market)
             apollo_raw = asyncio.run(
                 sourcing.source_apollo(apollo_skills, location or "", market or "IN")
             )
+            log.info("Apollo live search returned %d raw results", len(apollo_raw))
             for ac in apollo_raw:
                 clean = {k: v for k, v in ac.items() if not k.startswith("_")}
                 try:
@@ -3043,3 +3053,498 @@ def sequence_tick(user_role: str | None = None) -> dict:
         "failed": fail_count,
         "errors": errors,
     }
+
+
+# ── Agentic Boost ──────────────────────────────────────────────
+#
+# One-click pipeline: recruiter pastes a JD, five agents run in sequence and
+# stream progress back over SSE. Each run auto-creates a `requirements` row
+# (source='agentic_boost') so all existing dashboards (pipeline, shortlist,
+# sequences, submissions) light up automatically with no extra UI plumbing.
+#
+# Agents (in order):
+#   1. JD Parser         — claude-sonnet-4   → structured JD JSON
+#   2. Boolean Builder   — claude-haiku-4-5  → boolean_string + apollo_params
+#   3. Sourcing          — asyncio.gather(Apollo, Internal DB)
+#   4. Screener          — _score_candidate_batch (claude-sonnet-4) → top 50
+#   5. Outreach Drafter  — draft_sequence (claude-haiku-4-5) → outreach_log
+#                          rows with status='draft'
+
+BOOST_TOP_N = 50
+BOOST_JD_MIN = 50
+BOOST_JD_MAX = 30000
+
+
+def _parse_jd_agent(jd_text: str, market: str) -> dict:
+    """Run the JD Parser agent (claude-sonnet-4) over raw JD text."""
+    prompt = AGENTS.get("jd_parser", "")
+    raw = _call_claude(
+        "claude-sonnet-4-20250514", prompt,
+        f"Market: {market}\n\nJD text:\n{jd_text}",
+        max_tokens=2048, endpoint="/agentic-boost/jd-parse",
+    )
+    return _parse_llm_json(raw) or {}
+
+
+def _boolean_builder_agent(jd_parsed: dict) -> dict:
+    """Run the Boolean Builder agent. Falls back to the heuristic
+    sourcing.generate_linkedin_search_string() if the LLM returns nothing
+    usable."""
+    prompt = AGENTS.get("boolean_builder", "")
+    if not prompt:
+        # Agent prompt not loaded — straight fallback.
+        return _boolean_builder_fallback(jd_parsed)
+    raw = _call_claude(
+        "claude-haiku-4-5-20251001", prompt,
+        f"Parsed JD:\n{json.dumps(jd_parsed, indent=2)}",
+        max_tokens=1024, endpoint="/agentic-boost/boolean",
+    )
+    parsed = _parse_llm_json(raw)
+    if not isinstance(parsed, dict) or not parsed.get("boolean_string"):
+        return _boolean_builder_fallback(jd_parsed)
+    return parsed
+
+
+def _boolean_builder_fallback(jd_parsed: dict) -> dict:
+    """Heuristic boolean + minimal apollo_params when the LLM agent fails."""
+    market = jd_parsed.get("market") or "IN"
+    skills = jd_parsed.get("skills_required") or []
+    location = jd_parsed.get("location") or ""
+    boolean_string = sourcing.generate_linkedin_search_string({
+        "skills_required": skills,
+        "location": location,
+        "market": market,
+        "experience_min": jd_parsed.get("experience_min"),
+    })
+    return {
+        "boolean_string": boolean_string,
+        "apollo_params": {
+            "q_keywords": " ".join(skills),
+            "person_locations": [location or
+                                 ("Singapore" if market == "SG" else "India")],
+        },
+        "linkedin_url": "",
+    }
+
+
+async def _internal_db_search(requirement: dict, limit: int = 200) -> list[dict]:
+    """Internal-DB sourcing path — fetch a broad market+location pool and
+    pre-filter by skill overlap so the screener only spends tokens on
+    plausibly-relevant candidates."""
+    pool = db.search_candidates_broad(
+        market=requirement.get("market"),
+        location=requirement.get("location"),
+        limit=limit,
+    )
+    req_skills = {s.lower() for s in (requirement.get("skills_required") or [])}
+    if not req_skills:
+        return pool
+    overlap = [
+        c for c in pool
+        if req_skills & {(s or "").lower() for s in (c.get("skills") or [])}
+    ]
+    # If skill overlap returns nothing, fall back to the full broad pool —
+    # the screener can still find diamonds in the rough.
+    return overlap or pool
+
+
+def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
+    """SSE generator — drives the 5-agent Agentic Boost pipeline.
+
+    Yields `data: {json}\\n\\n` lines (see _sse). The Flask route wraps this
+    in a streaming Response.
+    """
+    try:
+        _require_role(user_role, ["recruiter", "tl"])
+    except CoreError as e:
+        yield _sse({"event": "error", "message": e.message})
+        return
+
+    payload = payload or {}
+    jd_text = (payload.get("jd_text") or "").strip()
+    market = _normalize_market(payload.get("market")) or "IN"
+
+    if len(jd_text) < BOOST_JD_MIN:
+        yield _sse({"event": "error",
+                    "message": f"JD text too short (min {BOOST_JD_MIN} chars)"})
+        return
+    if len(jd_text) > BOOST_JD_MAX:
+        yield _sse({"event": "error",
+                    "message": f"JD text too long (max {BOOST_JD_MAX} chars)"})
+        return
+
+    try:
+        boost_row = db.insert_boost_run({
+            "created_by": user_email,
+            "jd_text": jd_text,
+            "status": "running",
+        })
+    except Exception as exc:
+        log.exception("agentic boost: failed to insert run row")
+        yield _sse({"event": "error",
+                    "message": f"Could not start boost run: {exc}"})
+        return
+
+    boost_id = boost_row["id"]
+    yield _sse({"event": "boost_start",
+                "boost_id": boost_id, "total_agents": 5})
+
+    # ── Agent 1: JD Parser ─────────────────────────────────────
+    yield _sse({"event": "agent_start", "agent": "jd_parser",
+                "idx": 1, "label": "Parsing JD"})
+    try:
+        jd_parsed = _parse_jd_agent(jd_text, market)
+    except Exception as exc:
+        log.exception("agentic boost: jd_parser failed")
+        yield _sse({"event": "agent_error", "agent": "jd_parser",
+                    "message": str(exc)})
+        yield _sse({"event": "error",
+                    "message": "Pipeline aborted — JD parsing failed"})
+        try:
+            db.update_boost_run(boost_id, {"status": "failed"})
+        except Exception:
+            pass
+        return
+    if not jd_parsed:
+        yield _sse({"event": "agent_error", "agent": "jd_parser",
+                    "message": "JD parser returned no structured fields"})
+        yield _sse({"event": "error",
+                    "message": "Pipeline aborted — JD parsing returned nothing"})
+        try:
+            db.update_boost_run(boost_id, {"status": "failed"})
+        except Exception:
+            pass
+        return
+    yield _sse({"event": "agent_done", "agent": "jd_parser",
+                "payload": jd_parsed})
+
+    # ── Auto-create requirement ────────────────────────────────
+    req_payload = {
+        "client_name": jd_parsed.get("client_name") or "Agentic Boost (auto)",
+        "market": market,
+        "role_title": jd_parsed.get("role_title") or "Role from JD",
+        "skills_required": jd_parsed.get("skills_required") or [],
+        "experience_min": (str(jd_parsed["experience_min"])
+                           if jd_parsed.get("experience_min") is not None
+                           else None),
+        "location": jd_parsed.get("location"),
+        "contract_type": jd_parsed.get("contract_type"),
+        "assigned_recruiters": [user_email],
+        "source": "agentic_boost",
+        "boost_run": True,
+        "jd_text": jd_text,
+        "jd_parsed": jd_parsed,
+    }
+    try:
+        req_row = db.insert_requirement(req_payload)
+        requirement_id = req_row["id"]
+        db.update_boost_run(boost_id, {"requirement_id": requirement_id})
+    except Exception as exc:
+        log.exception("agentic boost: requirement insert failed")
+        yield _sse({"event": "error",
+                    "message": f"Could not create requirement: {exc}"})
+        try:
+            db.update_boost_run(boost_id, {"status": "failed"})
+        except Exception:
+            pass
+        return
+    requirement = db.get_requirement_by_id(requirement_id) or req_row
+    # Ensure downstream helpers see the parsed market and skills.
+    requirement.setdefault("market", market)
+    requirement.setdefault("skills_required",
+                           jd_parsed.get("skills_required") or [])
+
+    # ── Agent 2: Boolean Builder ───────────────────────────────
+    yield _sse({"event": "agent_start", "agent": "boolean_builder",
+                "idx": 2, "label": "Building boolean string"})
+    try:
+        boolean_output = _boolean_builder_agent({**jd_parsed, "market": market})
+    except Exception as exc:
+        log.exception("agentic boost: boolean_builder failed — using heuristic")
+        boolean_output = _boolean_builder_fallback({**jd_parsed,
+                                                   "market": market})
+        yield _sse({"event": "agent_error", "agent": "boolean_builder",
+                    "message": f"{exc} — using heuristic fallback"})
+    yield _sse({"event": "agent_done", "agent": "boolean_builder",
+                "payload": boolean_output})
+
+    # ── Agent 3: Sourcing (Apollo + Internal DB in parallel) ──
+    yield _sse({"event": "agent_start", "agent": "sourcing",
+                "idx": 3, "label": "Sourcing Apollo + Internal DB"})
+    apollo_enabled = bool(os.environ.get("APOLLO_API_KEY")
+                          or os.environ.get("APOLLO_API"))
+    channel_errors: dict[str, str] = {}
+    source_counts: dict[str, int] = {"apollo": 0, "internal_db": 0}
+    pool_by_id: dict[str, dict] = {}
+
+    async def _run_sourcing():
+        task_names: list[str] = []
+        coros = []
+        if apollo_enabled:
+            task_names.append("apollo")
+            coros.append(sourcing.source_apollo_structured(
+                boolean_output.get("apollo_params") or {}, market))
+        task_names.append("internal_db")
+        coros.append(_internal_db_search(requirement, limit=200))
+        gathered = await asyncio.gather(*coros, return_exceptions=True)
+        return list(zip(task_names, gathered))
+
+    try:
+        gathered = _run_async(_run_sourcing())
+    except Exception as exc:
+        log.exception("agentic boost: sourcing top-level failed")
+        gathered = []
+        channel_errors["sourcing"] = str(exc)
+
+    for name, result in gathered:
+        if isinstance(result, Exception):
+            channel_errors[name] = f"{type(result).__name__}: {result}"
+            continue
+        for cand in result:
+            if name == "apollo":
+                # Persist Apollo results (they're new external candidates)
+                try:
+                    if cand.get("email"):
+                        row = db.upsert_candidate_by_email(cand)
+                    elif cand.get("name"):
+                        row = db.upsert_candidate_by_name(cand)
+                    else:
+                        continue
+                except Exception:
+                    log.exception("apollo upsert failed for %s",
+                                  cand.get("name"))
+                    continue
+                if row and row.get("id") and row["id"] not in pool_by_id:
+                    pool_by_id[row["id"]] = row
+                    source_counts["apollo"] += 1
+            else:  # internal_db
+                cid = cand.get("id")
+                if cid and cid not in pool_by_id:
+                    pool_by_id[cid] = cand
+                    source_counts["internal_db"] += 1
+
+    pool = list(pool_by_id.values())
+    yield _sse({"event": "agent_done", "agent": "sourcing", "payload": {
+        "counts": source_counts,
+        "total_unique": len(pool),
+        "channel_errors": channel_errors,
+    }})
+
+    if not pool:
+        yield _sse({"event": "error",
+                    "message": "No candidates found from any channel"})
+        try:
+            db.update_boost_run(boost_id, {"status": "failed"})
+        except Exception:
+            pass
+        return
+
+    # ── Agent 4: Screener ──────────────────────────────────────
+    yield _sse({"event": "agent_start", "agent": "screener", "idx": 4,
+                "label": f"Scoring {len(pool)} candidates"})
+    top_enriched: list[dict] = []
+    try:
+        all_ids = [c["id"] for c in pool]
+        cached = db.get_cached_match_scores(requirement_id, all_ids)
+        to_score = [c for c in pool if c["id"] not in cached]
+        new_scores: list[dict] = []
+        if to_score:
+            for i in range(0, len(to_score), MATCH_BATCH_SIZE):
+                batch = to_score[i:i + MATCH_BATCH_SIZE]
+                try:
+                    batch_scores = _score_candidate_batch(batch, requirement)
+                except Exception:
+                    log.exception("screener batch failed (i=%s)", i)
+                    batch_scores = []
+                new_scores.extend(batch_scores)
+                yield _sse({"event": "agent_progress", "agent": "screener",
+                            "message": (f"Scored "
+                                        f"{min(i + MATCH_BATCH_SIZE, len(to_score))}"
+                                        f"/{len(to_score)}")})
+            if new_scores:
+                db.upsert_match_scores(requirement_id, new_scores)
+        top = (db.get_match_scores_above(
+            requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
+        top_ids = [t["candidate_id"] for t in top]
+        cands_by_id: dict[str, dict] = {}
+        if top_ids:
+            cand_rows = (db.get_client().table("candidates")
+                         .select("id, name, email, current_job_title, "
+                                 "current_employer, current_location, skills")
+                         .in_("id", top_ids).execute().data) or []
+            cands_by_id = {c["id"]: c for c in cand_rows}
+        for t in top:
+            cand = cands_by_id.get(t["candidate_id"])
+            if not cand:
+                continue
+            top_enriched.append({**cand, **t})
+        yield _sse({"event": "agent_done", "agent": "screener", "payload": {
+            "scored_total": len(pool),
+            "top_count": len(top_enriched),
+        }})
+    except Exception as exc:
+        log.exception("agentic boost: screener failed")
+        yield _sse({"event": "agent_error", "agent": "screener",
+                    "message": str(exc)})
+        yield _sse({"event": "error",
+                    "message": "Pipeline aborted — screening failed"})
+        try:
+            db.update_boost_run(boost_id, {"status": "failed"})
+        except Exception:
+            pass
+        return
+
+    # ── Agent 5: Outreach Drafter ──────────────────────────────
+    yield _sse({"event": "agent_start", "agent": "outreach_drafter",
+                "idx": 5,
+                "label": f"Drafting {len(top_enriched)} emails"})
+    if not top_enriched:
+        yield _sse({"event": "agent_done", "agent": "outreach_drafter",
+                    "payload": {"drafts_created": 0}})
+    else:
+        try:
+            draft_result = draft_sequence(
+                {"requirement_id": requirement_id,
+                 "candidate_ids": [t["candidate_id"] for t in top_enriched],
+                 "recruiter_name": user_email.split("@")[0].title()},
+                user_role, user_email,
+            )
+            draft_ids_by_candidate: dict[str, str] = {}
+            drafts_by_candidate: dict[str, dict] = {}
+            for em in (draft_result.get("emails") or []):
+                drafts_by_candidate[em["candidate_id"]] = em
+                if not em.get("sendable"):
+                    continue
+                try:
+                    log_row = db.insert_outreach_log({
+                        "candidate_id": em["candidate_id"],
+                        "requirement_id": requirement_id,
+                        "recruiter_email": user_email,
+                        "email_subject": em["subject"],
+                        "email_body": em["body"],
+                        "status": "draft",
+                    })
+                    draft_ids_by_candidate[em["candidate_id"]] = log_row["id"]
+                except Exception:
+                    log.exception("draft persist failed for candidate %s",
+                                  em.get("candidate_id"))
+            for t in top_enriched:
+                cid = t["candidate_id"]
+                em = drafts_by_candidate.get(cid)
+                t["draft_id"] = draft_ids_by_candidate.get(cid)
+                if em:
+                    t["draft_subject"] = em.get("subject")
+                    t["draft_body"] = em.get("body")
+                    t["draft_sendable"] = em.get("sendable", False)
+                else:
+                    t["draft_sendable"] = False
+            yield _sse({"event": "agent_done", "agent": "outreach_drafter",
+                        "payload": {
+                            "drafts_created": len(draft_ids_by_candidate),
+                        }})
+        except Exception as exc:
+            log.exception("agentic boost: outreach drafter failed")
+            yield _sse({"event": "agent_error", "agent": "outreach_drafter",
+                        "message": str(exc)})
+
+    # ── Done ───────────────────────────────────────────────────
+    try:
+        db.update_boost_run(boost_id, {
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        log.exception("agentic boost: failed to mark run completed")
+
+    yield _sse({"event": "boost_done",
+                "boost_id": boost_id,
+                "requirement_id": requirement_id,
+                "boolean_string": boolean_output.get("boolean_string", ""),
+                "linkedin_url": boolean_output.get("linkedin_url", ""),
+                "top_candidates": top_enriched})
+
+
+def get_agentic_boost_run(boost_id: str, user_role: str,
+                          user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    row = db.get_boost_run(boost_id)
+    if not row:
+        raise CoreError(404, "Boost run not found")
+    if row.get("created_by") != user_email and user_role != "tl":
+        raise CoreError(403, "Not your boost run")
+    if row.get("requirement_id"):
+        row["top_candidates"] = (db.get_match_scores_above(
+            row["requirement_id"], min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
+    return row
+
+
+def list_agentic_boost_runs(user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    rows = db.list_boost_runs(
+        created_by=user_email if user_role != "tl" else None)
+    return {"runs": rows}
+
+
+def update_agentic_boost_draft(draft_id: str, payload: dict,
+                               user_role: str, user_email: str) -> dict:
+    """Edit a draft's subject and/or body."""
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    patch: dict = {}
+    if "email_subject" in payload:
+        patch["email_subject"] = payload["email_subject"]
+    if "email_body" in payload:
+        patch["email_body"] = payload["email_body"]
+    if not patch:
+        raise CoreError(422, "nothing to update (email_subject or email_body)")
+    row = db.get_outreach_log(draft_id)
+    if not row:
+        raise CoreError(404, "Draft not found")
+    if row.get("status") != "draft":
+        raise CoreError(400,
+                        f"Cannot edit — draft already {row.get('status')}")
+    if (row.get("recruiter_email") != user_email and user_role != "tl"):
+        raise CoreError(403, "Not your draft")
+    updated = db.update_outreach_log(draft_id, patch)
+    return {"status": "ok", "draft": updated}
+
+
+def send_agentic_boost_draft(draft_id: str, user_role: str,
+                             user_email: str) -> dict:
+    """Send a draft via Outlook (the recruiter's mailbox)."""
+    _require_role(user_role, ["recruiter", "tl"])
+    row = db.get_outreach_log(draft_id)
+    if not row:
+        raise CoreError(404, "Draft not found")
+    if row.get("status") != "draft":
+        raise CoreError(400, f"Draft already {row.get('status')}")
+    if (row.get("recruiter_email") != user_email and user_role != "tl"):
+        raise CoreError(403, "Not your draft")
+    cand = db.get_candidate_by_id(row["candidate_id"])
+    if not cand or not cand.get("email"):
+        raise CoreError(400, "Candidate has no email address")
+    try:
+        sent = outlook.send_email(
+            from_email=user_email,
+            to_email=cand["email"],
+            subject=row.get("email_subject") or "",
+            body=row.get("email_body") or "",
+        )
+    except Exception as exc:
+        log.exception("agentic boost: outlook send failed for draft %s",
+                      draft_id)
+        try:
+            db.update_outreach_log(draft_id, {"status": "failed"})
+        except Exception:
+            pass
+        raise CoreError(502, f"Email send failed: {exc}")
+    db.update_outreach_log(draft_id, {
+        "status": "sent",
+        "outlook_message_id": sent.get("message_id"),
+        "outlook_thread_id": sent.get("thread_id"),
+        "sent_at": sent.get("sent_at"),
+    })
+    return {"status": "sent",
+            "draft_id": draft_id,
+            "sent_at": sent.get("sent_at")}
