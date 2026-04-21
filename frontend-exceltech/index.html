@@ -7685,6 +7685,220 @@
     }
 
     // ══════════════════════════════════
+    // ── Apollo Search UI helpers ──
+    // ══════════════════════════════════
+
+    async function fetchApolloCredits() {
+      try {
+        const data = await api('/api/apollo/credits');
+        if (data) state._apolloCredits = data;
+      } catch (_) { /* silent — credits bar just won't show */ }
+    }
+
+    async function revealField(candidateId, field, btn) {
+      if (!candidateId || !field) return;
+      btn.disabled = true;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '<div class="loading-spinner" style="width:12px;height:12px;border-width:2px"></div>';
+
+      try {
+        const data = await api(`/api/candidates/${candidateId}/reveal`, {
+          method: 'POST', body: { field }
+        });
+        const value = data?.value || '';
+        let displayHtml;
+        if (field === 'email') {
+          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(value))}</span>`;
+        } else if (field === 'phone') {
+          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(value))}</span>`;
+        } else {
+          // name — replace the pill with a proper name button
+          displayHtml = `<button class="arow-name-btn" onclick="openApolloDrawer('${esc(candidateId)}')">${esc(value || 'Unknown')}</button>`;
+        }
+        btn.outerHTML = displayHtml;
+
+        // Update credits bar if we have credits data
+        if (data?.credits_remaining != null) {
+          state._apolloCredits = state._apolloCredits || {};
+          state._apolloCredits.credits_remaining = data.credits_remaining;
+        }
+        // Refresh credits silently
+        fetchApolloCredits().catch(() => {});
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        const msg = err.message || '';
+        if (msg.includes('credits_exhausted') || msg.includes('402')) {
+          btn.outerHTML = `<span style="font-size:11px;color:#b91c1c">Out of credits · <a href="https://app.apollo.io/settings/credits" target="_blank" style="color:#b91c1c">top up</a></span>`;
+        } else {
+          showToast('Reveal failed: ' + msg, 'error');
+        }
+      }
+    }
+
+    async function openApolloDrawer(candidateId) {
+      const overlay = document.getElementById('apollo-drawer-overlay');
+      const leftPane = document.getElementById('apd-left');
+      const rightContent = document.getElementById('apd-company-content');
+      const nameEl = document.getElementById('apd-name');
+      const roleEl = document.getElementById('apd-role');
+      const avatarEl = document.getElementById('apd-avatar');
+
+      overlay.classList.remove('hidden');
+      leftPane.innerHTML = '<div class="apollo-drawer-loading"><div class="loading-spinner"></div> Loading…</div>';
+      rightContent.innerHTML = '<div class="apollo-drawer-loading"><div class="loading-spinner"></div> Loading company data…</div>';
+      nameEl.textContent = 'Loading…';
+      roleEl.textContent = '';
+
+      try {
+        const data = await api(`/api/candidates/${candidateId}/detail`);
+        const c = data?.candidate || {};
+        const co = data?.company_enrichment || {};
+
+        const name = c.name || 'Unknown';
+        const initials = getInitials(name);
+        avatarEl.textContent = initials;
+        nameEl.textContent = name;
+        roleEl.textContent = [c.current_job_title, c.current_employer].filter(Boolean).join(' at ') +
+          (c.current_location ? ' · ' + c.current_location : '');
+
+        _renderApolloDrawerLeft(c, leftPane);
+        _renderApolloDrawerCompanyOverview(co, rightContent);
+      } catch (err) {
+        leftPane.innerHTML = `<div style="color:var(--brand-red);padding:16px;font-size:13px">Failed to load: ${esc(err.message)}</div>`;
+        rightContent.innerHTML = '';
+      }
+    }
+
+    function _renderApolloDrawerLeft(c, container) {
+      const cid = esc(c.id || '');
+      const emailReveal = c.do_not_email
+        ? '<span class="dnc-pill">No email (DNC)</span>'
+        : c.email
+          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`
+          : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','email',this)">
+               <span class="material-icons-outlined">email</span> Access email <em>(1 cr)</em>
+             </button>`;
+
+      const phoneReveal = c.do_not_call
+        ? '<span class="dnc-pill">DNC</span>'
+        : c.phone
+          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`
+          : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','phone',this)">
+               <span class="material-icons-outlined">phone</span> Access mobile <em>(1 cr)</em>
+             </button>`;
+
+      container.innerHTML = `
+        <div class="apollo-section-title">Contact Information</div>
+        <div class="apollo-contact-row">
+          <span class="material-icons-outlined">email</span>
+          <div id="apd-email-cell">${emailReveal}</div>
+        </div>
+        <div class="apollo-contact-row">
+          <span class="material-icons-outlined">phone</span>
+          <div id="apd-phone-cell">${phoneReveal}</div>
+        </div>
+        ${c.linkedin_url ? `<div class="apollo-contact-row">
+          <span class="material-icons-outlined" style="color:#0a66c2">link</span>
+          <a href="${esc(c.linkedin_url)}" target="_blank" style="font-size:12px;color:#0a66c2">LinkedIn profile</a>
+        </div>` : ''}
+        <div class="dnc-toggle-row">
+          <label class="dnc-toggle">
+            <input type="checkbox" id="apd-dnc-toggle" ${c.do_not_call ? 'checked' : ''}
+              onchange="toggleDNC('${cid}', this.checked)">
+            <span class="dnc-toggle-slider"></span>
+          </label>
+          <span style="font-size:12px;color:var(--text-secondary)">Do Not Call</span>
+        </div>
+        <div class="apollo-section-title" style="margin-top:20px">Scores</div>
+        <div style="font-size:12px;color:var(--text-muted)">No scores found · <a href="#" style="color:var(--brand-purple)" onclick="return false">Create score</a></div>
+        <div class="apollo-section-title" style="margin-top:20px">Similar People</div>
+        <div style="font-size:11px;background:#f9f5ff;border-radius:8px;padding:10px 12px;color:var(--text-secondary)">
+          <span style="background:#e9d5ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-right:6px">Apollo AI · Beta</span>
+          Coming soon — will use internal pgvector search
+        </div>`;
+    }
+
+    function _renderApolloDrawerCompanyOverview(co, container) {
+      if (!co || !co.apollo_organization_id) {
+        container.innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:8px">No company data available.</div>';
+        return;
+      }
+      const fmt = v => v == null ? '—' : String(v);
+      const fmtMoney = v => v == null ? '—' : '$' + Number(v).toLocaleString();
+      const industries = (co.industries || []).map(i => `<span class="apollo-pill">${esc(i)}</span>`).join('');
+      const techs = (co.technologies || []).filter(Boolean).slice(0, 12)
+        .map(t => `<span class="apollo-pill" style="background:#f0fdf4;color:#15803d">${esc(t)}</span>`).join('');
+
+      container.innerHTML = `
+        <div class="apollo-kv-grid">
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">Founded Year</div>
+            <div class="apollo-kv-value">${fmt(co.founded_year)}</div>
+          </div>
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">Employees</div>
+            <div class="apollo-kv-value">${co.employees ? Number(co.employees).toLocaleString() : '—'}</div>
+          </div>
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">Annual Revenue</div>
+            <div class="apollo-kv-value">${fmtMoney(co.revenue)}</div>
+          </div>
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">Market Cap</div>
+            <div class="apollo-kv-value">${fmtMoney(co.market_cap)}</div>
+          </div>
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">HQ Location</div>
+            <div class="apollo-kv-value">${fmt(co.hq_location)}</div>
+          </div>
+          <div class="apollo-kv">
+            <div class="apollo-kv-label">Website</div>
+            <div class="apollo-kv-value">${co.website_url ? `<a href="${esc(co.website_url)}" target="_blank" style="color:var(--brand-purple)">${esc(co.website_url)}</a>` : '—'}</div>
+          </div>
+        </div>
+        ${industries ? `<div class="apollo-section-title" style="margin-top:14px">Industries</div>
+        <div class="apollo-pill-group">${industries}</div>` : ''}
+        ${techs ? `<div class="apollo-section-title" style="margin-top:14px">Technologies</div>
+        <div class="apollo-pill-group">${techs}</div>` : ''}`;
+    }
+
+    async function revealFieldDrawer(candidateId, field, btn) {
+      const cell = btn.closest('[id]');
+      await revealField(candidateId, field, btn);
+      // Re-open drawer to refresh contact panel after reveal
+      // (cheapest way: just reload the detail quietly)
+      try {
+        const data = await api(`/api/candidates/${candidateId}/detail`);
+        const c = data?.candidate || {};
+        _renderApolloDrawerLeft(c, document.getElementById('apd-left'));
+      } catch (_) {}
+    }
+
+    async function toggleDNC(candidateId, value) {
+      try {
+        await api(`/api/candidates/${candidateId}/dnc`, { method: 'POST', body: { value } });
+        // Refresh left pane
+        const data = await api(`/api/candidates/${candidateId}/detail`);
+        if (data?.candidate) {
+          _renderApolloDrawerLeft(data.candidate, document.getElementById('apd-left'));
+        }
+      } catch (err) {
+        showToast('DNC update failed: ' + err.message, 'error');
+      }
+    }
+
+    // Close apollo drawer
+    document.getElementById('apd-close')?.addEventListener('click', () => {
+      document.getElementById('apollo-drawer-overlay').classList.add('hidden');
+    });
+    document.getElementById('apollo-drawer-overlay')?.addEventListener('click', (e) => {
+      if (e.target === document.getElementById('apollo-drawer-overlay')) {
+        document.getElementById('apollo-drawer-overlay').classList.add('hidden');
+      }
+    });
+
+    // ══════════════════════════════════
     // ── Inbox Monitor ──
     // ══════════════════════════════════
 

@@ -896,49 +896,41 @@ def reveal_candidate_field(cid: str, field: str) -> dict:
     return {"field": field, "value": value, "candidate_id": cid}
 
 
-def get_candidate_detail(cid: str) -> dict:
-    """Return full candidate row + lazy-loaded company enrichment.
-
-    Company enrichment is fetched from Apollo on first access and cached in
-    the `company_enrichment` table.  Subsequent calls are free.
-    """
-    cand = db.get_candidate_by_id(cid)
-    if not cand:
-        raise CoreError(404, "Candidate not found")
-
-    company_info: dict = {}
-    org_id = cand.get("apollo_organization_id")
-    if org_id:
-        cached = db.get_company_enrichment(org_id)
-        if cached:
-            company_info = cached
-        else:
-            try:
-                org = asyncio.run(sourcing.apollo_organizations_enrich(
-                    apollo_organization_id=org_id))
-                row = {
-                    "apollo_organization_id": org_id,
-                    "name": org.get("name"),
-                    "industries": org.get("industries") or [],
-                    "founded_year": org.get("founded_year"),
-                    "revenue": org.get("annual_revenue"),
-                    "market_cap": org.get("market_cap"),
-                    "employees": org.get("estimated_num_employees"),
-                    "hq_location": org.get("city") or org.get("country"),
-                    "technologies": [
-                        t.get("name") if isinstance(t, dict) else str(t)
-                        for t in (org.get("current_technologies") or [])
-                    ],
-                    "linkedin_url": org.get("linkedin_url"),
-                    "website_url": org.get("website_url"),
-                    "enrichment_json": org,
-                }
-                db.upsert_company_enrichment(row)
-                company_info = row
-            except Exception as e:
-                log.warning("Company enrichment failed for %s: %s", org_id, e)
-
-    return {"candidate": cand, "company_enrichment": company_info}
+def _fetch_company_enrichment(org_id: str | None) -> dict:
+    """Return cached company enrichment; lazy-fetch from Apollo on first touch."""
+    if not org_id:
+        return {}
+    cached = db.get_company_enrichment(org_id)
+    if cached:
+        return cached
+    try:
+        org = asyncio.run(sourcing.apollo_organizations_enrich(
+            apollo_organization_id=org_id))
+    except Exception as e:
+        log.warning("Company enrichment failed for %s: %s", org_id, e)
+        return {}
+    row = {
+        "apollo_organization_id": org_id,
+        "name": org.get("name"),
+        "industries": org.get("industries") or [],
+        "founded_year": org.get("founded_year"),
+        "revenue": org.get("annual_revenue"),
+        "market_cap": org.get("market_cap"),
+        "employees": org.get("estimated_num_employees"),
+        "hq_location": org.get("city") or org.get("country"),
+        "technologies": [
+            t.get("name") if isinstance(t, dict) else str(t)
+            for t in (org.get("current_technologies") or [])
+        ],
+        "linkedin_url": org.get("linkedin_url"),
+        "website_url": org.get("website_url"),
+        "enrichment_json": org,
+    }
+    try:
+        db.upsert_company_enrichment(row)
+    except Exception as e:
+        log.warning("upsert_company_enrichment failed: %s", e)
+    return row
 
 
 # ── Requirements ───────────────────────────────────────────────
