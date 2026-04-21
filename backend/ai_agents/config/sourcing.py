@@ -44,15 +44,21 @@ def _normalize_apollo_people(people: list[dict],
             if s and s.lower() in title_lower:
                 person_skills.append(s)
         person_skills = list(dict.fromkeys(person_skills)) or list(match_skills)
+        org = person.get("organization") or {}
         results.append({
             "name": person.get("name", ""),
             "email": person.get("email"),
             "linkedin_url": person.get("linkedin_url"),
             "current_job_title": person.get("title"),
-            "current_employer": (person.get("organization") or {}).get("name"),
+            "current_employer": org.get("name"),
             "skills": person_skills,
             "source": "apollo",
             "market": market,
+            # Underscore-prefixed: stripped by `run_all_sources` upsert path,
+            # re-attached explicitly by `run_search` so the candidate row keeps
+            # the Apollo ids needed for downstream /people/match reveals.
+            "_apollo_person_id": person.get("id"),
+            "_apollo_organization_id": org.get("id"),
         })
     return results
 
@@ -137,6 +143,115 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
                 (params.get("q_keywords") or "").split())
     return _normalize_apollo_people(resp.json().get("people", []), hint, market)
 
+
+# ── Apollo per-row reveal + org enrichment ─────────────────────
+
+async def apollo_people_match(apollo_person_id: str | None = None,
+                              linkedin_url: str | None = None,
+                              email: str | None = None,
+                              reveal_phone_number: bool = False) -> dict:
+    """Reveal a single Apollo contact via /v1/people/match.
+
+    Pass at least one identifier (id > linkedin > email). When
+    `reveal_phone_number` is True Apollo also returns the mobile number,
+    consuming one phone credit on top of the email-reveal cost.
+    """
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
+    if not api_key:
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
+    if not (apollo_person_id or linkedin_url or email):
+        raise RuntimeError("apollo_people_match needs id, linkedin, or email")
+
+    body: dict = {"reveal_personal_emails": True}
+    if apollo_person_id:
+        body["id"] = apollo_person_id
+    if linkedin_url:
+        body["linkedin_url"] = linkedin_url
+    if email:
+        body["email"] = email
+    if reveal_phone_number:
+        body["reveal_phone_number"] = True
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.apollo.io/v1/people/match",
+            headers={"X-Api-Key": api_key,
+                     "Cache-Control": "no-cache",
+                     "Content-Type": "application/json"},
+            json=body,
+        )
+        if resp.status_code == 402:
+            raise RuntimeError("apollo credits_exhausted")
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
+    data = resp.json() or {}
+    return data.get("person") or data
+
+
+async def apollo_organizations_enrich(
+        apollo_organization_id: str | None = None,
+        domain: str | None = None) -> dict:
+    """Fetch full company profile via /v1/organizations/enrich.
+
+    Either an Apollo org id or a website domain is required. Returns the
+    `organization` payload (industries, founded year, revenue, employees,
+    technologies, etc.).
+    """
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
+    if not api_key:
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
+    if not (apollo_organization_id or domain):
+        raise RuntimeError(
+            "apollo_organizations_enrich needs id or domain")
+
+    params: dict = {}
+    if apollo_organization_id:
+        params["id"] = apollo_organization_id
+    if domain:
+        params["domain"] = domain
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            "https://api.apollo.io/v1/organizations/enrich",
+            headers={"X-Api-Key": api_key,
+                     "Cache-Control": "no-cache",
+                     "Accept": "application/json"},
+            params=params,
+        )
+        if resp.status_code == 402:
+            raise RuntimeError("apollo credits_exhausted")
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
+    data = resp.json() or {}
+    return data.get("organization") or data
+
+
+async def apollo_account_credits() -> dict:
+    """Return current Apollo credit counters via /v1/auth/health.
+
+    Apollo's `/v1/auth/health` returns a dict that contains the seat's
+    `email_credits_per_month`, `email_credits_used_this_month`, and the same
+    pair for phone/export credits. We surface the *remaining* values so the
+    UI can render a single number.
+    """
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
+    if not api_key:
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://api.apollo.io/v1/auth/health",
+            headers={"X-Api-Key": api_key,
+                     "Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
+    return resp.json() or {}
 
 
 # ── Naukri Recruiter API (cookie auth, India's #1 resume DB) ──

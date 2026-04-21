@@ -191,6 +191,10 @@ def _normalize_market(market: str | None) -> str | None:
 
 MATCH_BATCH_SIZE = 20
 MATCH_MIN_SCORE = 60
+# Lower bar for ad-hoc searches: Apollo rows often miss `current_location`
+# (LLM penalises that) so a 30-point floor keeps results visible while still
+# filtering obvious garbage.
+SEARCH_MIN_SCORE = 30
 
 
 def _build_requirement_summary(requirement: dict) -> str:
@@ -617,7 +621,7 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
     return [
         {"candidate_id": cid, **data}
         for cid, data in all_scores.items()
-        if data["score"] >= MATCH_MIN_SCORE
+        if data["score"] >= SEARCH_MIN_SCORE
     ]
 
 
@@ -680,16 +684,44 @@ def run_search(payload: dict, market: str | None) -> dict:
         or [sc["criterion"] for sc in soft_criteria[:3] if sc.get("criterion")]
     )
     apollo_db_rows: list[dict] = []
-    if apollo_skills and (os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API")):
+    if not apollo_skills:
+        log.info("run_search: Apollo skipped — no skills/title_keywords/soft_criteria")
+    elif not (os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API")):
+        log.info("run_search: Apollo skipped — APOLLO_API_KEY not set")
+    else:
         try:
-            log.info("Apollo live search starting: skills=%s location=%s market=%s",
+            log.info("run_search: calling Apollo skills=%s location=%s market=%s",
                      apollo_skills, location, market)
             apollo_raw = asyncio.run(
                 sourcing.source_apollo(apollo_skills, location or "", market or "IN")
             )
-            log.info("Apollo live search returned %d raw results", len(apollo_raw))
+            region_default = "Singapore" if (market or "IN") == "SG" else "India"
+            named_count = 0
+            emailed_count = 0
             for ac in apollo_raw:
                 clean = {k: v for k, v in ac.items() if not k.startswith("_")}
+                # Apollo redacts `current_location` on most tiers — stamp the
+                # search location (or market default) so location-aware scoring
+                # doesn't penalise these rows out of the result set.
+                if not clean.get("current_location"):
+                    clean["current_location"] = location or region_default
+                # Apollo redacts `name` too. Synthesize a placeholder so the
+                # row survives upsert; the UI will show a "Reveal name"
+                # button that hits /people/match for the real value.
+                if not clean.get("name"):
+                    title = clean.get("current_job_title") or "Unknown role"
+                    employer = clean.get("current_employer") or "unknown employer"
+                    clean["name"] = f"{title} @ {employer} (Apollo)"
+                # Re-attach the underscore-prefixed Apollo ids that the
+                # normaliser stripped out so the candidate row keeps them.
+                if ac.get("_apollo_person_id"):
+                    clean["apollo_person_id"] = ac["_apollo_person_id"]
+                if ac.get("_apollo_organization_id"):
+                    clean["apollo_organization_id"] = ac["_apollo_organization_id"]
+                if clean.get("name"):
+                    named_count += 1
+                if clean.get("email"):
+                    emailed_count += 1
                 try:
                     if clean.get("email"):
                         row = db.upsert_candidate_by_email(clean)
@@ -701,8 +733,12 @@ def run_search(payload: dict, market: str | None) -> dict:
                         apollo_db_rows.append(row)
                 except Exception as upsert_err:
                     log.warning("Apollo upsert failed: %s", upsert_err)
+            log.info("run_search: Apollo returned %d raw, upserted %d, "
+                     "%d named, %d emailed",
+                     len(apollo_raw), len(apollo_db_rows),
+                     named_count, emailed_count)
         except Exception as e:
-            log.warning("Apollo search failed during run_search: %s", e)
+            log.warning("run_search: Apollo failed: %s", e)
 
     existing_emails = {c["email"] for c in candidates if c.get("email")}
     existing_names  = {c["name"]  for c in candidates if c.get("name")}
@@ -729,11 +765,17 @@ def run_search(payload: dict, market: str | None) -> dict:
             "id": c["id"],
             "name": c.get("name"),
             "email": c.get("email"),
+            "phone": c.get("phone"),
+            "linkedin_url": c.get("linkedin_url"),
             "skills": c.get("skills") or [],
             "current_location": c.get("current_location"),
             "current_job_title": c.get("current_job_title"),
             "current_employer": c.get("current_employer"),
             "total_experience": c.get("total_experience"),
+            "apollo_person_id": c.get("apollo_person_id"),
+            "apollo_organization_id": c.get("apollo_organization_id"),
+            "do_not_call": c.get("do_not_call") or False,
+            "do_not_email": c.get("do_not_email") or False,
             "score": s["score"],
             "reasoning": s["reasoning"],
             "criterion_matches": s.get("criterion_matches") or {},
@@ -747,6 +789,156 @@ def run_search(payload: dict, market: str | None) -> dict:
         "candidate_pool": len(candidates),
         "candidates": results,
     }
+
+
+# ── Apollo reveal + credits + candidate detail ─────────────────
+
+_apollo_credits_cache: dict = {}  # {"data": {...}, "expires": datetime}
+
+
+def get_apollo_credits() -> dict:
+    """Return remaining Apollo credits. Result is cached for 5 minutes."""
+    now = datetime.now(timezone.utc)
+    if _apollo_credits_cache.get("expires") and now < _apollo_credits_cache["expires"]:
+        return _apollo_credits_cache["data"]
+    try:
+        raw = asyncio.run(sourcing.apollo_account_credits())
+    except Exception as e:
+        raise CoreError(502, f"Apollo credits check failed: {e}")
+    month = raw.get("monthly_credits_limit", 0)
+    used = raw.get("monthly_credits_used", 0)
+    remaining = max(0, month - used)
+    # Apollo /auth/health doesn't break out email vs phone separately —
+    # expose whatever granularity the API returns.
+    data = {
+        "email_credits": raw.get("email_credits_per_month", remaining),
+        "phone_credits": raw.get("phone_credits_per_month", remaining),
+        "export_credits": raw.get("export_credits_per_month", remaining),
+        "credits_used_month": used,
+        "credits_limit_month": month,
+        "credits_remaining": remaining,
+        "raw": raw,
+    }
+    _apollo_credits_cache["data"] = data
+    _apollo_credits_cache["expires"] = now + timedelta(minutes=5)
+    return data
+
+
+def reveal_candidate_field(cid: str, field: str) -> dict:
+    """Call Apollo /people/match to reveal name, email, or phone for a candidate.
+
+    Upserts the revealed value(s) back to the candidates row so subsequent
+    drawer opens are free (served from DB).  Returns {field, value,
+    credits_remaining}.
+    """
+    if field not in ("name", "email", "phone"):
+        raise CoreError(422, "field must be name | email | phone")
+    cand = db.get_candidate_by_id(cid)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+
+    apollo_id = cand.get("apollo_person_id")
+    linkedin = cand.get("linkedin_url")
+    email = cand.get("email")
+    if not (apollo_id or linkedin or email):
+        raise CoreError(422, "Candidate has no Apollo id, LinkedIn URL, or email — cannot reveal")
+
+    reveal_phone = field == "phone"
+    try:
+        person = asyncio.run(sourcing.apollo_people_match(
+            apollo_person_id=apollo_id,
+            linkedin_url=linkedin,
+            email=email,
+            reveal_phone_number=reveal_phone,
+        ))
+    except RuntimeError as e:
+        msg = str(e)
+        if "credits_exhausted" in msg:
+            raise CoreError(402, "apollo credits_exhausted")
+        raise CoreError(502, f"Apollo error: {msg}")
+
+    # Determine the revealed value
+    if field == "name":
+        value = person.get("name") or ""
+    elif field == "email":
+        emails = person.get("email") or person.get("personal_emails") or []
+        if isinstance(emails, list):
+            value = emails[0] if emails else ""
+        else:
+            value = str(emails)
+    else:  # phone
+        phones = (person.get("phone_numbers") or
+                  person.get("sanitized_phone") or "")
+        if isinstance(phones, list):
+            value = phones[0].get("sanitized_number", "") if phones else ""
+        else:
+            value = str(phones)
+
+    # Persist revealed values so next open is free
+    patch: dict = {}
+    if person.get("name"):
+        patch["name"] = person["name"]
+    if person.get("email"):
+        patch["email"] = person["email"]
+    phone_list = person.get("phone_numbers") or []
+    if phone_list:
+        p = phone_list[0]
+        phone_val = p.get("sanitized_number") or p.get("raw_number") if isinstance(p, dict) else str(p)
+        if phone_val:
+            patch["phone"] = phone_val
+    patch["enriched_at"] = datetime.now(timezone.utc).isoformat()
+    if patch:
+        db.update_candidate(cid, patch)
+
+    # Bust the credits cache so counter updates on next poll
+    _apollo_credits_cache.clear()
+
+    return {"field": field, "value": value, "candidate_id": cid}
+
+
+def get_candidate_detail(cid: str) -> dict:
+    """Return full candidate row + lazy-loaded company enrichment.
+
+    Company enrichment is fetched from Apollo on first access and cached in
+    the `company_enrichment` table.  Subsequent calls are free.
+    """
+    cand = db.get_candidate_by_id(cid)
+    if not cand:
+        raise CoreError(404, "Candidate not found")
+
+    company_info: dict = {}
+    org_id = cand.get("apollo_organization_id")
+    if org_id:
+        cached = db.get_company_enrichment(org_id)
+        if cached:
+            company_info = cached
+        else:
+            try:
+                org = asyncio.run(sourcing.apollo_organizations_enrich(
+                    apollo_organization_id=org_id))
+                row = {
+                    "apollo_organization_id": org_id,
+                    "name": org.get("name"),
+                    "industries": org.get("industries") or [],
+                    "founded_year": org.get("founded_year"),
+                    "revenue": org.get("annual_revenue"),
+                    "market_cap": org.get("market_cap"),
+                    "employees": org.get("estimated_num_employees"),
+                    "hq_location": org.get("city") or org.get("country"),
+                    "technologies": [
+                        t.get("name") if isinstance(t, dict) else str(t)
+                        for t in (org.get("current_technologies") or [])
+                    ],
+                    "linkedin_url": org.get("linkedin_url"),
+                    "website_url": org.get("website_url"),
+                    "enrichment_json": org,
+                }
+                db.upsert_company_enrichment(row)
+                company_info = row
+            except Exception as e:
+                log.warning("Company enrichment failed for %s: %s", org_id, e)
+
+    return {"candidate": cand, "company_enrichment": company_info}
 
 
 # ── Requirements ───────────────────────────────────────────────

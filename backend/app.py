@@ -97,23 +97,35 @@ RECRUITER_LOGINS = {
 from ai_agents import core as ai_core
 ai_core.init()
 
-# ── Background scheduler for sequence_tick ──
+# ── Background scheduler for sequence_tick + inbox_poll ──
 if os.environ.get("ENABLE_SCHEDULER") == "1":
     from apscheduler.schedulers.background import BackgroundScheduler
     _scheduler = BackgroundScheduler()
     from ai_agents.config.cron import _cron_log
+
+    if not os.environ.get("RECRUITER_EMAILS"):
+        _cron_log("WARNING: RECRUITER_EMAILS is not set — inbox_poll_cron will do nothing")
+
     def _bg_sequence_tick(user_role=None):
         return ai_core.sequence_tick(user_role)
+
+    def _bg_inbox_poll():
+        try:
+            result = ai_core.process_inbox({"recruiter_email": None})
+            _cron_log(f"inbox_poll OK: {result}")
+        except Exception as e:
+            _cron_log(f"inbox_poll ERR: {e}")
+
     _scheduler.add_job(
-        _bg_sequence_tick,
-        "interval",
-        minutes=5,
-        id="sequence_tick_cron",
-        misfire_grace_time=60,
-        max_instances=1,
+        _bg_sequence_tick, "interval", minutes=5,
+        id="sequence_tick_cron", misfire_grace_time=60, max_instances=1,
+    )
+    _scheduler.add_job(
+        _bg_inbox_poll, "interval", minutes=15,
+        id="inbox_poll_cron", misfire_grace_time=60, max_instances=1,
     )
     _scheduler.start()
-    _cron_log("BackgroundScheduler started with sequence_tick every 5 min")
+    _cron_log("BackgroundScheduler started: sequence_tick/5m, inbox_poll/15m")
 
 
 def _ai_core_call(fn, *args, **kwargs):
@@ -140,6 +152,7 @@ try:
         "candidate_notes",
         "submissions",
         "outreach_log",
+        "agentic_boost_runs",
     )
     _missing_tables = []
     for _table in _critical_tables:
@@ -441,6 +454,48 @@ def api_search_run():
         return jsonify({"error": "Not authenticated"}), 401
     market = request.args.get("market") or None
     return _ai_core_call(ai_core.run_search, request.get_json(silent=True), market)
+
+
+@app.route("/api/apollo/credits", methods=["GET"])
+def api_apollo_credits():
+    """Return remaining Apollo credit counters (cached 5 min)."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.get_apollo_credits)
+
+
+@app.route("/api/candidates/<cid>/reveal", methods=["POST"])
+def api_candidate_reveal(cid):
+    """Reveal name, email, or phone for a candidate via Apollo /people/match."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    body = request.get_json(silent=True) or {}
+    field = body.get("field")
+    if field not in ("name", "email", "phone"):
+        return jsonify({"error": "field must be name | email | phone"}), 422
+    return _ai_core_call(ai_core.reveal_candidate_field, cid, field)
+
+
+@app.route("/api/candidates/<cid>/detail", methods=["GET"])
+def api_candidate_detail_view(cid):
+    """Return full candidate row + lazy-loaded company enrichment."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.get_candidate_detail, cid)
+
+
+@app.route("/api/candidates/<cid>/dnc", methods=["POST"])
+def api_candidate_dnc(cid):
+    """Toggle do_not_call on a candidate."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    body = request.get_json(silent=True) or {}
+    value = bool(body.get("value", True))
+    try:
+        row = ai_core.db.update_candidate(cid, {"do_not_call": value})
+        return jsonify({"ok": True, "do_not_call": row.get("do_not_call")}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/outreach/emails", methods=["POST"])
@@ -3451,6 +3506,70 @@ def api_sequences_generate():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── Agentic Boost ─────────────────────────────────────────────
+
+@app.route("/api/agentic-boost/launch", methods=["POST"])
+def api_agentic_boost_launch():
+    """SSE — multi-agent pipeline from JD paste to ranked candidates."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+
+    def _stream():
+        try:
+            yield from ai_core.launch_agentic_boost_stream(payload, role, email)
+        except Exception as exc:
+            import json as _json
+            app.logger.exception("agentic boost stream crashed")
+            yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
+
+    return Response(
+        stream_with_context(_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/agentic-boost/runs", methods=["GET"])
+def api_agentic_boost_list():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.list_agentic_boost_runs, role, email)
+
+
+@app.route("/api/agentic-boost/runs/<boost_id>", methods=["GET"])
+def api_agentic_boost_get(boost_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_agentic_boost_run, boost_id, role, email)
+
+
+@app.route("/api/agentic-boost/drafts/<draft_id>", methods=["PATCH"])
+def api_agentic_boost_edit_draft(draft_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_agentic_boost_draft, draft_id,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/agentic-boost/drafts/<draft_id>/send", methods=["POST"])
+def api_agentic_boost_send_draft(draft_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.send_agentic_boost_draft, draft_id,
+                         role, email)
 
 
 @app.route("/api/sequences/new", methods=["POST"])

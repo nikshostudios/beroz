@@ -568,6 +568,89 @@
     .criterion-cell { text-align:center; }
     .criterion-cell .material-icons-outlined { font-size:18px; color:#22c55e; }
 
+    /* ── Apollo-parity search table ── */
+    .apollo-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .apollo-table th { text-align:left; padding:8px 10px; font-size:11px; font-weight:600;
+      color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em;
+      border-bottom:1px solid var(--border-color); white-space:nowrap; }
+    .apollo-table td { padding:9px 10px; border-bottom:1px solid #f0f0f3; vertical-align:middle; }
+    .apollo-table tr.arow:hover td { background:#faf7ff; }
+    .apollo-table tr.arow { cursor:default; }
+    .arow-name-btn { background:none; border:none; padding:0; font-weight:600;
+      font-size:13px; color:var(--brand-purple); cursor:pointer; text-align:left; }
+    .arow-name-btn:hover { text-decoration:underline; }
+    .reveal-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 9px;
+      border-radius:20px; border:1px solid var(--border-color); font-size:11px;
+      background:#fff; cursor:pointer; color:var(--text-secondary); white-space:nowrap;
+      transition:all .15s; }
+    .reveal-pill:hover:not(:disabled) { border-color:var(--brand-purple);
+      color:var(--brand-purple); background:#faf7ff; }
+    .reveal-pill:disabled { opacity:.55; cursor:not-allowed; }
+    .reveal-pill .material-icons-outlined { font-size:12px; }
+    .reveal-value { font-size:12px; color:var(--text-primary); }
+    .reveal-value.masked { filter:blur(4px); user-select:none; cursor:pointer; }
+    .dnc-pill { display:inline-block; padding:2px 7px; border-radius:10px;
+      background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:600; }
+    .coming-soon-cell { color:var(--text-muted); font-size:11px; font-style:italic; }
+    .credits-bar { display:flex; align-items:center; gap:12px; font-size:12px;
+      color:var(--text-secondary); }
+    .credits-bar span { display:flex; align-items:center; gap:4px; }
+    .apollo-table-wrap { overflow-x:auto; }
+
+    /* ── Apollo candidate detail drawer ── */
+    .apollo-drawer-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35);
+      z-index:1100; display:flex; justify-content:flex-end; }
+    .apollo-drawer-overlay.hidden { display:none; }
+    .apollo-drawer { width:min(720px,95vw); height:100%; background:#fff;
+      display:flex; flex-direction:column; box-shadow:-8px 0 40px rgba(0,0,0,.18);
+      overflow:hidden; }
+    .apollo-drawer-header { display:flex; align-items:center; gap:12px;
+      padding:16px 20px; border-bottom:1px solid var(--border-color);
+      background:#fff; flex-shrink:0; }
+    .apollo-drawer-avatar { width:44px; height:44px; border-radius:50%;
+      background:var(--brand-purple); color:#fff; display:flex; align-items:center;
+      justify-content:center; font-size:18px; font-weight:700; flex-shrink:0; }
+    .apollo-drawer-meta { flex:1; min-width:0; }
+    .apollo-drawer-name { font-size:16px; font-weight:700; color:var(--text-primary); }
+    .apollo-drawer-role { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+    .apollo-drawer-close { background:none; border:none; cursor:pointer;
+      color:var(--text-muted); display:flex; align-items:center; }
+    .apollo-drawer-body { display:flex; flex:1; overflow:hidden; }
+    .apollo-drawer-left { width:280px; flex-shrink:0; border-right:1px solid var(--border-color);
+      overflow-y:auto; padding:16px; }
+    .apollo-drawer-right { flex:1; overflow-y:auto; padding:16px; }
+    .apollo-section-title { font-size:11px; font-weight:600; color:var(--text-muted);
+      text-transform:uppercase; letter-spacing:.05em; margin:14px 0 8px; }
+    .apollo-contact-row { display:flex; align-items:center; gap:8px; margin-bottom:8px;
+      font-size:13px; }
+    .apollo-contact-row .material-icons-outlined { font-size:14px; color:var(--text-muted); }
+    .apollo-company-tabs { display:flex; gap:0; border-bottom:1px solid var(--border-color);
+      margin-bottom:14px; flex-wrap:wrap; }
+    .apollo-company-tab { padding:7px 14px; border:none; background:none; cursor:pointer;
+      font-size:12px; font-weight:500; color:var(--text-secondary); border-bottom:2px solid transparent;
+      white-space:nowrap; }
+    .apollo-company-tab.active { color:var(--brand-purple); border-bottom-color:var(--brand-purple); }
+    .apollo-company-tab:disabled { opacity:.45; cursor:not-allowed; }
+    .apollo-kv-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
+    .apollo-kv { display:flex; flex-direction:column; }
+    .apollo-kv-label { font-size:10px; font-weight:600; color:var(--text-muted);
+      text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px; }
+    .apollo-kv-value { font-size:13px; color:var(--text-primary); }
+    .apollo-pill-group { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+    .apollo-pill { display:inline-block; padding:2px 9px; border-radius:12px;
+      background:#f0ebff; color:var(--brand-purple); font-size:11px; font-weight:500; }
+    .apollo-drawer-loading { display:flex; align-items:center; justify-content:center;
+      height:120px; color:var(--text-muted); font-size:13px; gap:8px; }
+    .dnc-toggle-row { display:flex; align-items:center; gap:10px; margin-top:10px; }
+    .dnc-toggle { position:relative; width:36px; height:20px; }
+    .dnc-toggle input { opacity:0; width:0; height:0; }
+    .dnc-toggle-slider { position:absolute; inset:0; background:#d1d5db;
+      border-radius:20px; cursor:pointer; transition:.2s; }
+    .dnc-toggle-slider:before { content:''; position:absolute; width:14px; height:14px;
+      left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+    .dnc-toggle input:checked + .dnc-toggle-slider { background:#ef4444; }
+    .dnc-toggle input:checked + .dnc-toggle-slider:before { transform:translateX(16px); }
+
     /* ── Market Tabs ── */
     .market-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
     .market-tab {
@@ -1742,6 +1825,133 @@
     }
     .submission-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .submission-card-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+    /* ── Agentic Boost ─────────────────────────────────────── */
+    .boost-nav-item { position: relative; }
+    .boost-nav-badge {
+      margin-left: auto;
+      background: linear-gradient(135deg, #7c3aed, #ec4899);
+      color: #fff; font-size: 10px; font-weight: 700;
+      padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px;
+    }
+    .boost-view.hidden { display: none; }
+    .boost-hero {
+      max-width: 720px; margin: 0 auto 24px; text-align: center;
+      padding-top: 24px;
+    }
+    .boost-hero h1 {
+      font-size: 32px; font-weight: 700; margin: 0 0 8px;
+      background: linear-gradient(135deg, #7c3aed, #ec4899);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .boost-hero p { color: var(--text-muted); font-size: 14px; margin: 0; }
+    .boost-input-card {
+      max-width: 720px; margin: 0 auto;
+      background: var(--bg-card); border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg); padding: 24px;
+    }
+    .boost-input-card label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: var(--text-muted); margin: 12px 0 6px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .boost-input-card label:first-child { margin-top: 0; }
+    .boost-input-card select,
+    .boost-input-card textarea {
+      width: 100%; box-sizing: border-box;
+      padding: 10px 12px; border: 1px solid var(--border-color);
+      border-radius: var(--radius-md); font-family: inherit; font-size: 14px;
+      background: var(--bg-input, #fff); color: var(--text-color);
+    }
+    .boost-input-card textarea { resize: vertical; min-height: 220px; }
+    .boost-char-counter {
+      font-size: 11px; color: var(--text-muted); text-align: right;
+      margin: 4px 0 16px;
+    }
+    .btn-lg {
+      padding: 12px 24px; font-size: 15px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    #btn-launch-boost {
+      width: 100%; justify-content: center;
+      background: linear-gradient(135deg, #7c3aed, #ec4899);
+      border: none; color: #fff;
+    }
+    #btn-launch-boost:disabled { opacity: 0.6; cursor: not-allowed; }
+    .boost-progress-wrap {
+      max-width: 720px; margin: 0 auto;
+    }
+    .boost-progress-wrap h2 {
+      text-align: center; margin: 16px 0 24px; font-weight: 600;
+    }
+    .boost-agent-grid {
+      display: flex; flex-direction: column; gap: 12px;
+      margin-bottom: 24px;
+    }
+    .boost-agent-card {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 20px; border-radius: var(--radius-lg);
+      background: var(--bg-card); border: 1px solid var(--border-color);
+      transition: all 0.2s ease;
+    }
+    .boost-agent-card.running {
+      border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+    }
+    .boost-agent-card.done {
+      border-color: #10b981; background: rgba(16, 185, 129, 0.05);
+    }
+    .boost-agent-card.error {
+      border-color: #ef4444; background: rgba(239, 68, 68, 0.05);
+    }
+    .boost-agent-card .agent-icon { font-size: 28px; color: var(--text-muted); }
+    .boost-agent-card.running .agent-icon { color: #7c3aed; }
+    .boost-agent-card.done .agent-icon { color: #10b981; }
+    .boost-agent-card.error .agent-icon { color: #ef4444; }
+    .boost-agent-card .agent-icon.spin { animation: boost-spin 1s linear infinite; }
+    @keyframes boost-spin { to { transform: rotate(360deg); } }
+    .boost-agent-card .agent-info { flex: 1; }
+    .boost-agent-card .agent-label { font-weight: 600; font-size: 14px; }
+    .boost-agent-card .agent-desc {
+      font-size: 12px; color: var(--text-muted); margin-top: 2px;
+    }
+    .boost-results-header {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+    }
+    .boost-results-header h2 { margin: 0; font-weight: 600; }
+    .boost-meta { display: flex; align-items: center; gap: 12px; }
+    .boost-meta #boost-req-title {
+      font-size: 13px; color: var(--text-muted); padding-right: 8px;
+    }
+    .boost-candidate-row {
+      display: grid; grid-template-columns: 48px 1fr auto;
+      gap: 16px; align-items: center;
+      padding: 16px; margin-bottom: 8px;
+      background: var(--bg-card); border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+    }
+    .boost-rank {
+      font-size: 18px; font-weight: 700; color: var(--text-muted);
+      text-align: center;
+    }
+    .boost-cand-name { font-weight: 600; font-size: 14px; }
+    .boost-cand-meta {
+      font-size: 12px; color: var(--text-muted); margin-top: 2px;
+    }
+    .boost-cand-score {
+      display: inline-block; font-size: 12px; margin-top: 6px;
+      padding: 2px 8px; border-radius: 10px;
+      background: rgba(124, 58, 237, 0.1); color: #7c3aed; font-weight: 600;
+    }
+    .boost-cand-reasoning {
+      font-size: 12px; color: var(--text-muted); margin-top: 6px;
+      line-height: 1.4;
+    }
+    .boost-cand-actions { display: flex; flex-direction: column; gap: 6px; }
+    .boost-cand-actions button.sent {
+      background: #10b981; color: #fff; border-color: #10b981;
+    }
+    .boost-muted { color: var(--text-muted); font-size: 12px; }
   </style>
 </head>
 <body>
@@ -1755,6 +1965,11 @@
           <span class="material-icons-outlined" style="font-size:18px">chevron_left</span>
         </button>
       </div>
+
+      <a class="nav-item nav-item-top boost-nav-item" data-page="agentic-boost" href="#" style="margin:4px 8px">
+        <span class="material-icons-outlined">auto_awesome</span> Agentic Boost
+        <span class="boost-nav-badge">AI</span>
+      </a>
 
       <a class="nav-item nav-item-top active" data-page="requirements" href="#" style="margin:4px 8px">
         <span class="material-icons-outlined">assignment</span> All Requirements
@@ -1855,6 +2070,56 @@
 
       <!-- Content -->
       <div class="content">
+
+        <!-- AGENTIC BOOST -->
+        <div class="page" id="page-agentic-boost">
+          <!-- View 1: input -->
+          <div class="boost-view" data-boost-view="input">
+            <div class="boost-hero">
+              <h1>Agentic Boost</h1>
+              <p>Paste a JD. Five AI agents source, score, and draft emails to the top 50 candidates — in under two minutes.</p>
+            </div>
+            <div class="boost-input-card">
+              <label for="boost-market">Market</label>
+              <select id="boost-market">
+                <option value="IN">India</option>
+                <option value="SG">Singapore</option>
+              </select>
+              <label for="boost-jd-text">Paste Job Description</label>
+              <textarea id="boost-jd-text" rows="14" placeholder="Paste the full JD here — role, skills, experience, location, salary, etc."></textarea>
+              <div class="boost-char-counter" id="boost-char-counter">0 characters</div>
+              <button id="btn-launch-boost" class="btn-primary btn-lg">
+                <span class="material-icons-outlined">auto_awesome</span> Launch Agentic Boost
+              </button>
+            </div>
+          </div>
+
+          <!-- View 2: live progress -->
+          <div class="boost-view hidden" data-boost-view="progress">
+            <div class="boost-progress-wrap">
+              <h2>Running pipeline…</h2>
+              <div id="boost-agent-cards" class="boost-agent-grid"></div>
+              <div style="text-align:center">
+                <button id="btn-cancel-boost" class="btn-secondary">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 3: results -->
+          <div class="boost-view hidden" data-boost-view="results">
+            <div class="boost-results-header">
+              <h2>Top <span id="boost-top-count">0</span> Candidates</h2>
+              <div class="boost-meta">
+                <span id="boost-req-title"></span>
+                <button id="btn-copy-boolean" class="btn-secondary" title="Copy boolean search string">
+                  <span class="material-icons-outlined">content_copy</span> Copy Boolean
+                </button>
+                <button id="btn-new-boost" class="btn-primary">New Boost</button>
+              </div>
+            </div>
+            <div id="boost-candidate-list"></div>
+          </div>
+        </div>
 
         <!-- REQUIREMENTS -->
         <div class="page active" id="page-requirements">
@@ -1962,24 +2227,59 @@
         <!-- CONTACTS -->
         <div class="page" id="page-contacts">
           <div class="table-container">
+            <!-- Top bar: title + actions -->
             <div class="table-header">
-              <div class="table-header-title" id="contacts-title">All Contacts</div>
-              <div class="table-header-actions">
-                <button class="btn-secondary" id="btn-delete-contacts" style="display:none;color:#b42318;border-color:#fecdca">
-                  <span class="material-icons-outlined" style="font-size:16px">delete_outline</span> Delete selected
-                </button>
-                <button class="btn-secondary" id="btn-refresh-contacts">
-                  <span class="material-icons-outlined" style="font-size:16px">refresh</span> Refresh
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="table-header-title" id="contacts-title">All Contacts</div>
+                <button class="icon-btn" id="btn-refresh-contacts" title="Refresh">
+                  <span class="material-icons-outlined" style="font-size:16px">refresh</span>
                 </button>
               </div>
+              <div style="position:relative">
+                <button class="btn-secondary" id="btn-contacts-actions">
+                  Actions <span class="material-icons-outlined" style="font-size:14px;margin-left:2px;vertical-align:middle">expand_more</span>
+                </button>
+                <div id="contacts-actions-menu" class="avatar-dropdown hidden" style="top:calc(100% + 4px);bottom:auto;left:auto;right:0;min-width:200px">
+                  <div class="avatar-dropdown-item" id="btn-delete-contacts" style="color:#b42318;opacity:0.4;pointer-events:none;cursor:default">
+                    <span class="material-icons-outlined" style="font-size:16px;color:#b42318">delete_outline</span>
+                    Delete selected (<span id="contacts-del-count">0</span>)
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <!-- Search + filter bar -->
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 0 4px">
+              <div style="position:relative;flex:1;max-width:320px">
+                <span class="material-icons-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text-muted)">search</span>
+                <input type="text" id="contacts-search" placeholder="Search by name, skills, location…"
+                       style="width:100%;padding:7px 10px 7px 32px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;box-sizing:border-box">
+              </div>
+              <div style="position:relative">
+                <button class="btn-secondary" id="btn-contacts-add-filter" style="color:var(--brand-blue);border-color:var(--brand-blue)">
+                  <span class="material-icons-outlined" style="font-size:15px;vertical-align:middle">filter_list</span> Add Filter
+                </button>
+                <div id="contacts-filter-menu" class="avatar-dropdown hidden" style="top:calc(100% + 4px);bottom:auto;left:0;min-width:180px">
+                  <div class="avatar-dropdown-item" data-filter="name">Name</div>
+                  <div class="avatar-dropdown-item" data-filter="skills">Skills</div>
+                  <div class="avatar-dropdown-item" data-filter="experience">Experience</div>
+                  <div class="avatar-dropdown-item" data-filter="location">Location</div>
+                  <div class="avatar-dropdown-item" data-filter="email">Email</div>
+                  <div class="avatar-dropdown-item" data-filter="market">Market</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Active filter chips -->
+            <div id="contacts-filter-chips" class="multi-picker-chips" style="padding:2px 0 8px"></div>
+
             <div id="contacts-loading" class="loading-state">
               <div class="loading-spinner"></div> Loading contacts...
             </div>
             <table id="contacts-table" style="display:none">
               <thead>
                 <tr>
-                  <th style="width:32px"><input type="checkbox" id="contacts-select-all"></th>
+                  <th style="width:32px"><input type="checkbox" id="contacts-select-all" style="cursor:pointer"></th>
                   <th>Name</th>
                   <th>Skills</th>
                   <th>Experience</th>
@@ -3267,6 +3567,41 @@
     </div>
   </div>
 
+  <!-- Apollo candidate detail drawer -->
+  <div class="apollo-drawer-overlay hidden" id="apollo-drawer-overlay">
+    <div class="apollo-drawer" id="apollo-drawer">
+      <div class="apollo-drawer-header">
+        <div class="apollo-drawer-avatar" id="apd-avatar">?</div>
+        <div class="apollo-drawer-meta">
+          <div class="apollo-drawer-name" id="apd-name">Loading…</div>
+          <div class="apollo-drawer-role" id="apd-role"></div>
+        </div>
+        <button class="apollo-drawer-close" id="apd-close" aria-label="Close">
+          <span class="material-icons-outlined" style="font-size:22px">close</span>
+        </button>
+      </div>
+      <div class="apollo-drawer-body">
+        <div class="apollo-drawer-left" id="apd-left">
+          <div class="apollo-drawer-loading"><div class="loading-spinner"></div> Loading…</div>
+        </div>
+        <div class="apollo-drawer-right" id="apd-right">
+          <div class="apollo-company-tabs" id="apd-company-tabs">
+            <button class="apollo-company-tab active" data-aptab="overview" type="button">Overview</button>
+            <button class="apollo-company-tab" disabled type="button">News</button>
+            <button class="apollo-company-tab" disabled type="button">Technologies</button>
+            <button class="apollo-company-tab" disabled type="button">Funding</button>
+            <button class="apollo-company-tab" disabled type="button">Job postings</button>
+            <button class="apollo-company-tab" disabled type="button">Employee trends</button>
+            <button class="apollo-company-tab" disabled type="button">Website visitors</button>
+          </div>
+          <div id="apd-company-content">
+            <div class="apollo-drawer-loading"><div class="loading-spinner"></div> Loading company data…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Submit to TL Modal -->
   <div class="modal-overlay hidden" id="modal-submit-tl">
     <div class="modal">
@@ -3523,6 +3858,7 @@
     const expandArrow = analyticsToggle.querySelector('.expand-arrow');
 
     const pageTitles = {
+      'agentic-boost': 'Agentic Boost',
       'requirements': 'Requirements',
       'shortlist': 'Shortlist',
       'contacts': 'Contacts',
@@ -3554,6 +3890,7 @@
       pageTitle.textContent = pageTitles[pageId] || pageId;
 
       // Load data on page switch
+      if (pageId === 'agentic-boost') loadAgenticBoost();
       if (pageId === 'requirements') loadRequirements();
       if (pageId === 'shortlist') loadShortlist();
       if (pageId === 'contacts') loadContacts();
@@ -5202,110 +5539,197 @@
     // ── Contacts ──
     // ══════════════════════════════════
 
+    let _contactsAll = [];
     const _contactsSelected = new Set();
+    let _contactsFilters = [];
 
-    function updateContactsSelectionUI() {
-      const btn = document.getElementById('btn-delete-contacts');
-      const all = document.getElementById('contacts-select-all');
-      const boxes = document.querySelectorAll('.contact-select');
-      const total = boxes.length;
+    const _contactsFilterLabels = {
+      name: 'Name', skills: 'Skills', experience: 'Experience',
+      location: 'Location', email: 'Email', market: 'Market'
+    };
+
+    function updateContactsActionUI() {
       const n = _contactsSelected.size;
-      if (n > 0) {
-        btn.style.display = '';
-        btn.innerHTML = `<span class="material-icons-outlined" style="font-size:16px">delete_outline</span> Delete selected (${n})`;
-      } else {
-        btn.style.display = 'none';
-      }
-      if (all) {
-        if (n === 0) {
-          all.checked = false;
-          all.indeterminate = false;
-        } else if (n === total) {
-          all.checked = true;
-          all.indeterminate = false;
-        } else {
-          all.checked = false;
-          all.indeterminate = true;
+      const btn = document.getElementById('btn-delete-contacts');
+      document.getElementById('contacts-del-count').textContent = n;
+      btn.style.opacity = n > 0 ? '1' : '0.4';
+      btn.style.pointerEvents = n > 0 ? 'auto' : 'none';
+      btn.style.cursor = n > 0 ? 'pointer' : 'default';
+    }
+
+    function renderFilterChips() {
+      const container = document.getElementById('contacts-filter-chips');
+      container.innerHTML = _contactsFilters.map((f, i) =>
+        `<span class="multi-picker-chip">${esc(_contactsFilterLabels[f.field])}: ${esc(f.value)}<button data-filter-idx="${i}" title="Remove" style="background:none;border:none;cursor:pointer;color:inherit;font-size:14px;line-height:1;margin-left:4px;padding:0">×</button></span>`
+      ).join('');
+    }
+
+    function renderContacts() {
+      const table = document.getElementById('contacts-table');
+      const tbody = document.getElementById('contacts-tbody');
+      const loading = document.getElementById('contacts-loading');
+      const searchVal = (document.getElementById('contacts-search').value || '').trim().toLowerCase();
+
+      let rows = _contactsAll.filter(c => {
+        if (searchVal) {
+          const hay = [c.name, (c.skills || []).join(' '), c.current_location, c.email, c.market]
+            .join(' ').toLowerCase();
+          if (!hay.includes(searchVal)) return false;
         }
+        for (const f of _contactsFilters) {
+          const v = f.value.toLowerCase();
+          if (f.field === 'name' && !(c.name || '').toLowerCase().includes(v)) return false;
+          if (f.field === 'skills' && !(c.skills || []).some(s => s.toLowerCase().includes(v))) return false;
+          if (f.field === 'experience' && !(c.total_experience || '').toLowerCase().includes(v)) return false;
+          if (f.field === 'location' && !(c.current_location || '').toLowerCase().includes(v)) return false;
+          if (f.field === 'email' && !(c.email || '').toLowerCase().includes(v)) return false;
+          if (f.field === 'market' && !(c.market || '').toLowerCase().includes(v)) return false;
+        }
+        return true;
+      });
+
+      document.getElementById('contacts-title').textContent = `All Contacts (${rows.length})`;
+
+      if (!rows.length) {
+        table.style.display = 'none';
+        loading.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">person_outline</span><p>No contacts match.</p></div>';
+        loading.style.display = '';
+        return;
       }
+
+      loading.style.display = 'none';
+      table.style.display = '';
+      tbody.innerHTML = '';
+
+      rows.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', e => {
+          if (e.target.closest('a, button, input')) return;
+          if (c.id) openCandidateDetail(c.id);
+        });
+        const marketTag = c.market === 'IN' ? '<span class="tag tag-india">IN</span>'
+                        : c.market === 'SG' ? '<span class="tag tag-singapore">SG</span>' : '';
+        const isChecked = _contactsSelected.has(c.shortlist_id);
+        tr.innerHTML = `
+          <td onclick="event.stopPropagation()" style="width:32px">
+            <input type="checkbox" class="contact-select" data-id="${esc(c.shortlist_id || '')}" ${isChecked ? 'checked' : ''} style="cursor:pointer">
+          </td>
+          <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
+          <td>${esc((c.skills || []).slice(0, 3).join(', '))}</td>
+          <td>${c.total_experience ? esc(c.total_experience) : '—'}</td>
+          <td>${esc(c.current_location || '—')}</td>
+          <td>${c.email ? esc(c.email) : '—'}</td>
+          <td>${marketTag}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // sync select-all state
+      const allIds = rows.map(c => c.shortlist_id).filter(Boolean);
+      const allChecked = allIds.length > 0 && allIds.every(id => _contactsSelected.has(id));
+      const anyChecked = allIds.some(id => _contactsSelected.has(id));
+      const sa = document.getElementById('contacts-select-all');
+      sa.checked = allChecked;
+      sa.indeterminate = anyChecked && !allChecked;
     }
 
     async function loadContacts() {
       const loading = document.getElementById('contacts-loading');
       const table = document.getElementById('contacts-table');
-      const tbody = document.getElementById('contacts-tbody');
+      loading.innerHTML = '<div class="loading-spinner"></div> Loading contacts...';
       loading.style.display = '';
       table.style.display = 'none';
-      tbody.innerHTML = '';
       _contactsSelected.clear();
-      updateContactsSelectionUI();
+      updateContactsActionUI();
 
       try {
         const data = await api('/api/shortlists');
-        loading.style.display = 'none';
-
-        const rows = data?.shortlists || [];
-        document.getElementById('contacts-title').textContent = `All Contacts (${rows.length})`;
-
-        if (rows.length === 0) {
+        _contactsAll = data?.shortlists || [];
+        if (!_contactsAll.length) {
           loading.innerHTML = '<div class="empty-state"><span class="material-icons-outlined">person_outline</span><p>No contacts yet. Shortlisted candidates appear here automatically.</p></div>';
           loading.style.display = '';
+          document.getElementById('contacts-title').textContent = 'All Contacts (0)';
           return;
         }
-
-        table.style.display = '';
-        rows.forEach(c => {
-          const tr = document.createElement('tr');
-          tr.style.cursor = 'pointer';
-          tr.dataset.candidateId = c.id || '';
-          tr.addEventListener('click', (e) => {
-            if (e.target.closest('a, button, input')) return;
-            if (c.id) openCandidateDetail(c.id);
-          });
-          const marketTag = c.market === 'IN' ? '<span class="tag tag-india">IN</span>' : c.market === 'SG' ? '<span class="tag tag-singapore">SG</span>' : '';
-          tr.innerHTML = `
-            <td onclick="event.stopPropagation()"><input type="checkbox" class="contact-select" data-id="${esc(c.shortlist_id || '')}"></td>
-            <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
-            <td>${esc((c.skills || []).slice(0, 3).join(', '))}</td>
-            <td>${c.total_experience ? esc(c.total_experience) : '—'}</td>
-            <td>${esc(c.current_location || '—')}</td>
-            <td>${c.email ? esc(c.email) : '—'}</td>
-            <td>${marketTag}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-        updateContactsSelectionUI();
-      } catch (err) {
         loading.style.display = 'none';
+        renderContacts();
+      } catch (err) {
         loading.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
       }
     }
 
+    // Refresh
     document.getElementById('btn-refresh-contacts').addEventListener('click', loadContacts);
 
-    document.getElementById('contacts-tbody').addEventListener('change', (e) => {
+    // Search
+    document.getElementById('contacts-search').addEventListener('input', renderContacts);
+
+    // Actions menu toggle
+    document.getElementById('btn-contacts-actions').addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('contacts-actions-menu').classList.toggle('hidden');
+    });
+
+    // Add Filter menu toggle
+    document.getElementById('btn-contacts-add-filter').addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('contacts-filter-menu').classList.toggle('hidden');
+    });
+
+    // Filter field selected
+    document.getElementById('contacts-filter-menu').addEventListener('click', e => {
+      const item = e.target.closest('[data-filter]');
+      if (!item) return;
+      const field = item.dataset.filter;
+      document.getElementById('contacts-filter-menu').classList.add('hidden');
+      const value = prompt(`Filter by ${_contactsFilterLabels[field]}:`);
+      if (!value || !value.trim()) return;
+      _contactsFilters.push({ field, value: value.trim() });
+      renderFilterChips();
+      renderContacts();
+    });
+
+    // Remove filter chip
+    document.getElementById('contacts-filter-chips').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-filter-idx]');
+      if (!btn) return;
+      _contactsFilters.splice(Number(btn.dataset.filterIdx), 1);
+      renderFilterChips();
+      renderContacts();
+    });
+
+    // Row checkbox delegation
+    document.getElementById('contacts-tbody').addEventListener('change', e => {
       const cb = e.target.closest('.contact-select');
       if (!cb) return;
-      const id = cb.dataset.id;
-      if (!id) return;
-      if (cb.checked) _contactsSelected.add(id);
-      else _contactsSelected.delete(id);
-      updateContactsSelectionUI();
+      if (cb.checked) _contactsSelected.add(cb.dataset.id);
+      else _contactsSelected.delete(cb.dataset.id);
+      updateContactsActionUI();
+      // sync header
+      const all = document.querySelectorAll('.contact-select');
+      const allChecked = [...all].every(c => c.checked);
+      const anyChecked = [...all].some(c => c.checked);
+      const sa = document.getElementById('contacts-select-all');
+      sa.checked = allChecked;
+      sa.indeterminate = anyChecked && !allChecked;
     });
 
-    document.getElementById('contacts-select-all').addEventListener('change', (e) => {
-      const checked = e.target.checked;
+    // Select-all
+    document.getElementById('contacts-select-all').addEventListener('change', e => {
       _contactsSelected.clear();
       document.querySelectorAll('.contact-select').forEach(cb => {
-        cb.checked = checked;
-        if (checked && cb.dataset.id) _contactsSelected.add(cb.dataset.id);
+        cb.checked = e.target.checked;
+        if (e.target.checked && cb.dataset.id) _contactsSelected.add(cb.dataset.id);
       });
-      updateContactsSelectionUI();
+      updateContactsActionUI();
     });
 
+    // Delete selected (in Actions menu)
     document.getElementById('btn-delete-contacts').addEventListener('click', async () => {
       const ids = [..._contactsSelected];
       if (!ids.length) return;
+      document.getElementById('contacts-actions-menu').classList.add('hidden');
       if (!confirm(`Remove ${ids.length} contact${ids.length === 1 ? '' : 's'} from your list?`)) return;
       try {
         await api('/api/shortlists/delete', { method: 'POST', body: JSON.stringify({ shortlist_ids: ids }) });
@@ -5314,6 +5738,12 @@
       } catch (err) {
         alert('Delete failed: ' + err.message);
       }
+    });
+
+    // Close contacts dropdowns on outside click
+    document.addEventListener('click', () => {
+      document.getElementById('contacts-actions-menu')?.classList.add('hidden');
+      document.getElementById('contacts-filter-menu')?.classList.add('hidden');
     });
 
     // ══════════════════════════════════
@@ -6313,6 +6743,290 @@
       } catch (err) { /* non-fatal */ }
     }
 
+    // ── Agentic Boost ─────────────────────────────────────────
+
+    const AGENTIC_BOOST_AGENTS = [
+      { key: 'jd_parser',        label: 'JD Parser',        desc: 'Extracting skills + role' },
+      { key: 'boolean_builder',  label: 'Boolean Builder',  desc: 'Building search string' },
+      { key: 'sourcing',         label: 'Sourcing',         desc: 'Apollo + Internal DB' },
+      { key: 'screener',         label: 'Screener',         desc: 'Scoring candidates' },
+      { key: 'outreach_drafter', label: 'Outreach Drafter', desc: 'Writing personalized emails' },
+    ];
+
+    const boostState = {
+      controller: null,
+      boostId: null,
+      requirementId: null,
+      booleanString: '',
+      jdParsed: null,
+      results: [],
+    };
+
+    function loadAgenticBoost() {
+      switchBoostView('input');
+      const ta = document.getElementById('boost-jd-text');
+      if (ta) ta.value = '';
+      const cc = document.getElementById('boost-char-counter');
+      if (cc) cc.textContent = '0 characters';
+      const launchBtn = document.getElementById('btn-launch-boost');
+      if (launchBtn) launchBtn.disabled = false;
+    }
+
+    function switchBoostView(view) {
+      document.querySelectorAll('#page-agentic-boost .boost-view').forEach(v => {
+        v.classList.toggle('hidden', v.dataset.boostView !== view);
+      });
+    }
+
+    function renderBoostAgentCards(statusById) {
+      const container = document.getElementById('boost-agent-cards');
+      if (!container) return;
+      container.innerHTML = AGENTIC_BOOST_AGENTS.map((a, i) => {
+        const s = statusById[a.key] || 'idle';
+        const icon = s === 'done' ? 'check_circle'
+                   : s === 'error' ? 'error'
+                   : s === 'running' ? 'autorenew'
+                   : 'radio_button_unchecked';
+        return `
+          <div class="boost-agent-card ${s}" id="agent-card-${a.key}">
+            <span class="material-icons-outlined agent-icon ${s === 'running' ? 'spin' : ''}">${icon}</span>
+            <div class="agent-info">
+              <div class="agent-label">${i + 1}. ${a.label}</div>
+              <div class="agent-desc" id="agent-desc-${a.key}">${a.desc}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function escapeHtmlBoost(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    async function launchAgenticBoost() {
+      const jdText = (document.getElementById('boost-jd-text').value || '').trim();
+      const market = document.getElementById('boost-market').value;
+      if (jdText.length < 50) {
+        alert('Please paste a JD of at least 50 characters.');
+        return;
+      }
+      boostState.boostId = null;
+      boostState.requirementId = null;
+      boostState.booleanString = '';
+      boostState.jdParsed = null;
+      boostState.results = [];
+
+      switchBoostView('progress');
+      const statuses = {};
+      renderBoostAgentCards(statuses);
+
+      boostState.controller = new AbortController();
+      try {
+        const resp = await fetch('/api/agentic-boost/launch', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jd_text: jdText, market }),
+          signal: boostState.controller.signal,
+        });
+        if (resp.status === 401) { window.location.href = '/'; return; }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const chunks = buf.split('\n\n');
+          buf = chunks.pop();
+          for (const chunk of chunks) {
+            if (!chunk.startsWith('data: ')) continue;
+            let evt;
+            try { evt = JSON.parse(chunk.slice(6)); } catch { continue; }
+            handleBoostEvent(evt, statuses);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          alert('Pipeline error: ' + err.message);
+          switchBoostView('input');
+        }
+      }
+    }
+
+    function handleBoostEvent(evt, statuses) {
+      if (!evt || !evt.event) return;
+      if (evt.event === 'boost_start') {
+        boostState.boostId = evt.boost_id;
+      } else if (evt.event === 'agent_start') {
+        statuses[evt.agent] = 'running';
+        renderBoostAgentCards(statuses);
+        if (evt.label) {
+          const desc = document.getElementById('agent-desc-' + evt.agent);
+          if (desc) desc.textContent = evt.label;
+        }
+      } else if (evt.event === 'agent_progress') {
+        const desc = document.getElementById('agent-desc-' + evt.agent);
+        if (desc && evt.message) desc.textContent = evt.message;
+      } else if (evt.event === 'agent_done') {
+        statuses[evt.agent] = 'done';
+        if (evt.agent === 'jd_parser') boostState.jdParsed = evt.payload || null;
+        if (evt.agent === 'boolean_builder' && evt.payload) {
+          boostState.booleanString = evt.payload.boolean_string || '';
+        }
+        if (evt.agent === 'sourcing' && evt.payload) {
+          const c = evt.payload.counts || {};
+          const desc = document.getElementById('agent-desc-sourcing');
+          if (desc) desc.textContent =
+            `Apollo: ${c.apollo || 0} · Internal DB: ${c.internal_db || 0} · Unique: ${evt.payload.total_unique || 0}`;
+        }
+        if (evt.agent === 'screener' && evt.payload) {
+          const desc = document.getElementById('agent-desc-screener');
+          if (desc) desc.textContent =
+            `Scored ${evt.payload.scored_total || 0}, kept top ${evt.payload.top_count || 0}`;
+        }
+        if (evt.agent === 'outreach_drafter' && evt.payload) {
+          const desc = document.getElementById('agent-desc-outreach_drafter');
+          if (desc) desc.textContent =
+            `Drafted ${evt.payload.drafts_created || 0} emails`;
+        }
+        renderBoostAgentCards(statuses);
+      } else if (evt.event === 'agent_error') {
+        statuses[evt.agent] = 'error';
+        const desc = document.getElementById('agent-desc-' + evt.agent);
+        if (desc && evt.message) desc.textContent = evt.message;
+        renderBoostAgentCards(statuses);
+      } else if (evt.event === 'boost_done') {
+        boostState.requirementId = evt.requirement_id;
+        boostState.results = evt.top_candidates || [];
+        if (evt.boolean_string) boostState.booleanString = evt.boolean_string;
+        renderBoostResults();
+        switchBoostView('results');
+      } else if (evt.event === 'error') {
+        alert('Pipeline error: ' + evt.message);
+        switchBoostView('input');
+      }
+    }
+
+    function renderBoostResults() {
+      const countEl = document.getElementById('boost-top-count');
+      if (countEl) countEl.textContent = boostState.results.length;
+      const titleEl = document.getElementById('boost-req-title');
+      if (titleEl) {
+        const role = (boostState.jdParsed && boostState.jdParsed.role_title) || 'Role from JD';
+        titleEl.textContent = role;
+      }
+      const list = document.getElementById('boost-candidate-list');
+      if (!list) return;
+      if (!boostState.results.length) {
+        list.innerHTML = '<div class="boost-muted" style="padding:24px;text-align:center">No candidates passed the screening threshold.</div>';
+        return;
+      }
+      list.innerHTML = boostState.results.map((c, i) => {
+        const draftId = c.draft_id || '';
+        const title = escapeHtmlBoost(c.current_job_title || '');
+        const employer = escapeHtmlBoost(c.current_employer || '');
+        const meta = title || employer
+          ? `${title}${title && employer ? ' @ ' : ''}${employer}`
+          : '<span class="boost-muted">No current role on file</span>';
+        const reasoning = c.reasoning ? escapeHtmlBoost(c.reasoning) : '';
+        const noEmail = !c.draft_sendable;
+        const actions = draftId
+          ? `
+              <button class="btn-secondary" onclick="editBoostDraft('${draftId}')">
+                <span class="material-icons-outlined">edit</span> Edit Draft
+              </button>
+              <button class="btn-primary" onclick="sendBoostDraft('${draftId}', this)" ${noEmail ? 'disabled title="No email address"' : ''}>
+                <span class="material-icons-outlined">send</span> Send Draft
+              </button>`
+          : '<span class="boost-muted">No email available</span>';
+        return `
+          <div class="boost-candidate-row" data-draft-id="${draftId}">
+            <div class="boost-rank">#${i + 1}</div>
+            <div>
+              <div class="boost-cand-name">${escapeHtmlBoost(c.name || '—')}</div>
+              <div class="boost-cand-meta">${meta}</div>
+              <div class="boost-cand-score">Match: ${c.score == null ? '—' : c.score}</div>
+              ${reasoning ? `<div class="boost-cand-reasoning">${reasoning}</div>` : ''}
+            </div>
+            <div class="boost-cand-actions">${actions}</div>
+          </div>`;
+      }).join('');
+    }
+
+    async function sendBoostDraft(draftId, btn) {
+      if (!btn) return;
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="material-icons-outlined">hourglass_top</span> Sending…';
+      try {
+        await api(`/api/agentic-boost/drafts/${draftId}/send`, { method: 'POST' });
+        btn.innerHTML = '<span class="material-icons-outlined">check</span> Sent';
+        btn.classList.add('sent');
+      } catch (err) {
+        alert('Send failed: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    }
+
+    async function editBoostDraft(draftId) {
+      const cand = boostState.results.find(c => c.draft_id === draftId);
+      if (!cand) return;
+      const newSubject = prompt('Edit subject:', cand.draft_subject || '');
+      if (newSubject === null) return;
+      const newBody = prompt('Edit body:', cand.draft_body || '');
+      if (newBody === null) return;
+      try {
+        await api(`/api/agentic-boost/drafts/${draftId}`, {
+          method: 'PATCH',
+          body: { email_subject: newSubject, email_body: newBody },
+        });
+        cand.draft_subject = newSubject;
+        cand.draft_body = newBody;
+        alert('Draft updated.');
+      } catch (err) {
+        alert('Edit failed: ' + err.message);
+      }
+    }
+
+    // Wire up Agentic Boost buttons after DOM is ready.
+    document.addEventListener('DOMContentLoaded', () => {
+      const launchBtn = document.getElementById('btn-launch-boost');
+      if (launchBtn) launchBtn.addEventListener('click', launchAgenticBoost);
+
+      const cancelBtn = document.getElementById('btn-cancel-boost');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => {
+        if (boostState.controller) boostState.controller.abort();
+        switchBoostView('input');
+      });
+
+      const newBtn = document.getElementById('btn-new-boost');
+      if (newBtn) newBtn.addEventListener('click', loadAgenticBoost);
+
+      const copyBtn = document.getElementById('btn-copy-boolean');
+      if (copyBtn) copyBtn.addEventListener('click', () => {
+        if (!boostState.booleanString) { alert('No boolean string to copy.'); return; }
+        navigator.clipboard.writeText(boostState.booleanString)
+          .then(() => {
+            const original = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<span class="material-icons-outlined">check</span> Copied!';
+            setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
+          })
+          .catch(() => alert('Could not copy to clipboard.'));
+      });
+
+      const ta = document.getElementById('boost-jd-text');
+      const counter = document.getElementById('boost-char-counter');
+      if (ta && counter) {
+        ta.addEventListener('input', () => {
+          counter.textContent = `${ta.value.length} characters`;
+        });
+      }
+    });
+
     // ── AI SSE streaming ──────────────────────────────────────
 
     async function startAiGeneration(seqId, cfg, role, company) {
@@ -6716,19 +7430,30 @@
         return '<div class="empty-state"><p>No matching candidates. Try loosening the filters.</p></div>';
       }
       const mode = state.searchViewMode || 'synopsis';
+      const creditsHtml = state._apolloCredits
+        ? `<div class="credits-bar">
+            <span><span class="material-icons-outlined" style="font-size:13px">email</span>
+              ${(state._apolloCredits.email_credits || 0).toLocaleString()} email</span>
+            <span><span class="material-icons-outlined" style="font-size:13px">phone</span>
+              ${(state._apolloCredits.phone_credits || 0).toLocaleString()} phone</span>
+           </div>`
+        : '';
       const toggleHtml = `
         <div class="results-header">
           <span>Matching Candidates (${candidates.length})</span>
-          <div class="view-toggle">
-            <button class="view-toggle-btn${mode === 'synopsis' ? ' active' : ''}" title="Synopsis" onclick="setSearchViewMode('synopsis')">
-              <span class="material-icons-outlined" style="font-size:16px">view_module</span>
-            </button>
-            <button class="view-toggle-btn${mode === 'table' ? ' active' : ''}" title="Table" onclick="setSearchViewMode('table')">
-              <span class="material-icons-outlined" style="font-size:16px">table_chart</span>
-            </button>
-            <button class="view-toggle-btn${mode === 'cards' ? ' active' : ''}" title="Cards" onclick="setSearchViewMode('cards')">
-              <span class="material-icons-outlined" style="font-size:16px">view_agenda</span>
-            </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            ${creditsHtml}
+            <div class="view-toggle">
+              <button class="view-toggle-btn${mode === 'synopsis' ? ' active' : ''}" title="Synopsis" onclick="setSearchViewMode('synopsis')">
+                <span class="material-icons-outlined" style="font-size:16px">view_module</span>
+              </button>
+              <button class="view-toggle-btn${mode === 'table' ? ' active' : ''}" title="Table" onclick="setSearchViewMode('table')">
+                <span class="material-icons-outlined" style="font-size:16px">table_chart</span>
+              </button>
+              <button class="view-toggle-btn${mode === 'cards' ? ' active' : ''}" title="Cards" onclick="setSearchViewMode('cards')">
+                <span class="material-icons-outlined" style="font-size:16px">view_agenda</span>
+              </button>
+            </div>
           </div>
         </div>`;
       let html = `<div class="card" id="search-results-card">${toggleHtml}`;
@@ -6780,31 +7505,88 @@
       return html + '</div>';
     }
 
+    function _maskEmail(email) {
+      if (!email) return '';
+      const [local, domain] = email.split('@');
+      if (!domain) return email;
+      return local[0] + '***@' + domain;
+    }
+
+    function _maskPhone(phone) {
+      if (!phone) return '';
+      const digits = phone.replace(/\D/g, '');
+      return phone.slice(0, 2) + '•'.repeat(Math.max(0, digits.length - 4)) + digits.slice(-4);
+    }
+
     function renderTableView(candidates, softCriteria, withCheckboxes) {
       const criteria = (softCriteria || []).map(sc => typeof sc === 'string' ? sc : (sc.criterion || sc.name || String(sc)));
-      let html = '<div class="table-container"><table><thead><tr>';
-      if (withCheckboxes) html += '<th style="width:32px"></th>';
-      html += '<th>Name</th><th>Profiles</th><th>Job Title</th><th>Company</th><th>Match</th>';
-      criteria.forEach(cr => { html += `<th style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(cr)}">${esc(cr.length > 12 ? cr.slice(0, 12) + '…' : cr)}</th>`; });
-      html += '</tr></thead><tbody>';
+      let html = '<div class="apollo-table-wrap"><table class="apollo-table"><thead><tr>';
+      if (withCheckboxes) html += '<th style="width:28px"></th>';
+      html += '<th>Name</th><th>Job Title</th><th>Company</th><th>Emails</th><th>Phone Numbers</th>';
+      html += '<th title="Apollo-Web-only feature" style="color:var(--text-muted)">Qualify Contact</th>';
+      html += '<th title="Apollo-Web-only feature" style="color:var(--text-muted)">Qualify Account</th>';
+      criteria.forEach(cr => {
+        html += `<th style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(cr)}">${esc(cr.length > 12 ? cr.slice(0, 12) + '…' : cr)}</th>`;
+      });
+      html += '<th>Match</th><th style="width:40px">Links</th></tr></thead><tbody>';
+
       candidates.forEach(c => {
+        const cid = esc(c.id || '');
+        const isApolloRedacted = !c.name || c.name.endsWith('(Apollo)');
         const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
-        const matches = c.criterion_matches || {};
-        html += `<tr class="search-table-row" data-candidate-id="${esc(c.id || '')}">`;
-        if (withCheckboxes) html += `<td><input type="checkbox" class="seq-cand-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()"></td>`;
-        html += `
-          <td style="font-weight:500">${esc(c.name || 'Unknown')}</td>
-          <td>
-            ${c.linkedin_url ? `<a href="${esc(c.linkedin_url)}" target="_blank" onclick="event.stopPropagation()" title="LinkedIn"><span class="material-icons-outlined" style="font-size:16px;color:#0a66c2">link</span></a>` : ''}
-            ${c.email ? `<span title="${esc(c.email)}"><span class="material-icons-outlined" style="font-size:16px;color:var(--text-muted)">email</span></span>` : ''}
-          </td>
-          <td>${esc(c.current_job_title || '—')}</td>
-          <td>${esc(c.current_employer || '—')}</td>
-          <td>${typeof c.score === 'number' ? `<span class="score-badge ${scoreClass}">${c.score}%</span>` : '—'}</td>`;
+
+        // Name cell
+        const nameCell = isApolloRedacted
+          ? `<button class="reveal-pill" onclick="revealField('${cid}','name',this)" data-cid="${cid}">
+               <span class="material-icons-outlined">lock</span> Reveal name <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+             </button>`
+          : `<button class="arow-name-btn" onclick="openApolloDrawer('${cid}')">${esc(c.name)}</button>`;
+
+        // Email cell
+        let emailCell;
+        if (c.do_not_email) {
+          emailCell = '<span class="dnc-pill">No email</span>';
+        } else if (c.email) {
+          emailCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`;
+        } else {
+          emailCell = `<button class="reveal-pill" onclick="revealField('${cid}','email',this)" data-cid="${cid}">
+            <span class="material-icons-outlined">email</span> Access email <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+          </button>`;
+        }
+
+        // Phone cell
+        let phoneCell;
+        if (c.do_not_call) {
+          phoneCell = '<span class="dnc-pill">DNC</span>';
+        } else if (c.phone) {
+          phoneCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`;
+        } else {
+          phoneCell = `<button class="reveal-pill" onclick="revealField('${cid}','phone',this)" data-cid="${cid}">
+            <span class="material-icons-outlined">phone</span> Access mobile <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+          </button>`;
+        }
+
+        html += `<tr class="arow" data-candidate-id="${cid}">`;
+        if (withCheckboxes) {
+          html += `<td><input type="checkbox" class="seq-cand-check" data-cand-id="${cid}" onclick="event.stopPropagation()"></td>`;
+        }
+        html += `<td style="min-width:160px">${nameCell}</td>`;
+        html += `<td style="color:var(--text-secondary)">${esc(c.current_job_title || '—')}</td>`;
+        html += `<td>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${c.current_employer ? `<div style="width:22px;height:22px;border-radius:4px;background:#e0e7ff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#4f46e5;flex-shrink:0">${esc(c.current_employer[0] || '?')}</div>` : ''}
+            <span style="font-size:12px">${esc(c.current_employer || '—')}</span>
+          </div></td>`;
+        html += `<td style="min-width:160px">${emailCell}</td>`;
+        html += `<td style="min-width:160px">${phoneCell}</td>`;
+        html += `<td class="coming-soon-cell">Coming soon</td>`;
+        html += `<td class="coming-soon-cell">Coming soon</td>`;
         criteria.forEach(cr => {
-          const matched = matches[cr];
+          const matched = (c.criterion_matches || {})[cr];
           html += `<td class="criterion-cell">${matched === true ? '<span class="material-icons-outlined">thumb_up</span>' : '—'}</td>`;
         });
+        html += `<td>${typeof c.score === 'number' ? `<span class="score-badge ${scoreClass}">${c.score}%</span>` : '—'}</td>`;
+        html += `<td>${c.linkedin_url ? `<a href="${esc(c.linkedin_url)}" target="_blank" onclick="event.stopPropagation()" title="LinkedIn" style="color:#0a66c2"><span class="material-icons-outlined" style="font-size:16px">link</span></a>` : ''}</td>`;
         html += '</tr>';
       });
       return html + '</tbody></table></div>';
@@ -6880,6 +7662,16 @@
           return;
         }
         state._lastSearchData = data;
+        // Fetch Apollo credits in background so credits bar renders
+        fetchApolloCredits().then(() => {
+          const card = document.getElementById('search-results-card');
+          if (card) {
+            const newHtml = renderSearchResults(data.candidates || [], data.soft_criteria || []);
+            const tmp = document.createElement('div');
+            tmp.innerHTML = newHtml;
+            card.replaceWith(tmp.firstElementChild);
+          }
+        }).catch(() => {});
         let html = renderFiltersCard(data.filters || {});
         html += renderSearchResults(data.candidates || [], data.soft_criteria || []);
         if (typeof data.candidate_pool === 'number' && data.candidate_pool > 0 && !(data.candidates || []).length) {

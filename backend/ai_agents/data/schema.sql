@@ -277,3 +277,72 @@ create index if not exists idx_notes_user on candidate_notes(user_email);
 
 alter table candidate_shortlists enable row level security;
 alter table candidate_notes enable row level security;
+
+-- ============================================================
+-- Agentic Boost: one-click JD → ranked candidates pipeline
+-- See backend/ai_agents/data/agentic_boost.sql for the standalone migration.
+-- ============================================================
+
+alter table requirements
+  add column if not exists source text default 'manual',
+  add column if not exists boost_run boolean default false,
+  add column if not exists jd_text text,
+  add column if not exists jd_parsed jsonb;
+
+create index if not exists idx_requirements_source on requirements(source);
+
+alter table outreach_log
+  add column if not exists status text default 'sent'
+    check (status in ('draft', 'sent', 'failed', 'approved')),
+  add column if not exists email_body text;
+
+create index if not exists idx_outreach_log_status on outreach_log(status);
+
+create table if not exists agentic_boost_runs (
+  id uuid primary key default gen_random_uuid(),
+  requirement_id uuid references requirements(id) on delete cascade,
+  created_by text not null,
+  jd_text text not null,
+  agent_events jsonb default '[]'::jsonb,
+  status text default 'running' check (status in ('running', 'completed', 'failed')),
+  created_at timestamptz default now(),
+  completed_at timestamptz
+);
+
+create index if not exists idx_boost_runs_created_by on agentic_boost_runs(created_by);
+create index if not exists idx_boost_runs_requirement on agentic_boost_runs(requirement_id);
+
+alter table agentic_boost_runs enable row level security;
+
+-- ============================================================
+-- Apollo-parity search UI: per-row reveal + company enrichment
+-- Run in Supabase SQL Editor to apply to an existing database.
+-- ============================================================
+
+alter table candidates
+  add column if not exists apollo_person_id        text unique,
+  add column if not exists apollo_organization_id  text,
+  add column if not exists do_not_call             boolean default false,
+  add column if not exists do_not_email            boolean default false,
+  add column if not exists enriched_at             timestamptz;
+
+create index if not exists idx_candidates_apollo_person
+  on candidates(apollo_person_id);
+
+create table if not exists company_enrichment (
+  apollo_organization_id text primary key,
+  name                   text,
+  industries             text[],
+  founded_year           int,
+  revenue                bigint,
+  market_cap             bigint,
+  employees              int,
+  hq_location            text,
+  technologies           text[],
+  linkedin_url           text,
+  website_url            text,
+  enrichment_json        jsonb,
+  enriched_at            timestamptz default now()
+);
+
+alter table company_enrichment enable row level security;

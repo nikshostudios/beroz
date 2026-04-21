@@ -83,6 +83,29 @@ def upsert_candidate_by_name(data: dict) -> dict:
     return get_client().table("candidates").insert(data).execute().data[0]
 
 
+def update_candidate(candidate_id: str, patch: dict) -> dict:
+    """Patch arbitrary columns on a candidate row. Returns the updated row."""
+    return (get_client().table("candidates")
+            .update(patch).eq("id", candidate_id)
+            .execute().data[0])
+
+
+# ── Company Enrichment (Apollo org cache) ───────────────────────
+
+def get_company_enrichment(apollo_organization_id: str) -> dict | None:
+    rows = (get_client().table("company_enrichment")
+            .select("*")
+            .eq("apollo_organization_id", apollo_organization_id)
+            .execute().data)
+    return rows[0] if rows else None
+
+
+def upsert_company_enrichment(data: dict) -> dict:
+    return (get_client().table("company_enrichment")
+            .upsert(data, on_conflict="apollo_organization_id")
+            .execute().data[0])
+
+
 def search_candidates_by_skill(skills: list[str], market: str | None = None):
     """Legacy keyword overlap search — kept for backward compat but no longer
     used for internal matching.  Use search_candidates_broad() + LLM scoring."""
@@ -570,3 +593,39 @@ def get_pending_replies(recruiter_email: str):
             .eq("reply_received", False)
             .order("sent_at", desc=True)
             .execute().data)
+
+
+# ── Agentic Boost (one-click JD pipeline) ──────────────────
+
+def get_outreach_log(log_id: str) -> dict | None:
+    rows = (get_client().table("outreach_log").select("*")
+            .eq("id", log_id).execute().data)
+    return rows[0] if rows else None
+
+
+def update_outreach_log(log_id: str, patch: dict) -> dict:
+    return (get_client().table("outreach_log").update(patch)
+            .eq("id", log_id).execute().data[0])
+
+
+def insert_boost_run(data: dict) -> dict:
+    return get_client().table("agentic_boost_runs").insert(data).execute().data[0]
+
+
+def update_boost_run(run_id: str, patch: dict) -> dict:
+    return (get_client().table("agentic_boost_runs").update(patch)
+            .eq("id", run_id).execute().data[0])
+
+
+def get_boost_run(run_id: str) -> dict | None:
+    rows = (get_client().table("agentic_boost_runs").select("*")
+            .eq("id", run_id).execute().data)
+    return rows[0] if rows else None
+
+
+def list_boost_runs(created_by: str | None = None,
+                    limit: int = 50) -> list[dict]:
+    q = get_client().table("agentic_boost_runs").select("*")
+    if created_by:
+        q = q.eq("created_by", created_by)
+    return q.order("created_at", desc=True).limit(limit).execute().data
