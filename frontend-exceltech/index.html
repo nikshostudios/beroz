@@ -6942,6 +6942,7 @@
       }
       list.innerHTML = boostState.results.map((c, i) => {
         const draftId = c.draft_id || '';
+        const candId = c.candidate_id || '';
         const title = escapeHtmlBoost(c.current_job_title || '');
         const employer = escapeHtmlBoost(c.current_employer || '');
         const meta = title || employer
@@ -6951,15 +6952,18 @@
         const noEmail = !c.draft_sendable;
         const actions = draftId
           ? `
-              <button class="btn-secondary" onclick="editBoostDraft('${draftId}')">
+              <button class="btn-secondary" onclick="event.stopPropagation(); editBoostDraft('${draftId}')">
                 <span class="material-icons-outlined">edit</span> Edit Draft
               </button>
-              <button class="btn-primary" onclick="sendBoostDraft('${draftId}', this)" ${noEmail ? 'disabled title="No email address"' : ''}>
+              <button class="btn-primary" onclick="event.stopPropagation(); sendBoostDraft('${draftId}', this)" ${noEmail ? 'disabled title="No email address"' : ''}>
                 <span class="material-icons-outlined">send</span> Send Draft
               </button>`
           : '<span class="boost-muted">No email available</span>';
+        const clickableAttrs = candId
+          ? ` onclick="openCandidateDetail('${candId}', {requirementId: boostState.requirementId})" style="cursor:pointer"`
+          : '';
         return `
-          <div class="boost-candidate-row" data-draft-id="${draftId}">
+          <div class="boost-candidate-row" data-draft-id="${draftId}"${clickableAttrs}>
             <div class="boost-rank">#${i + 1}</div>
             <div>
               <div class="boost-cand-name">${escapeHtmlBoost(c.name || '—')}</div>
@@ -6967,7 +6971,7 @@
               <div class="boost-cand-score">Match: ${c.score == null ? '—' : c.score}</div>
               ${reasoning ? `<div class="boost-cand-reasoning">${reasoning}</div>` : ''}
             </div>
-            <div class="boost-cand-actions">${actions}</div>
+            <div class="boost-cand-actions" onclick="event.stopPropagation()">${actions}</div>
           </div>`;
       }).join('');
     }

@@ -980,8 +980,7 @@ def list_requirements(market: str | None, status: str = "open",
                 rid = row["requirement_id"]
                 counts[rid] = counts.get(rid, 0) + 1
             for r in reqs:
-                raw = counts.get(r["id"], 0)
-                r["matched_count"] = min(raw, DEFAULT_SOURCE_CAP_PER_REQ)
+                r["matched_count"] = counts.get(r["id"], 0)
         except Exception:
             for r in reqs:
                 r["matched_count"] = 0

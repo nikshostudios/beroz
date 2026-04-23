@@ -481,7 +481,9 @@ def api_candidate_detail_view(cid):
     """Return full candidate row + lazy-loaded company enrichment."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
-    return _ai_core_call(ai_core.get_candidate_detail, cid)
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_candidate_detail, cid, role, email)
 
 
 @app.route("/api/candidates/<cid>/dnc", methods=["POST"])
