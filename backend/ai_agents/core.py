@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from typing import Any
 import anthropic
 
 from .config import db, outlook, sourcing, search_parser, market_intelligence
+from . import webhook_signing
 
 log = logging.getLogger(__name__)
 
@@ -824,12 +826,15 @@ def get_apollo_credits() -> dict:
     return data
 
 
-def reveal_candidate_field(cid: str, field: str) -> dict:
+def reveal_candidate_field(cid: str, field: str,
+                           requested_by: str | None = None) -> dict:
     """Call Apollo /people/match to reveal name, email, or phone for a candidate.
 
-    Upserts the revealed value(s) back to the candidates row so subsequent
-    drawer opens are free (served from DB).  Returns {field, value,
-    credits_remaining}.
+    For name/email the revealed value is returned synchronously and upserted
+    back to the candidates row. For phone, Apollo delivers the number
+    asynchronously via webhook (see app.py:/api/apollo/phone-webhook), so
+    this returns {pending: True, value: None} and the frontend polls
+    /api/candidates/<cid>/reveal/status until the webhook lands.
     """
     if field not in ("name", "email", "phone"):
         raise CoreError(422, "field must be name | email | phone")
@@ -844,12 +849,28 @@ def reveal_candidate_field(cid: str, field: str) -> dict:
         raise CoreError(422, "Candidate has no Apollo id, LinkedIn URL, or email — cannot reveal")
 
     reveal_phone = field == "phone"
+    webhook_url: str | None = None
+    request_id: str | None = None
+    if reveal_phone:
+        public_url = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+        if not public_url:
+            raise CoreError(500, "PUBLIC_APP_URL not set; phone reveal disabled")
+        request_id = uuid.uuid4().hex
+        sig = webhook_signing.sign_phone_reveal(request_id, cid)
+        webhook_url = (f"{public_url}/api/apollo/phone-webhook"
+                       f"?request_id={request_id}&candidate_id={cid}&sig={sig}")
+        try:
+            db.pending_phone_reveal_create(request_id, cid, requested_by)
+        except Exception as e:
+            log.warning("Failed to insert pending_phone_reveals row: %s", e)
+
     try:
         person = asyncio.run(sourcing.apollo_people_match(
             apollo_person_id=apollo_id,
             linkedin_url=linkedin,
             email=email,
             reveal_phone_number=reveal_phone,
+            webhook_url=webhook_url,
         ))
     except RuntimeError as e:
         msg = str(e)
@@ -857,24 +878,8 @@ def reveal_candidate_field(cid: str, field: str) -> dict:
             raise CoreError(402, "apollo credits_exhausted")
         raise CoreError(502, f"Apollo error: {msg}")
 
-    # Determine the revealed value
-    if field == "name":
-        value = person.get("name") or ""
-    elif field == "email":
-        emails = person.get("email") or person.get("personal_emails") or []
-        if isinstance(emails, list):
-            value = emails[0] if emails else ""
-        else:
-            value = str(emails)
-    else:  # phone
-        phones = (person.get("phone_numbers") or
-                  person.get("sanitized_phone") or "")
-        if isinstance(phones, list):
-            value = phones[0].get("sanitized_number", "") if phones else ""
-        else:
-            value = str(phones)
-
-    # Persist revealed values so next open is free
+    # Persist any synchronously-revealed values (name/email come back
+    # synchronously even on a phone-reveal call).
     patch: dict = {}
     if person.get("name"):
         patch["name"] = person["name"]
@@ -893,7 +898,96 @@ def reveal_candidate_field(cid: str, field: str) -> dict:
     # Bust the credits cache so counter updates on next poll
     _apollo_credits_cache.clear()
 
+    if reveal_phone:
+        # Phone arrives async; tell the frontend to poll the status endpoint.
+        return {
+            "field": "phone",
+            "value": None,
+            "pending": True,
+            "request_id": request_id,
+            "candidate_id": cid,
+        }
+
+    # Sync reveal — pull the requested value out of the response.
+    if field == "name":
+        value = person.get("name") or ""
+    else:  # email
+        emails = person.get("email") or person.get("personal_emails") or []
+        if isinstance(emails, list):
+            value = emails[0] if emails else ""
+        else:
+            value = str(emails)
     return {"field": field, "value": value, "candidate_id": cid}
+
+
+def get_phone_reveal_status(cid: str) -> dict:
+    """Return latest phone-reveal status for a candidate (for frontend polling).
+
+    Statuses: pending, received, no_phone, failed, expired, none.
+    A still-pending row older than 5 min is returned as 'expired' (no DB write).
+    """
+    row = db.pending_phone_reveal_get_latest(cid)
+    if not row:
+        return {"status": "none"}
+    status = row.get("status") or "pending"
+    if status == "pending":
+        try:
+            requested_at = datetime.fromisoformat(
+                row["requested_at"].replace("Z", "+00:00"))
+        except Exception:
+            requested_at = None
+        if requested_at and (datetime.now(timezone.utc) - requested_at
+                             > timedelta(minutes=5)):
+            status = "expired"
+    return {
+        "status": status,
+        "phone": row.get("phone_number"),
+        "requested_at": row.get("requested_at"),
+        "received_at": row.get("received_at"),
+    }
+
+
+def handle_phone_webhook(request_id: str, candidate_id: str,
+                         payload: dict) -> dict:
+    """Process an Apollo phone-reveal webhook callback. Idempotent."""
+    pending = db.pending_phone_reveal_get(request_id)
+    if not pending:
+        log.warning("Phone webhook for unknown request_id=%s", request_id)
+        return {"ok": True, "noop": True}
+    if pending.get("status") != "pending":
+        # Already processed — Apollo retries; respond 200 to stop them.
+        return {"ok": True, "noop": True, "status": pending.get("status")}
+    if pending.get("candidate_id") != candidate_id:
+        log.warning("Phone webhook candidate_id mismatch: pending=%s req=%s",
+                    pending.get("candidate_id"), candidate_id)
+        return {"ok": True, "noop": True}
+
+    person = (payload.get("person") or payload.get("contact")
+              or payload or {})
+    phone_list = person.get("phone_numbers") or []
+    phone_val = ""
+    if phone_list and isinstance(phone_list[0], dict):
+        p = phone_list[0]
+        phone_val = p.get("sanitized_number") or p.get("raw_number") or ""
+    elif isinstance(person.get("phone"), str):
+        phone_val = person["phone"]
+
+    if phone_val:
+        try:
+            db.update_candidate(candidate_id, {
+                "phone": phone_val,
+                "enriched_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            log.error("Failed to upsert phone for %s: %s", candidate_id, e)
+        db.pending_phone_reveal_mark_received(
+            request_id, "received", phone_val, payload)
+        _apollo_credits_cache.clear()
+        return {"ok": True, "status": "received"}
+
+    db.pending_phone_reveal_mark_received(
+        request_id, "no_phone", None, payload)
+    return {"ok": True, "status": "no_phone"}
 
 
 def _fetch_company_enrichment(org_id: str | None) -> dict:

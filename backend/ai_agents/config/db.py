@@ -90,6 +90,54 @@ def update_candidate(candidate_id: str, patch: dict) -> dict:
             .execute().data[0])
 
 
+# ── Pending phone reveals (Apollo async webhook callbacks) ──────
+
+def pending_phone_reveal_create(request_id: str,
+                                candidate_id: str,
+                                requested_by: str | None = None) -> dict:
+    row = {
+        "request_id": request_id,
+        "candidate_id": candidate_id,
+        "requested_by": requested_by,
+        "status": "pending",
+    }
+    return (get_client().table("pending_phone_reveals")
+            .insert(row).execute().data[0])
+
+
+def pending_phone_reveal_mark_received(request_id: str,
+                                       status: str,
+                                       phone_number: str | None = None,
+                                       payload: dict | None = None) -> dict | None:
+    patch: dict = {
+        "status": status,
+        "received_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if phone_number:
+        patch["phone_number"] = phone_number
+    if payload is not None:
+        patch["webhook_payload"] = payload
+    rows = (get_client().table("pending_phone_reveals")
+            .update(patch).eq("request_id", request_id)
+            .execute().data)
+    return rows[0] if rows else None
+
+
+def pending_phone_reveal_get(request_id: str) -> dict | None:
+    rows = (get_client().table("pending_phone_reveals")
+            .select("*").eq("request_id", request_id)
+            .execute().data)
+    return rows[0] if rows else None
+
+
+def pending_phone_reveal_get_latest(candidate_id: str) -> dict | None:
+    rows = (get_client().table("pending_phone_reveals")
+            .select("*").eq("candidate_id", candidate_id)
+            .order("requested_at", desc=True).limit(1)
+            .execute().data)
+    return rows[0] if rows else None
+
+
 # ── Company Enrichment (Apollo org cache) ───────────────────────
 
 def get_company_enrichment(apollo_organization_id: str) -> dict | None:

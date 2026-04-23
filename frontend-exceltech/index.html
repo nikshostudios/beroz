@@ -591,6 +591,11 @@
                    padding:1px 6px; border-radius:10px; background:rgba(0,0,0,.06);
                    font-size:11px; font-weight:600; color:var(--text-primary); }
     .reveal-cost .material-icons-outlined { font-size:12px; color:#f59e0b; }
+    .reveal-pending { display:inline-flex; align-items:center; gap:6px;
+                      font-size:11px; color:var(--text-secondary); }
+    .reveal-pending .loading-spinner { width:10px; height:10px; border-width:2px; }
+    .reveal-retry { font-size:11px; color:var(--brand-purple); cursor:pointer;
+                    text-decoration:underline; background:none; border:none; padding:0; }
     .reveal-value { font-size:12px; color:var(--text-primary); }
     .reveal-value.masked { filter:blur(4px); user-select:none; cursor:pointer; }
     .dnc-pill { display:inline-block; padding:2px 7px; border-radius:10px;
@@ -7995,6 +8000,18 @@
         const data = await api(`/api/candidates/${candidateId}/reveal`, {
           method: 'POST', body: { field }
         });
+
+        if (data?.pending && field === 'phone') {
+          // Apollo delivers phone async; replace pill with a pending span
+          // and start polling the status endpoint.
+          const pendingId = `phone-pending-${candidateId}-${Date.now()}`;
+          btn.outerHTML = `<span class="reveal-pending" id="${pendingId}">
+            <div class="loading-spinner"></div> Requesting phone…
+          </span>`;
+          pollPhoneReveal(candidateId, pendingId);
+          return { pending: true };
+        }
+
         const value = data?.value || '';
         let displayHtml;
         if (field === 'email') {
@@ -8024,6 +8041,61 @@
           showToast('Reveal failed: ' + msg, 'error');
         }
       }
+    }
+
+    // Poll the phone-reveal status endpoint until the Apollo webhook lands
+    // (status='received'/'no_phone'/'failed'/'expired') or we hit the timeout.
+    async function pollPhoneReveal(candidateId, pendingId, attempt = 0) {
+      const MAX_ATTEMPTS = 20;       // 20 polls × 3s = 60s
+      const INTERVAL_MS = 3000;
+      const span = document.getElementById(pendingId);
+      if (!span) return;             // user navigated away or DOM replaced
+
+      let data;
+      try {
+        data = await api(`/api/candidates/${candidateId}/reveal/status`);
+      } catch (_) {
+        // Network blip — retry next tick if we still have attempts
+        if (attempt + 1 >= MAX_ATTEMPTS) {
+          span.outerHTML = `<button class="reveal-retry" onclick="retryPhoneReveal('${esc(candidateId)}', this)">Still pending — retry</button>`;
+          return;
+        }
+        setTimeout(() => pollPhoneReveal(candidateId, pendingId, attempt + 1), INTERVAL_MS);
+        return;
+      }
+
+      const status = data?.status;
+      if (status === 'received' && data.phone) {
+        span.outerHTML = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(data.phone))}</span>`;
+        fetchApolloCredits().catch(() => {});
+        return;
+      }
+      if (status === 'no_phone') {
+        span.outerHTML = '<span class="dnc-pill">No phone available</span>';
+        return;
+      }
+      if (status === 'failed' || status === 'expired') {
+        span.outerHTML = `<button class="reveal-retry" onclick="retryPhoneReveal('${esc(candidateId)}', this)">Phone reveal ${status} — retry</button>`;
+        return;
+      }
+      // status === 'pending' or 'none' — keep polling
+      if (attempt + 1 >= MAX_ATTEMPTS) {
+        span.outerHTML = `<button class="reveal-retry" onclick="retryPhoneReveal('${esc(candidateId)}', this)">Still pending — retry</button>`;
+        return;
+      }
+      setTimeout(() => pollPhoneReveal(candidateId, pendingId, attempt + 1), INTERVAL_MS);
+    }
+
+    // Re-issue a phone reveal request from a retry button.
+    function retryPhoneReveal(candidateId, btn) {
+      // Swap the retry button back into a pill so revealField has something
+      // to disable + replace, mirroring the original click target.
+      const pill = document.createElement('button');
+      pill.className = 'reveal-pill';
+      pill.dataset.cid = candidateId;
+      pill.innerHTML = '<span class="material-icons-outlined">phone</span> Access mobile <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>';
+      btn.replaceWith(pill);
+      revealField(candidateId, 'phone', pill);
     }
 
     async function openApolloDrawer(candidateId) {
@@ -8155,9 +8227,11 @@
 
     async function revealFieldDrawer(candidateId, field, btn) {
       const cell = btn.closest('[id]');
-      await revealField(candidateId, field, btn);
-      // Re-open drawer to refresh contact panel after reveal
-      // (cheapest way: just reload the detail quietly)
+      const result = await revealField(candidateId, field, btn);
+      // For phone reveals the answer arrives async via webhook; the pending
+      // span is being polled in place, so DON'T re-render the drawer (would
+      // wipe it out and orphan the polling).
+      if (result?.pending) return;
       try {
         const data = await api(`/api/candidates/${candidateId}/detail`);
         const c = data?.candidate || {};

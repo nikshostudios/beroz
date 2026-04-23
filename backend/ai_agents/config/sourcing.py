@@ -169,11 +169,13 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
 async def apollo_people_match(apollo_person_id: str | None = None,
                               linkedin_url: str | None = None,
                               email: str | None = None,
-                              reveal_phone_number: bool = False) -> dict:
+                              reveal_phone_number: bool = False,
+                              webhook_url: str | None = None) -> dict:
     """Reveal a single Apollo contact via /v1/people/match.
 
     Pass at least one identifier (id > linkedin > email). When
-    `reveal_phone_number` is True Apollo also returns the mobile number,
+    `reveal_phone_number` is True Apollo returns the mobile number
+    asynchronously to `webhook_url` (required when reveal_phone_number=True),
     consuming one phone credit on top of the email-reveal cost.
     """
     api_key = (os.environ.get("APOLLO_API_KEY")
@@ -182,6 +184,8 @@ async def apollo_people_match(apollo_person_id: str | None = None,
         raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
     if not (apollo_person_id or linkedin_url or email):
         raise RuntimeError("apollo_people_match needs id, linkedin, or email")
+    if reveal_phone_number and not webhook_url:
+        raise RuntimeError("apollo_people_match: webhook_url required when reveal_phone_number=True")
 
     body: dict = {"reveal_personal_emails": True}
     if apollo_person_id:
@@ -192,6 +196,7 @@ async def apollo_people_match(apollo_person_id: str | None = None,
         body["email"] = email
     if reveal_phone_number:
         body["reveal_phone_number"] = True
+        body["webhook_url"] = webhook_url
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(

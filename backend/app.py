@@ -476,6 +476,34 @@ def api_candidate_reveal(cid):
     return _ai_core_call(ai_core.reveal_candidate_field, cid, field)
 
 
+@app.route("/api/candidates/<cid>/reveal/status", methods=["GET"])
+def api_candidate_reveal_status(cid):
+    """Poll the latest phone-reveal status for a candidate."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    return _ai_core_call(ai_core.get_phone_reveal_status, cid)
+
+
+@app.route("/api/apollo/phone-webhook", methods=["POST"])
+def api_apollo_phone_webhook():
+    """Apollo posts the revealed phone number here. Token-signed, no auth."""
+    from ai_agents import webhook_signing
+    request_id = request.args.get("request_id", "")
+    candidate_id = request.args.get("candidate_id", "")
+    sig = request.args.get("sig", "")
+    if not webhook_signing.verify_phone_reveal(request_id, candidate_id, sig):
+        return jsonify({"error": "invalid signature"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = ai_core.handle_phone_webhook(request_id, candidate_id, payload)
+        return jsonify(result), 200
+    except Exception as e:
+        # Always return 200 so Apollo doesn't retry on our bugs; log loudly.
+        import logging
+        logging.getLogger(__name__).exception("phone webhook handler failed")
+        return jsonify({"ok": False, "error": str(e)}), 200
+
+
 @app.route("/api/candidates/<cid>/detail", methods=["GET"])
 def api_candidate_detail_view(cid):
     """Return full candidate row + lazy-loaded company enrichment."""
