@@ -113,10 +113,14 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
         raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
 
     default_loc = "Singapore" if market == "SG" else "India"
-    body = {
-        "q_keywords": params.get("q_keywords", ""),
-        "per_page": 50,
-    }
+    body = {"per_page": 50}
+    # Apollo's api_search treats q_keywords as an AND full-text match (not
+    # fuzzy, despite what the UI suggests). Anything beyond ~2 tokens rapidly
+    # drops total_entries to 0. Cap to 2 tokens, and only include when we
+    # don't already have person_titles (which is more precise).
+    q_raw = (params.get("q_keywords") or "").strip()
+    if q_raw and not params.get("person_titles"):
+        body["q_keywords"] = " ".join(q_raw.split()[:2])
     if params.get("person_titles"):
         body["person_titles"] = list(params["person_titles"])[:4]
     body["person_locations"] = list(

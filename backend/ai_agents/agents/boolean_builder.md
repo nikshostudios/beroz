@@ -50,7 +50,7 @@ Return a single JSON object — no markdown, no commentary, no backticks:
 - Keep the string under 500 characters. If too long, drop nice-to-have skills first.
 
 ### apollo_params
-- `q_keywords`: space-separated bag of words from `skills_required` (and optionally `role_title`). NO quotes, NO operators — Apollo treats it as fuzzy keywords.
+- `q_keywords`: AT MOST 2 single-word tokens, space-separated, drawn from the most important must-have skills. NO quotes, NO operators. Apollo's api_search endpoint treats q_keywords as exact-match AND across the whole string — every extra token narrows results exponentially, and anything beyond 2 tokens typically drops matches to zero. When in doubt, leave it empty and rely on `person_titles`.
 - `person_titles`: array of role title variants — include `role_title` and 1-3 close variants (e.g., `["ServiceNow Developer", "SNOW Developer", "ServiceNow Engineer"]`). Keep ≤ 4.
 - `person_locations`: array of location strings. If `location` is just a city, expand to `"<City>, <Country>"` (e.g., `"Bangalore, India"`). For `market=SG` default to `["Singapore"]`. For `market=IN` default to `["India"]`.
 - `person_seniorities`: array — pick from `["entry", "junior", "senior", "manager", "director", "vp", "c_suite"]`. Map: `experience_min < 3` → `["entry","junior"]`; `3-7` → `["senior"]`; `7-12` → `["senior","manager"]`; `>12` → `["manager","director"]`. If `experience_min` is null, omit the field.
