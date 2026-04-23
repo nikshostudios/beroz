@@ -3507,10 +3507,14 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                     title = cand.get("current_job_title") or "Unknown role"
                     employer = cand.get("current_employer") or "unknown employer"
                     cand["name"] = f"{title} @ {employer} (Apollo)"
-                if cand.get("_apollo_person_id"):
-                    cand["apollo_person_id"] = cand["_apollo_person_id"]
-                if cand.get("_apollo_organization_id"):
-                    cand["apollo_organization_id"] = cand["_apollo_organization_id"]
+                # Drop the `_`-prefixed sentinel keys before upsert — they
+                # aren't real columns and Supabase rejects the whole insert.
+                apollo_pid = cand.pop("_apollo_person_id", None)
+                apollo_oid = cand.pop("_apollo_organization_id", None)
+                if apollo_pid:
+                    cand["apollo_person_id"] = apollo_pid
+                if apollo_oid:
+                    cand["apollo_organization_id"] = apollo_oid
                 # Persist Apollo results (they're new external candidates)
                 try:
                     if cand.get("email"):
