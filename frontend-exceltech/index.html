@@ -6882,6 +6882,8 @@
           if (desc) desc.textContent =
             `Apollo: ${c.apollo || 0} · Internal DB: ${c.internal_db || 0} · Unique: ${evt.payload.total_unique || 0}`;
           boostState.channelErrors = evt.payload.channel_errors || {};
+          boostState.sourcingCounts = c;
+          boostState.sourcingTotalUnique = evt.payload.total_unique || 0;
         }
         if (evt.agent === 'screener' && evt.payload) {
           const desc = document.getElementById('agent-desc-screener');
@@ -6907,9 +6909,14 @@
         switchBoostView('results');
       } else if (evt.event === 'error') {
         let msg = 'Pipeline error: ' + evt.message;
+        const c = boostState.sourcingCounts;
+        if (c) {
+          msg += `\n\nSourcing results:\n  • Apollo: ${c.apollo || 0}\n  • Internal DB: ${c.internal_db || 0}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
+        }
         const errs = boostState.channelErrors || {};
         const lines = Object.entries(errs).map(([ch, m]) => `  • ${ch}: ${m}`);
         if (lines.length) msg += '\n\nChannel errors:\n' + lines.join('\n');
+        else if (c) msg += '\n\n(No channel errors — both channels succeeded but returned zero matching candidates.)';
         alert(msg);
         switchBoostView('input');
       }
