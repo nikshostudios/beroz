@@ -587,6 +587,10 @@
       color:var(--brand-purple); background:#faf7ff; }
     .reveal-pill:disabled { opacity:.55; cursor:not-allowed; }
     .reveal-pill .material-icons-outlined { font-size:12px; }
+    .reveal-cost { display:inline-flex; align-items:center; gap:2px; margin-left:6px;
+                   padding:1px 6px; border-radius:10px; background:rgba(0,0,0,.06);
+                   font-size:11px; font-weight:600; color:var(--text-primary); }
+    .reveal-cost .material-icons-outlined { font-size:12px; color:#f59e0b; }
     .reveal-value { font-size:12px; color:var(--text-primary); }
     .reveal-value.masked { filter:blur(4px); user-select:none; cursor:pointer; }
     .dnc-pill { display:inline-block; padding:2px 7px; border-radius:10px;
@@ -2084,9 +2088,12 @@
               <span style="color:var(--text-secondary)">Previous runs:</span>
               <select id="boost-session-picker-input" style="flex:1;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff"></select>
             </div>
-            <div id="boost-orphan-banner" class="hidden" style="max-width:900px;margin:0 auto 12px auto;padding:10px 14px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;color:#92400e;font-size:13px;display:flex;align-items:center;gap:8px">
-              <span class="material-icons-outlined" style="font-size:16px">warning_amber</span>
-              <span>A previous boost stalled — start a new one.</span>
+            <div id="boost-orphan-banner" class="hidden" style="max-width:900px;margin:0 auto 12px auto;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e40af;font-size:13px;display:flex;align-items:center;gap:8px">
+              <span class="material-icons-outlined" style="font-size:16px">info_outline</span>
+              <span style="flex:1">A previous run is still marked as in-progress. You can ignore this or start a new boost.</span>
+              <button type="button" id="boost-orphan-dismiss" aria-label="Dismiss" style="background:none;border:none;padding:2px;cursor:pointer;color:#1e40af;display:flex;align-items:center">
+                <span class="material-icons-outlined" style="font-size:16px">close</span>
+              </button>
             </div>
             <div class="boost-input-card">
               <label for="boost-market">Market</label>
@@ -6867,7 +6874,7 @@
         && (Date.now() - new Date(boostState.sessions[0].created_at).getTime()
             > 10 * 60 * 1000);
       const banner = document.getElementById('boost-orphan-banner');
-      if (banner) banner.classList.toggle('hidden', !orphan);
+      if (banner) banner.classList.toggle('hidden', !orphan || boostState.orphanDismissed);
     }
 
     function populateBoostSessionPickers() {
@@ -6921,6 +6928,9 @@
     }
 
     function startNewBoost() {
+      const orphanBanner = document.getElementById('boost-orphan-banner');
+      if (orphanBanner) orphanBanner.classList.add('hidden');
+      boostState.orphanDismissed = true;
       boostState.results = [];
       boostState.boostId = null;
       boostState.requirementId = null;
@@ -7009,6 +7019,9 @@
         alert('Please paste a JD of at least 50 characters.');
         return;
       }
+      const orphanBanner = document.getElementById('boost-orphan-banner');
+      if (orphanBanner) orphanBanner.classList.add('hidden');
+      boostState.orphanDismissed = true;
       boostState.boostId = null;
       boostState.requirementId = null;
       boostState.booleanString = '';
@@ -7234,6 +7247,13 @@
 
       const newBtn = document.getElementById('btn-new-boost');
       if (newBtn) newBtn.addEventListener('click', startNewBoost);
+
+      const orphanDismiss = document.getElementById('boost-orphan-dismiss');
+      if (orphanDismiss) orphanDismiss.addEventListener('click', () => {
+        const b = document.getElementById('boost-orphan-banner');
+        if (b) b.classList.add('hidden');
+        boostState.orphanDismissed = true;
+      });
 
       ['boost-session-picker', 'boost-session-picker-input'].forEach(id => {
         const el = document.getElementById(id);
@@ -7709,9 +7729,9 @@
       const creditsHtml = state._apolloCredits
         ? `<div class="credits-bar">
             <span><span class="material-icons-outlined" style="font-size:13px">email</span>
-              ${(state._apolloCredits.email_credits || 0).toLocaleString()} email</span>
+              ${(state._apolloCredits.email_credits || 0).toLocaleString()} email credits</span>
             <span><span class="material-icons-outlined" style="font-size:13px">phone</span>
-              ${(state._apolloCredits.phone_credits || 0).toLocaleString()} phone</span>
+              ${(state._apolloCredits.phone_credits || 0).toLocaleString()} phone credits</span>
            </div>`
         : '';
       const toggleHtml = `
@@ -7815,7 +7835,7 @@
         // (Boost sets it to openCandidateDetail; default is openApolloDrawer).
         const nameCell = isApolloRedacted
           ? `<button class="reveal-pill" onclick="revealField('${cid}','name',this)" data-cid="${cid}">
-               <span class="material-icons-outlined">lock</span> Reveal name <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+               <span class="material-icons-outlined">lock</span> Reveal name <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
              </button>`
           : `<button class="arow-name-btn" onclick="(window._drawerOpener || openApolloDrawer)('${cid}')">${esc(c.name)}</button>`;
 
@@ -7827,7 +7847,7 @@
           emailCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`;
         } else {
           emailCell = `<button class="reveal-pill" onclick="revealField('${cid}','email',this)" data-cid="${cid}">
-            <span class="material-icons-outlined">email</span> Access email <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+            <span class="material-icons-outlined">email</span> Access email <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
           </button>`;
         }
 
@@ -7839,7 +7859,7 @@
           phoneCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`;
         } else {
           phoneCell = `<button class="reveal-pill" onclick="revealField('${cid}','phone',this)" data-cid="${cid}">
-            <span class="material-icons-outlined">phone</span> Access mobile <em style="margin-left:2px;opacity:.7">(1 cr)</em>
+            <span class="material-icons-outlined">phone</span> Access mobile <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
           </button>`;
         }
 
@@ -8054,7 +8074,7 @@
         : c.email
           ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`
           : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','email',this)">
-               <span class="material-icons-outlined">email</span> Access email <em>(1 cr)</em>
+               <span class="material-icons-outlined">email</span> Access email <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
              </button>`;
 
       const phoneReveal = c.do_not_call
@@ -8062,7 +8082,7 @@
         : c.phone
           ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`
           : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','phone',this)">
-               <span class="material-icons-outlined">phone</span> Access mobile <em>(1 cr)</em>
+               <span class="material-icons-outlined">phone</span> Access mobile <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
              </button>`;
 
       container.innerHTML = `
