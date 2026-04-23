@@ -3492,10 +3492,15 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     region_default = "Singapore" if market == "SG" else "India"
     fallback_loc = (apollo_params.get("person_locations")
                     or [region_default])[0]
+    apollo_received = 0
+    apollo_upsert_errs: list[str] = []
+    apollo_skipped_no_key = 0
     for name, result in gathered:
         if isinstance(result, Exception):
             channel_errors[name] = f"{type(result).__name__}: {result}"
             continue
+        if name == "apollo":
+            apollo_received = len(result)
         for cand in result:
             if name == "apollo":
                 # Apollo redacts name / email / location at search tier.
@@ -3522,8 +3527,13 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                     elif cand.get("name"):
                         row = db.upsert_candidate_by_name(cand)
                     else:
+                        apollo_skipped_no_key += 1
                         continue
-                except Exception:
+                except Exception as upsert_err:
+                    if len(apollo_upsert_errs) < 3:
+                        apollo_upsert_errs.append(
+                            f"{type(upsert_err).__name__}: "
+                            f"{str(upsert_err)[:200]}")
                     log.exception("apollo upsert failed for %s",
                                   cand.get("name"))
                     continue
@@ -3535,6 +3545,23 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 if cid and cid not in pool_by_id:
                     pool_by_id[cid] = cand
                     source_counts["internal_db"] += 1
+
+    # Surface silent Apollo drops in channel_errors so the pipeline-error
+    # alert can tell us whether the API returned nothing, rows got skipped
+    # pre-upsert, or Supabase rejected every insert.
+    if (apollo_enabled
+            and source_counts["apollo"] == 0
+            and "apollo" not in channel_errors):
+        parts = [f"received {apollo_received} rows"]
+        if apollo_skipped_no_key:
+            parts.append(f"{apollo_skipped_no_key} skipped "
+                         f"(no email/name after synthesis)")
+        if apollo_upsert_errs:
+            parts.append(f"upsert errs (up to 3): {apollo_upsert_errs}")
+        elif apollo_received and not apollo_skipped_no_key:
+            parts.append("all rows reached upsert but none persisted "
+                         "(empty row returned)")
+        channel_errors["apollo"] = "post-sourcing drop — " + "; ".join(parts)
 
     pool = list(pool_by_id.values())
     yield _sse({"event": "agent_done", "agent": "sourcing", "payload": {
