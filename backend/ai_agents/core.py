@@ -3460,6 +3460,15 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     channel_errors: dict[str, str] = {}
     source_counts: dict[str, int] = {"apollo": 0, "internal_db": 0}
     pool_by_id: dict[str, dict] = {}
+    apollo_params = boolean_output.get("apollo_params") or {}
+
+    if not apollo_enabled:
+        channel_errors["apollo"] = "skipped — APOLLO_API_KEY not set on server"
+    elif not (apollo_params.get("person_titles")
+              or apollo_params.get("q_keywords")):
+        channel_errors["apollo"] = ("skipped — boolean builder produced no "
+                                    "person_titles or q_keywords to search with")
+        apollo_enabled = False
 
     async def _run_sourcing():
         task_names: list[str] = []
@@ -3467,7 +3476,7 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         if apollo_enabled:
             task_names.append("apollo")
             coros.append(sourcing.source_apollo_structured(
-                boolean_output.get("apollo_params") or {}, market))
+                apollo_params, market))
         task_names.append("internal_db")
         coros.append(_internal_db_search(requirement, limit=200))
         gathered = await asyncio.gather(*coros, return_exceptions=True)
