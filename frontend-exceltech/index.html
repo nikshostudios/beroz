@@ -6875,6 +6875,7 @@
         if (evt.agent === 'jd_parser') boostState.jdParsed = evt.payload || null;
         if (evt.agent === 'boolean_builder' && evt.payload) {
           boostState.booleanString = evt.payload.boolean_string || '';
+          boostState.apolloParams = evt.payload.apollo_params || null;
         }
         if (evt.agent === 'sourcing' && evt.payload) {
           const c = evt.payload.counts || {};
@@ -6912,6 +6913,9 @@
         const c = boostState.sourcingCounts;
         if (c) {
           msg += `\n\nSourcing results:\n  • Apollo: ${c.apollo || 0}\n  • Internal DB: ${c.internal_db || 0}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
+        }
+        if (boostState.apolloParams) {
+          msg += '\n\nApollo query sent:\n' + JSON.stringify(boostState.apolloParams, null, 2);
         }
         const errs = boostState.channelErrors || {};
         const lines = Object.entries(errs).map(([ch, m]) => `  • ${ch}: ${m}`);
