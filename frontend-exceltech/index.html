@@ -2079,6 +2079,15 @@
               <h1>Agentic Boost</h1>
               <p>Paste a JD. Five AI agents source, score, and draft emails to the top 50 candidates — in under two minutes.</p>
             </div>
+            <div id="boost-input-session-row" style="display:none;max-width:900px;margin:0 auto 12px auto;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;align-items:center;gap:10px;font-size:13px">
+              <span class="material-icons-outlined" style="font-size:16px;color:#6366f1">history</span>
+              <span style="color:var(--text-secondary)">Previous runs:</span>
+              <select id="boost-session-picker-input" style="flex:1;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff"></select>
+            </div>
+            <div id="boost-orphan-banner" class="hidden" style="max-width:900px;margin:0 auto 12px auto;padding:10px 14px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;color:#92400e;font-size:13px;display:flex;align-items:center;gap:8px">
+              <span class="material-icons-outlined" style="font-size:16px">warning_amber</span>
+              <span>A previous boost stalled — start a new one.</span>
+            </div>
             <div class="boost-input-card">
               <label for="boost-market">Market</label>
               <select id="boost-market">
@@ -2111,6 +2120,10 @@
               <h2>Top <span id="boost-top-count">0</span> Candidates</h2>
               <div class="boost-meta">
                 <span id="boost-req-title"></span>
+                <select id="boost-session-picker" title="Switch to a previous run" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff;max-width:260px"></select>
+                <button id="btn-boost-shortlist" class="btn-secondary" disabled title="Shortlist the selected candidates">
+                  <span class="material-icons-outlined">star_outline</span> Shortlist Selected (<span id="boost-shortlist-count">0</span>)
+                </button>
                 <button id="btn-copy-boolean" class="btn-secondary" title="Copy boolean search string">
                   <span class="material-icons-outlined">content_copy</span> Copy Boolean
                 </button>
@@ -3522,6 +3535,7 @@
             <button class="cand-tab" data-cand-tab="education" type="button">Education</button>
             <button class="cand-tab" data-cand-tab="skills" type="button">Skills</button>
           </div>
+          <div id="cand-panel-drafts" style="display:none"></div>
           <div class="cand-tab-content">
             <div class="cand-tab-panel active" data-cand-tab="overview" id="cand-panel-overview"></div>
             <div class="cand-tab-panel" data-cand-tab="experience" id="cand-panel-experience"></div>
@@ -4373,6 +4387,7 @@
 
     function updateSeqActionBar() {
       const bar = document.getElementById('seq-action-bar');
+      if (!bar) return;
       const count = state.selectedSequenceCandidates?.size || 0;
       if (count === 0) { bar.classList.add('hidden'); return; }
       bar.classList.remove('hidden');
@@ -4651,6 +4666,8 @@
       currentCandidateReqId = null;
       currentCandidateName = '';
       currentCandidateSubmissions = [];
+      const dp = document.getElementById('cand-panel-drafts');
+      if (dp) { dp.style.display = 'none'; dp.innerHTML = ''; }
     }
 
     document.getElementById('cand-slide-close-top')?.addEventListener('click', closeCandidateDetail);
@@ -4819,6 +4836,9 @@
       // Notes
       renderNotes(notes);
 
+      // Active drafts for the current requirement (Boost flow)
+      renderCandidateDrafts(data?.outreach || []);
+
       // Sequences (email history for this candidate)
       renderCandidateSequences(data?.outreach || []);
 
@@ -4828,6 +4848,52 @@
         outreach: data?.outreach || [],
         submissions: currentCandidateSubmissions,
       });
+    }
+
+    function renderCandidateDrafts(outreach) {
+      const panel = document.getElementById('cand-panel-drafts');
+      if (!panel) return;
+      const reqId = currentCandidateReqId;
+      // Find the latest draft outreach row matching this requirement.
+      const latest = (outreach || [])
+        .filter(o => o && o.status === 'draft'
+          && (reqId ? o.requirement_id === reqId : true))
+        .sort((a, b) => new Date(b.created_at || b.sent_at || 0)
+                       - new Date(a.created_at || a.sent_at || 0))[0];
+      if (!latest) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        panel._latestDraft = null;
+        return;
+      }
+      const subj = esc(latest.email_subject || '(no subject)');
+      const id = esc(latest.id);
+      panel._latestDraft = latest;
+      panel.style.display = 'block';
+      panel.innerHTML = `
+        <div style="margin:12px 24px 0 24px;padding:12px 14px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
+            <div style="font-weight:600;font-size:13px;color:#3730a3;display:flex;align-items:center;gap:6px">
+              <span class="material-icons-outlined" style="font-size:16px">drafts</span>
+              Active Draft
+            </div>
+            <div style="font-size:11px;color:#6366f1">Ready to send</div>
+          </div>
+          <div style="font-size:13px;color:var(--text-primary);margin-bottom:10px;word-break:break-word">
+            <span style="color:var(--text-secondary)">Subject:</span> ${subj}
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-secondary" type="button" onclick="editBoostDraft('${id}')">
+              <span class="material-icons-outlined" style="font-size:14px">edit</span>
+              Edit Draft
+            </button>
+            <button class="btn-primary" type="button" onclick="sendBoostDraft('${id}', this)">
+              <span class="material-icons-outlined" style="font-size:14px">send</span>
+              Send Draft
+            </button>
+          </div>
+        </div>
+      `;
     }
 
     function renderCandidateSequences(outreach) {
@@ -6760,9 +6826,33 @@
       booleanString: '',
       jdParsed: null,
       results: [],
+      sessions: [],
+      currentSessionId: null,
+      viewMode: localStorage.getItem('boostViewMode') || 'table',
+      completedAt: null,
     };
 
-    function loadAgenticBoost() {
+    async function loadAgenticBoost() {
+      // Populate session picker (runs in background; non-fatal on failure).
+      try {
+        const data = await api('/api/agentic-boost/runs');
+        boostState.sessions = data?.runs || [];
+      } catch (_) {
+        boostState.sessions = [];
+      }
+      populateBoostSessionPickers();
+
+      // If we already have results in memory (e.g. tab switch during session),
+      // keep the user on the results view — just re-render to refresh DOM.
+      if (boostState.results?.length) {
+        renderBoostResults();
+        switchBoostView('results');
+        return;
+      }
+
+      // Otherwise default to the input view. Per product decision, we do not
+      // auto-rehydrate the last completed session here — the user can use the
+      // session picker on this view to pick one up.
       switchBoostView('input');
       const ta = document.getElementById('boost-jd-text');
       if (ta) ta.value = '';
@@ -6770,6 +6860,114 @@
       if (cc) cc.textContent = '0 characters';
       const launchBtn = document.getElementById('btn-launch-boost');
       if (launchBtn) launchBtn.disabled = false;
+
+      // Orphan-run warning: most recent run is still "running" but >10 min old.
+      const orphan = (boostState.sessions[0]?.status === 'running')
+        && boostState.sessions[0].created_at
+        && (Date.now() - new Date(boostState.sessions[0].created_at).getTime()
+            > 10 * 60 * 1000);
+      const banner = document.getElementById('boost-orphan-banner');
+      if (banner) banner.classList.toggle('hidden', !orphan);
+    }
+
+    function populateBoostSessionPickers() {
+      const runs = boostState.sessions || [];
+      const role = (state.user?.role || 'recruiter');
+      const opts = ['<option value="">— Past runs —</option>'].concat(
+        runs.map(r => {
+          const when = r.created_at
+            ? new Date(r.created_at).toLocaleDateString() : '';
+          const jd = (r.jd_text || '').slice(0, 50);
+          const prefix = (role === 'tl' && r.created_by)
+            ? `${r.created_by} · ` : '';
+          const label = `${when} · ${prefix}${jd}${jd.length >= 50 ? '…' : ''}`;
+          const selected = r.id === boostState.currentSessionId ? ' selected' : '';
+          return `<option value="${esc(r.id)}"${selected}>${esc(label)}</option>`;
+        })
+      ).join('');
+      const showInput = runs.length > 0;
+      const rowInput = document.getElementById('boost-input-session-row');
+      if (rowInput) rowInput.style.display = showInput ? 'flex' : 'none';
+      ['boost-session-picker', 'boost-session-picker-input'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = opts;
+      });
+    }
+
+    async function loadBoostSession(boostId) {
+      if (!boostId) return;
+      try {
+        const run = await api(`/api/agentic-boost/runs/${boostId}`);
+        boostState.boostId = run.id || boostId;
+        boostState.currentSessionId = run.id || boostId;
+        boostState.requirementId = run.requirement_id || null;
+        boostState.booleanString = run.boolean_string || '';
+        boostState.jdParsed = null;
+        boostState.results = run.top_candidates || [];
+        boostState.completedAt = run.completed_at || null;
+        const titleEl = document.getElementById('boost-req-title');
+        if (titleEl) {
+          const jd = (run.jd_text || '').slice(0, 60);
+          const when = run.completed_at
+            ? new Date(run.completed_at).toLocaleString() : '';
+          titleEl.textContent = (jd ? jd + (run.jd_text && run.jd_text.length > 60 ? '…' : '') : 'Role from JD')
+            + (when ? ' · ' + when : '');
+        }
+        renderBoostResults();
+        switchBoostView('results');
+      } catch (err) {
+        alert('Could not load session: ' + err.message);
+      }
+    }
+
+    function startNewBoost() {
+      boostState.results = [];
+      boostState.boostId = null;
+      boostState.requirementId = null;
+      boostState.currentSessionId = null;
+      boostState.booleanString = '';
+      boostState.jdParsed = null;
+      boostState.completedAt = null;
+      const ta = document.getElementById('boost-jd-text');
+      if (ta) ta.value = '';
+      const cc = document.getElementById('boost-char-counter');
+      if (cc) cc.textContent = '0 characters';
+      const launchBtn = document.getElementById('btn-launch-boost');
+      if (launchBtn) launchBtn.disabled = false;
+      populateBoostSessionPickers();
+      switchBoostView('input');
+    }
+
+    function setBoostViewMode(mode) {
+      boostState.viewMode = mode;
+      try { localStorage.setItem('boostViewMode', mode); } catch (_) {}
+      renderBoostResults();
+    }
+
+    function _openCandidateFromBoost(cid) {
+      openCandidateDetail(cid, { requirementId: boostState.requirementId });
+    }
+
+    function updateBoostShortlistButton() {
+      const list = document.getElementById('boost-candidate-list');
+      if (!list) return;
+      const count = list.querySelectorAll('.seq-cand-check:checked').length;
+      const btn = document.getElementById('btn-boost-shortlist');
+      const countEl = document.getElementById('boost-shortlist-count');
+      if (btn) btn.disabled = count === 0;
+      if (countEl) countEl.textContent = String(count);
+    }
+
+    function wireBoostSelectionCheckboxes(container) {
+      container.querySelectorAll('.seq-cand-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const row = cb.closest('.person-card') || cb.closest('tr');
+          row?.classList.toggle('selected', cb.checked);
+          updateBoostShortlistButton();
+        });
+      });
+      updateBoostShortlistButton();
     }
 
     function switchBoostView(view) {
@@ -6816,6 +7014,8 @@
       boostState.booleanString = '';
       boostState.jdParsed = null;
       boostState.results = [];
+      boostState.currentSessionId = null;
+      boostState.completedAt = null;
 
       switchBoostView('progress');
       const statuses = {};
@@ -6860,6 +7060,7 @@
       if (!evt || !evt.event) return;
       if (evt.event === 'boost_start') {
         boostState.boostId = evt.boost_id;
+        boostState.currentSessionId = evt.boost_id;
       } else if (evt.event === 'agent_start') {
         statuses[evt.agent] = 'running';
         renderBoostAgentCards(statuses);
@@ -6906,8 +7107,14 @@
         boostState.requirementId = evt.requirement_id;
         boostState.results = evt.top_candidates || [];
         if (evt.boolean_string) boostState.booleanString = evt.boolean_string;
+        boostState.completedAt = new Date().toISOString();
         renderBoostResults();
         switchBoostView('results');
+        // Refresh the session list so the just-finished run shows up.
+        api('/api/agentic-boost/runs').then(d => {
+          boostState.sessions = d?.runs || [];
+          populateBoostSessionPickers();
+        }).catch(() => {});
       } else if (evt.event === 'error') {
         let msg = 'Pipeline error: ' + evt.message;
         const c = boostState.sourcingCounts;
@@ -6930,50 +7137,38 @@
       const countEl = document.getElementById('boost-top-count');
       if (countEl) countEl.textContent = boostState.results.length;
       const titleEl = document.getElementById('boost-req-title');
-      if (titleEl) {
-        const role = (boostState.jdParsed && boostState.jdParsed.role_title) || 'Role from JD';
-        titleEl.textContent = role;
+      // Only write the title from jdParsed on the fresh-run path;
+      // loadBoostSession sets its own rehydrate title before calling us.
+      if (titleEl && boostState.jdParsed) {
+        titleEl.textContent = boostState.jdParsed.role_title || 'Role from JD';
+      }
+      // Reflect current session in the results-view session picker.
+      const picker = document.getElementById('boost-session-picker');
+      if (picker && boostState.currentSessionId) {
+        picker.value = boostState.currentSessionId;
       }
       const list = document.getElementById('boost-candidate-list');
       if (!list) return;
       if (!boostState.results.length) {
         list.innerHTML = '<div class="boost-muted" style="padding:24px;text-align:center">No candidates passed the screening threshold.</div>';
+        updateBoostShortlistButton();
         return;
       }
-      list.innerHTML = boostState.results.map((c, i) => {
-        const draftId = c.draft_id || '';
-        const candId = c.candidate_id || '';
-        const title = escapeHtmlBoost(c.current_job_title || '');
-        const employer = escapeHtmlBoost(c.current_employer || '');
-        const meta = title || employer
-          ? `${title}${title && employer ? ' @ ' : ''}${employer}`
-          : '<span class="boost-muted">No current role on file</span>';
-        const reasoning = c.reasoning ? escapeHtmlBoost(c.reasoning) : '';
-        const noEmail = !c.draft_sendable;
-        const actions = draftId
-          ? `
-              <button class="btn-secondary" onclick="event.stopPropagation(); editBoostDraft('${draftId}')">
-                <span class="material-icons-outlined">edit</span> Edit Draft
-              </button>
-              <button class="btn-primary" onclick="event.stopPropagation(); sendBoostDraft('${draftId}', this)" ${noEmail ? 'disabled title="No email address"' : ''}>
-                <span class="material-icons-outlined">send</span> Send Draft
-              </button>`
-          : '<span class="boost-muted">No email available</span>';
-        const clickableAttrs = candId
-          ? ` onclick="openCandidateDetail('${candId}', {requirementId: boostState.requirementId})" style="cursor:pointer"`
-          : '';
-        return `
-          <div class="boost-candidate-row" data-draft-id="${draftId}"${clickableAttrs}>
-            <div class="boost-rank">#${i + 1}</div>
-            <div>
-              <div class="boost-cand-name">${escapeHtmlBoost(c.name || '—')}</div>
-              <div class="boost-cand-meta">${meta}</div>
-              <div class="boost-cand-score">Match: ${c.score == null ? '—' : c.score}</div>
-              ${reasoning ? `<div class="boost-cand-reasoning">${reasoning}</div>` : ''}
-            </div>
-            <div class="boost-cand-actions" onclick="event.stopPropagation()">${actions}</div>
-          </div>`;
-      }).join('');
+      list.innerHTML = renderSearchResults(boostState.results, [], {
+        withCheckboxes: true,
+        mode: boostState.viewMode || 'table',
+        toggleFn: 'setBoostViewMode',
+        cardId: 'boost-results-card',
+        drawerOpener: _openCandidateFromBoost,
+      });
+      // Stamp requirement-id onto rendered cards so the existing document-level
+      // click handler (on .person-card) opens the drawer with requirement context.
+      if (boostState.requirementId) {
+        list.querySelectorAll('.person-card[data-candidate-id]').forEach(el => {
+          el.dataset.requirementId = boostState.requirementId;
+        });
+      }
+      wireBoostSelectionCheckboxes(list);
     }
 
     async function sendBoostDraft(draftId, btn) {
@@ -6993,19 +7188,33 @@
     }
 
     async function editBoostDraft(draftId) {
-      const cand = boostState.results.find(c => c.draft_id === draftId);
-      if (!cand) return;
-      const newSubject = prompt('Edit subject:', cand.draft_subject || '');
+      // Source initial subject/body from either the Boost results pool (when
+      // called from the Boost table row) or the drawer's stashed latest draft
+      // (when called from the candidate detail drawer).
+      let cand = boostState.results.find(c => c.draft_id === draftId);
+      let initSubject = cand?.draft_subject || '';
+      let initBody = cand?.draft_body || '';
+      if (!cand) {
+        const panel = document.getElementById('cand-panel-drafts');
+        const stashed = panel?._latestDraft;
+        if (stashed && stashed.id === draftId) {
+          initSubject = stashed.email_subject || '';
+          initBody = stashed.email_body || '';
+        }
+      }
+      const newSubject = prompt('Edit subject:', initSubject);
       if (newSubject === null) return;
-      const newBody = prompt('Edit body:', cand.draft_body || '');
+      const newBody = prompt('Edit body:', initBody);
       if (newBody === null) return;
       try {
         await api(`/api/agentic-boost/drafts/${draftId}`, {
           method: 'PATCH',
           body: { email_subject: newSubject, email_body: newBody },
         });
-        cand.draft_subject = newSubject;
-        cand.draft_body = newBody;
+        if (cand) {
+          cand.draft_subject = newSubject;
+          cand.draft_body = newBody;
+        }
         alert('Draft updated.');
       } catch (err) {
         alert('Edit failed: ' + err.message);
@@ -7024,7 +7233,48 @@
       });
 
       const newBtn = document.getElementById('btn-new-boost');
-      if (newBtn) newBtn.addEventListener('click', loadAgenticBoost);
+      if (newBtn) newBtn.addEventListener('click', startNewBoost);
+
+      ['boost-session-picker', 'boost-session-picker-input'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (v) loadBoostSession(v);
+        });
+      });
+
+      const slBtn = document.getElementById('btn-boost-shortlist');
+      if (slBtn) slBtn.addEventListener('click', async () => {
+        const list = document.getElementById('boost-candidate-list');
+        if (!list) return;
+        const ids = Array.from(
+          list.querySelectorAll('.seq-cand-check:checked')
+        ).map(cb => cb.dataset.candId).filter(Boolean);
+        if (!ids.length) return;
+        slBtn.disabled = true;
+        const origHtml = slBtn.innerHTML;
+        slBtn.innerHTML = '<span class="material-icons-outlined">hourglass_top</span> Shortlisting…';
+        try {
+          const pool = boostState.results;
+          const allAlready = ids.every(id => pool.find(c => c.id === id)?.shortlisted);
+          await Promise.all(ids.map(id =>
+            api(`/api/candidates/${id}/shortlist`, {
+              method: 'POST',
+              body: { unshortlist: allAlready },
+            })
+          ));
+          pool.forEach(c => {
+            if (ids.includes(c.id)) c.shortlisted = !allAlready;
+          });
+          slBtn.innerHTML = '<span class="material-icons-outlined">check</span> ' +
+            (allAlready ? 'Unshortlisted' : 'Shortlisted');
+          setTimeout(() => { slBtn.innerHTML = origHtml; updateBoostShortlistButton(); }, 1200);
+        } catch (err) {
+          alert('Shortlist update failed: ' + err.message);
+          slBtn.innerHTML = origHtml;
+          slBtn.disabled = false;
+        }
+      });
 
       const copyBtn = document.getElementById('btn-copy-boolean');
       if (copyBtn) copyBtn.addEventListener('click', () => {
@@ -7446,10 +7696,16 @@
 
     function renderSearchResults(candidates, softCriteria, opts) {
       const withCheckboxes = opts?.withCheckboxes || false;
+      // Caller-provided drawer opener routes table-view name clicks to the
+      // correct detail view. Cleared on every render so a stale Boost opener
+      // doesn't leak into Search-side renders.
+      window._drawerOpener = opts?.drawerOpener || null;
       if (!candidates?.length) {
         return '<div class="empty-state"><p>No matching candidates. Try loosening the filters.</p></div>';
       }
-      const mode = state.searchViewMode || 'synopsis';
+      const mode = opts?.mode || state.searchViewMode || 'synopsis';
+      const toggleFn = opts?.toggleFn || 'setSearchViewMode';
+      const cardId = opts?.cardId || 'search-results-card';
       const creditsHtml = state._apolloCredits
         ? `<div class="credits-bar">
             <span><span class="material-icons-outlined" style="font-size:13px">email</span>
@@ -7464,19 +7720,19 @@
           <div style="display:flex;align-items:center;gap:12px">
             ${creditsHtml}
             <div class="view-toggle">
-              <button class="view-toggle-btn${mode === 'synopsis' ? ' active' : ''}" title="Synopsis" onclick="setSearchViewMode('synopsis')">
+              <button class="view-toggle-btn${mode === 'synopsis' ? ' active' : ''}" title="Synopsis" onclick="${toggleFn}('synopsis')">
                 <span class="material-icons-outlined" style="font-size:16px">view_module</span>
               </button>
-              <button class="view-toggle-btn${mode === 'table' ? ' active' : ''}" title="Table" onclick="setSearchViewMode('table')">
+              <button class="view-toggle-btn${mode === 'table' ? ' active' : ''}" title="Table" onclick="${toggleFn}('table')">
                 <span class="material-icons-outlined" style="font-size:16px">table_chart</span>
               </button>
-              <button class="view-toggle-btn${mode === 'cards' ? ' active' : ''}" title="Cards" onclick="setSearchViewMode('cards')">
+              <button class="view-toggle-btn${mode === 'cards' ? ' active' : ''}" title="Cards" onclick="${toggleFn}('cards')">
                 <span class="material-icons-outlined" style="font-size:16px">view_agenda</span>
               </button>
             </div>
           </div>
         </div>`;
-      let html = `<div class="card" id="search-results-card">${toggleHtml}`;
+      let html = `<div class="card" id="${cardId}">${toggleHtml}`;
       if (mode === 'synopsis') html += renderSynopsisGrid(candidates, withCheckboxes);
       else if (mode === 'table') html += renderTableView(candidates, softCriteria || [], withCheckboxes);
       else                      html += renderClassicCards(candidates, withCheckboxes);
@@ -7555,12 +7811,13 @@
         const isApolloRedacted = !c.name || c.name.endsWith('(Apollo)');
         const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
 
-        // Name cell
+        // Name cell — drawer opener is swappable via window._drawerOpener
+        // (Boost sets it to openCandidateDetail; default is openApolloDrawer).
         const nameCell = isApolloRedacted
           ? `<button class="reveal-pill" onclick="revealField('${cid}','name',this)" data-cid="${cid}">
                <span class="material-icons-outlined">lock</span> Reveal name <em style="margin-left:2px;opacity:.7">(1 cr)</em>
              </button>`
-          : `<button class="arow-name-btn" onclick="openApolloDrawer('${cid}')">${esc(c.name)}</button>`;
+          : `<button class="arow-name-btn" onclick="(window._drawerOpener || openApolloDrawer)('${cid}')">${esc(c.name)}</button>`;
 
         // Email cell
         let emailCell;

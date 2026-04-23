@@ -1182,10 +1182,11 @@ def get_candidate_detail(candidate_id: str, user_role: str,
     try:
         outreach_rows = (db.get_client().table("outreach_log")
                          .select("id, requirement_id, recruiter_email, "
-                                 "email_subject, sent_at, reply_received, "
+                                 "email_subject, email_body, status, "
+                                 "sent_at, created_at, reply_received, "
                                  "replied_at, outlook_thread_id")
                          .eq("candidate_id", candidate_id)
-                         .order("sent_at", desc=True)
+                         .order("created_at", desc=True)
                          .execute().data) or []
     except Exception:
         outreach_rows = []
@@ -3331,6 +3332,86 @@ async def _internal_db_search(requirement: dict, limit: int = 200) -> list[dict]
     return overlap or pool
 
 
+def _enrich_top_candidates(top: list[dict], requirement_id: str,
+                           user_email: str) -> list[dict]:
+    """Merge match_scores rows with candidate/outreach/shortlist context.
+
+    Used by both the live pipeline (`launch_agentic_boost_stream`) and the
+    rehydrate path (`get_agentic_boost_run`) so the shape of a `top_candidate`
+    is identical regardless of source. Three batched `.in_()` queries per call
+    (candidates + outreach_log + candidate_shortlists) — constant regardless
+    of len(top). Aliases `id` from `candidate_id` so the Searches renderers
+    (which read `c.id`) work without modification.
+    """
+    if not top:
+        return []
+    top_ids = [t["candidate_id"] for t in top if t.get("candidate_id")]
+    if not top_ids:
+        return []
+    client = db.get_client()
+    try:
+        cand_rows = (client.table("candidates")
+                     .select("id, name, email, phone, current_job_title, "
+                             "current_employer, current_location, skills, "
+                             "do_not_email, do_not_call")
+                     .in_("id", top_ids).execute().data) or []
+    except Exception:
+        log.exception("boost enrich: candidates fetch failed")
+        cand_rows = []
+    cands_by_id = {c["id"]: c for c in cand_rows}
+
+    # Latest outreach row per candidate (for this requirement). Sorted desc so
+    # the first row we see per candidate_id wins.
+    drafts_by_cand: dict[str, dict] = {}
+    try:
+        outreach_rows = (client.table("outreach_log")
+                         .select("id, candidate_id, email_subject, "
+                                 "email_body, status, sent_at, created_at")
+                         .eq("requirement_id", requirement_id)
+                         .in_("candidate_id", top_ids)
+                         .order("created_at", desc=True)
+                         .execute().data) or []
+    except Exception:
+        log.exception("boost enrich: outreach fetch failed")
+        outreach_rows = []
+    for row in outreach_rows:
+        cid = row.get("candidate_id")
+        if cid and cid not in drafts_by_cand:
+            drafts_by_cand[cid] = row
+
+    shortlisted_ids: set[str] = set()
+    try:
+        sl_rows = (client.table("candidate_shortlists")
+                   .select("candidate_id")
+                   .eq("user_email", user_email)
+                   .in_("candidate_id", top_ids)
+                   .execute().data) or []
+        shortlisted_ids = {r["candidate_id"] for r in sl_rows
+                           if r.get("candidate_id")}
+    except Exception:
+        log.exception("boost enrich: shortlist fetch failed")
+
+    out: list[dict] = []
+    for t in top:
+        cid = t.get("candidate_id")
+        cand = cands_by_id.get(cid)
+        if not cand:
+            continue
+        merged = {**cand, **t, "id": cid,
+                  "shortlisted": cid in shortlisted_ids}
+        latest = drafts_by_cand.get(cid)
+        if latest:
+            merged["draft_id"] = latest["id"]
+            merged["draft_subject"] = latest.get("email_subject")
+            merged["draft_body"] = latest.get("email_body")
+            merged["draft_status"] = latest.get("status")
+            merged["draft_sendable"] = (latest.get("status") == "draft")
+        else:
+            merged.setdefault("draft_sendable", False)
+        out.append(merged)
+    return out
+
+
 def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     """SSE generator — drives the 5-agent Agentic Boost pipeline.
 
@@ -3604,19 +3685,8 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 db.upsert_match_scores(requirement_id, new_scores)
         top = (db.get_match_scores_above(
             requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
-        top_ids = [t["candidate_id"] for t in top]
-        cands_by_id: dict[str, dict] = {}
-        if top_ids:
-            cand_rows = (db.get_client().table("candidates")
-                         .select("id, name, email, current_job_title, "
-                                 "current_employer, current_location, skills")
-                         .in_("id", top_ids).execute().data) or []
-            cands_by_id = {c["id"]: c for c in cand_rows}
-        for t in top:
-            cand = cands_by_id.get(t["candidate_id"])
-            if not cand:
-                continue
-            top_enriched.append({**cand, **t})
+        top_enriched = _enrich_top_candidates(
+            top, requirement_id, user_email)
         yield _sse({"event": "agent_done", "agent": "screener", "payload": {
             "scored_total": len(pool),
             "top_count": len(top_enriched),
@@ -3667,16 +3737,23 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 except Exception:
                     log.exception("draft persist failed for candidate %s",
                                   em.get("candidate_id"))
+            # Merge just-drafted subject/body over whatever the enricher
+            # already stamped from DB (fresh drafts win — matters on the
+            # live path where the DB row was just inserted above).
             for t in top_enriched:
-                cid = t["candidate_id"]
+                cid = t.get("candidate_id") or t.get("id")
                 em = drafts_by_candidate.get(cid)
-                t["draft_id"] = draft_ids_by_candidate.get(cid)
+                did = draft_ids_by_candidate.get(cid)
+                if did:
+                    t["draft_id"] = did
                 if em:
                     t["draft_subject"] = em.get("subject")
                     t["draft_body"] = em.get("body")
                     t["draft_sendable"] = em.get("sendable", False)
+                    t["draft_status"] = ("draft" if em.get("sendable")
+                                         else t.get("draft_status"))
                 else:
-                    t["draft_sendable"] = False
+                    t.setdefault("draft_sendable", False)
             yield _sse({"event": "agent_done", "agent": "outreach_drafter",
                         "payload": {
                             "drafts_created": len(draft_ids_by_candidate),
@@ -3712,8 +3789,10 @@ def get_agentic_boost_run(boost_id: str, user_role: str,
     if row.get("created_by") != user_email and user_role != "tl":
         raise CoreError(403, "Not your boost run")
     if row.get("requirement_id"):
-        row["top_candidates"] = (db.get_match_scores_above(
+        top_raw = (db.get_match_scores_above(
             row["requirement_id"], min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
+        row["top_candidates"] = _enrich_top_candidates(
+            top_raw, row["requirement_id"], user_email)
     return row
 
 
