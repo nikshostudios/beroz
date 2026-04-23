@@ -3489,12 +3489,28 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         gathered = []
         channel_errors["sourcing"] = str(exc)
 
+    region_default = "Singapore" if market == "SG" else "India"
+    fallback_loc = (apollo_params.get("person_locations")
+                    or [region_default])[0]
     for name, result in gathered:
         if isinstance(result, Exception):
             channel_errors[name] = f"{type(result).__name__}: {result}"
             continue
         for cand in result:
             if name == "apollo":
+                # Apollo redacts name / email / location at search tier.
+                # Stamp placeholders so the row survives upsert + scoring;
+                # the UI's reveal button can upgrade these later.
+                if not cand.get("current_location"):
+                    cand["current_location"] = fallback_loc
+                if not cand.get("name"):
+                    title = cand.get("current_job_title") or "Unknown role"
+                    employer = cand.get("current_employer") or "unknown employer"
+                    cand["name"] = f"{title} @ {employer} (Apollo)"
+                if cand.get("_apollo_person_id"):
+                    cand["apollo_person_id"] = cand["_apollo_person_id"]
+                if cand.get("_apollo_organization_id"):
+                    cand["apollo_organization_id"] = cand["_apollo_organization_id"]
                 # Persist Apollo results (they're new external candidates)
                 try:
                     if cand.get("email"):
