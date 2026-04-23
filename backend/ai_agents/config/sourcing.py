@@ -137,11 +137,27 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
             raise RuntimeError(
                 f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
 
+    resp_json = resp.json()
+    people = resp_json.get("people", [])
+    if not people:
+        pagination = resp_json.get("pagination") or {}
+        total = pagination.get("total_entries")
+        top_keys = list(resp_json.keys())[:10]
+        err_field = (resp_json.get("error")
+                     or resp_json.get("message")
+                     or resp_json.get("errors"))
+        raise RuntimeError(
+            f"apollo 200 OK but 0 people returned "
+            f"(total_entries={total}, response_keys={top_keys}"
+            + (f", error_field={err_field}" if err_field else "")
+            + f", body_preview={resp.text[:300]})"
+        )
+
     # Use person_titles as the match-skills hint so downstream tagging keeps
     # working; fall back to keywords split.
     hint = list(params.get("person_titles") or
                 (params.get("q_keywords") or "").split())
-    return _normalize_apollo_people(resp.json().get("people", []), hint, market)
+    return _normalize_apollo_people(people, hint, market)
 
 
 # ── Apollo per-row reveal + org enrichment ─────────────────────
