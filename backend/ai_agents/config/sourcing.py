@@ -54,6 +54,15 @@ def _normalize_apollo_people(people: list[dict],
             "skills": person_skills,
             "source": "apollo",
             "market": market,
+            # Apollo pre-reveal signals: returned by /mixed_people/api_search
+            # without spending a credit. has_direct_phone is "Yes"/"No"/"Maybe...",
+            # has_email and has_country are bools, last_refreshed_at is ISO ts.
+            "first_name": person.get("first_name"),
+            "last_name_obfuscated": person.get("last_name_obfuscated"),
+            "has_email": person.get("has_email"),
+            "has_direct_phone": person.get("has_direct_phone"),
+            "has_country": person.get("has_country"),
+            "apollo_last_refreshed_at": person.get("last_refreshed_at"),
             # Underscore-prefixed: stripped by `run_all_sources` upsert path,
             # re-attached explicitly by `run_search` so the candidate row keeps
             # the Apollo ids needed for downstream /people/match reveals.
@@ -95,25 +104,9 @@ async def source_apollo(skills: list[str], location: str,
     return _normalize_apollo_people(resp.json().get("people", []), skills, market)
 
 
-async def source_apollo_structured(params: dict, market: str) -> list[dict]:
-    """Apollo search using pre-built structured params from the boolean_builder
-    agent (instead of raw skills + location).
-
-    `params` shape (all keys optional):
-        {
-          "q_keywords": "ServiceNow JavaScript ITSM",
-          "person_titles": ["ServiceNow Developer"],
-          "person_locations": ["Bangalore, India"],
-          "person_seniorities": ["senior"]
-        }
-    """
-    api_key = (os.environ.get("APOLLO_API_KEY")
-               or os.environ.get("APOLLO_API"))
-    if not api_key:
-        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
-
+def _build_apollo_search_body(params: dict, market: str) -> dict:
     default_loc = "Singapore" if market == "SG" else "India"
-    body = {"per_page": 50}
+    body: dict = {"per_page": 50}
     # Apollo's api_search treats q_keywords as an AND full-text match (not
     # fuzzy, despite what the UI suggests). Anything beyond ~2 tokens rapidly
     # drops total_entries to 0. Cap to 2 tokens, and only include when we
@@ -128,7 +121,21 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
     )
     if params.get("person_seniorities"):
         body["person_seniorities"] = list(params["person_seniorities"])
+    return body
 
+
+async def _apollo_search_raw(body: dict) -> dict:
+    """Low-level POST to /v1/mixed_people/api_search.
+
+    Returns the parsed response payload (including `pagination.total_entries`
+    and `people`) on 200 OK. Does NOT raise on `people=[]` — adaptive callers
+    need to inspect `total_entries` to decide whether to retry. Raises
+    RuntimeError only on non-200 responses or missing API key.
+    """
+    api_key = (os.environ.get("APOLLO_API_KEY")
+               or os.environ.get("APOLLO_API"))
+    if not api_key:
+        raise RuntimeError("APOLLO_API_KEY (or APOLLO_API) not set")
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.apollo.io/v1/mixed_people/api_search",
@@ -140,8 +147,26 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
         if resp.status_code != 200:
             raise RuntimeError(
                 f"apollo HTTP {resp.status_code}: {resp.text[:300]}")
+        return resp.json() or {}
 
-    resp_json = resp.json()
+
+async def source_apollo_structured(params: dict, market: str) -> list[dict]:
+    """Apollo search using pre-built structured params from the boolean_builder
+    agent (instead of raw skills + location).
+
+    `params` shape (all keys optional):
+        {
+          "q_keywords": "ServiceNow JavaScript ITSM",
+          "person_titles": ["ServiceNow Developer"],
+          "person_locations": ["Bangalore, India"],
+          "person_seniorities": ["senior"]
+        }
+
+    Raises RuntimeError on `people=[]` for back-compat with `run_search`.
+    The agentic-boost pipeline uses `source_apollo_structured_adaptive`.
+    """
+    body = _build_apollo_search_body(params, market)
+    resp_json = await _apollo_search_raw(body)
     people = resp_json.get("people", [])
     if not people:
         pagination = resp_json.get("pagination") or {}
@@ -154,14 +179,93 @@ async def source_apollo_structured(params: dict, market: str) -> list[dict]:
             f"apollo 200 OK but 0 people returned "
             f"(total_entries={total}, response_keys={top_keys}"
             + (f", error_field={err_field}" if err_field else "")
-            + f", body_preview={resp.text[:300]})"
+            + ")"
         )
-
     # Use person_titles as the match-skills hint so downstream tagging keeps
     # working; fall back to keywords split.
     hint = list(params.get("person_titles") or
                 (params.get("q_keywords") or "").split())
     return _normalize_apollo_people(people, hint, market)
+
+
+async def source_apollo_structured_adaptive(
+    params: dict, market: str, min_total: int = 50,
+) -> tuple[list[dict], list[dict]]:
+    """Try `params`; if `total_entries < min_total`, loosen progressively.
+
+    Returns `(candidates, iteration_log)`. The iteration log is a list of
+    dicts: `[{step, dropped, total_entries, returned}, ...]`. Each step
+    drops ONE constraint at a time and retries:
+
+        1. Original params.
+        2. Drop `q_keywords`.
+        3. Drop `person_seniorities`.
+        4. Trim `person_titles` to its first single entry.
+        5. Drop `person_titles` entirely (titles-only fallback).
+
+    Stops at the first step where `total_entries >= min_total`. If every
+    step yields below `min_total`, returns whichever step produced the most
+    candidates and tags the final log entry with `degraded=True`.
+    """
+    base = dict(params or {})
+    steps: list[tuple[str | None, dict]] = [(None, dict(base))]
+    if base.get("q_keywords"):
+        s = dict(steps[-1][1])
+        s.pop("q_keywords", None)
+        steps.append(("q_keywords", s))
+    if base.get("person_seniorities"):
+        s = dict(steps[-1][1])
+        s.pop("person_seniorities", None)
+        steps.append(("person_seniorities", s))
+    titles = list(base.get("person_titles") or [])
+    if len(titles) > 1:
+        s = dict(steps[-1][1])
+        s["person_titles"] = titles[:1]
+        steps.append(("person_titles[1:]", s))
+    if titles:
+        s = dict(steps[-1][1])
+        s.pop("person_titles", None)
+        steps.append(("person_titles", s))
+
+    log_entries: list[dict] = []
+    best: tuple[int, list[dict], dict] | None = None
+    for idx, (dropped, step_params) in enumerate(steps, start=1):
+        body = _build_apollo_search_body(step_params, market)
+        try:
+            resp_json = await _apollo_search_raw(body)
+        except RuntimeError as exc:
+            log.warning("apollo_adaptive: step=%d dropped=%s raised %s",
+                        idx, dropped, exc)
+            log_entries.append({
+                "step": idx, "dropped": dropped,
+                "total_entries": None, "returned": 0,
+                "error": str(exc)[:300],
+            })
+            continue
+        people = resp_json.get("people", []) or []
+        pagination = resp_json.get("pagination") or {}
+        total = pagination.get("total_entries") or 0
+        hint = list(step_params.get("person_titles") or
+                    (step_params.get("q_keywords") or "").split())
+        candidates = _normalize_apollo_people(people, hint, market)
+        entry = {
+            "step": idx,
+            "dropped": dropped,
+            "total_entries": total,
+            "returned": len(candidates),
+        }
+        log.info("apollo_adaptive: step=%d dropped=%s total_entries=%d returned=%d",
+                 idx, dropped, total, len(candidates))
+        log_entries.append(entry)
+        if total >= min_total and candidates:
+            return candidates, log_entries
+        if best is None or len(candidates) > best[0]:
+            best = (len(candidates), candidates, entry)
+
+    if best and best[1]:
+        best[2]["degraded"] = True
+        return best[1], log_entries
+    return [], log_entries
 
 
 # ── Apollo per-row reveal + org enrichment ─────────────────────

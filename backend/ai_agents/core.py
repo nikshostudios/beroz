@@ -242,7 +242,10 @@ def _score_candidate_batch(candidates: list[dict], requirement: dict) -> list[di
         f"You are a recruitment matching engine. Score each candidate 0-100 "
         f"for fit against this requirement. Consider skill synonyms "
         f"(React = ReactJS, .NET = dotnet), transferable experience, "
-        f"seniority level, and location fit.\n\n"
+        f"seniority level, and location fit. When a candidate's Location is "
+        f"\"N/A\" (unknown, e.g. Apollo redacts it), treat it as neutral — "
+        f"neither a positive nor a negative — and score on the remaining "
+        f"signals.\n\n"
         f"REQUIREMENT:\n{req_summary}\n\n"
         f"CANDIDATES:\n{cand_block}\n\n"
         f"Return a JSON array. Each element must have:\n"
@@ -697,18 +700,18 @@ def run_search(payload: dict, market: str | None) -> dict:
             apollo_raw = asyncio.run(
                 sourcing.source_apollo(apollo_skills, location or "", market or "IN")
             )
-            region_default = "Singapore" if (market or "IN") == "SG" else "India"
             named_count = 0
             emailed_count = 0
+            apollo_skipped_unreachable = 0
             for ac in apollo_raw:
+                # Apollo says no email AND no/maybe phone -> unreachable. Skip.
+                hp = (ac.get("has_direct_phone") or "").lower()
+                if ac.get("has_email") is False and hp in ("", "no"):
+                    apollo_skipped_unreachable += 1
+                    continue
                 clean = {k: v for k, v in ac.items() if not k.startswith("_")}
-                # Apollo redacts `current_location` on most tiers — stamp the
-                # search location (or market default) so location-aware scoring
-                # doesn't penalise these rows out of the result set.
-                if not clean.get("current_location"):
-                    clean["current_location"] = location or region_default
-                # Apollo redacts `name` too. Synthesize a placeholder so the
-                # row survives upsert; the UI will show a "Reveal name"
+                # Apollo redacts `name` on most tiers. Synthesize a placeholder
+                # so the row survives upsert; the UI will show a "Reveal name"
                 # button that hits /people/match for the real value.
                 if not clean.get("name"):
                     title = clean.get("current_job_title") or "Unknown role"
@@ -736,9 +739,9 @@ def run_search(payload: dict, market: str | None) -> dict:
                 except Exception as upsert_err:
                     log.warning("Apollo upsert failed: %s", upsert_err)
             log.info("run_search: Apollo returned %d raw, upserted %d, "
-                     "%d named, %d emailed",
+                     "%d named, %d emailed, %d skipped (unreachable)",
                      len(apollo_raw), len(apollo_db_rows),
-                     named_count, emailed_count)
+                     named_count, emailed_count, apollo_skipped_unreachable)
         except Exception as e:
             log.warning("run_search: Apollo failed: %s", e)
 
@@ -918,6 +921,154 @@ def reveal_candidate_field(cid: str, field: str,
         else:
             value = str(emails)
     return {"field": field, "value": value, "candidate_id": cid}
+
+
+def _auto_reveal_top_reachable(
+    requirement_id: str,
+    candidate_ids_by_score: list[str],
+    requested_by: str,
+    budget: int = 5,
+) -> dict:
+    """Auto-reveal up to `budget` top-scored Apollo candidates that Apollo
+    flagged reachable (`has_email=True` OR `has_direct_phone='Yes'`).
+
+    Pre-flight credit check skips the entire pass if remaining email credits
+    fall below `budget` — avoids 402-on-Nth-call partial-state. On a successful
+    /people/match call, name/email are persisted synchronously; phone arrives
+    asynchronously via the existing `/api/apollo/phone-webhook` route.
+
+    Returns: {revealed_email, revealed_phone_pending, skipped_credits,
+              attempted, errors}.
+    """
+    summary = {
+        "revealed_email": 0, "revealed_phone_pending": 0,
+        "skipped_credits": False, "attempted": 0, "errors": 0,
+    }
+    if not candidate_ids_by_score:
+        return summary
+
+    try:
+        credits = get_apollo_credits()
+    except CoreError as e:
+        log.warning("auto_reveal: credits check failed: %s", e.message)
+        summary["skipped_credits"] = True
+        return summary
+    if (credits.get("email_credits") or 0) < budget:
+        log.info(
+            "auto_reveal: skipping (email_credits=%s < budget=%s)",
+            credits.get("email_credits"), budget,
+        )
+        summary["skipped_credits"] = True
+        return summary
+
+    client = db.get_client()
+    try:
+        rows = (client.table("candidates")
+                .select("id, source, apollo_person_id, linkedin_url, email, "
+                        "has_email, has_direct_phone, do_not_email, do_not_call")
+                .in_("id", candidate_ids_by_score).execute().data) or []
+    except Exception:
+        log.exception("auto_reveal: candidates fetch failed")
+        return summary
+    rows_by_id = {r["id"]: r for r in rows}
+
+    reachable: list[dict] = []
+    for cid in candidate_ids_by_score:
+        r = rows_by_id.get(cid)
+        if not r or r.get("source") != "apollo":
+            continue
+        if r.get("do_not_email") and r.get("do_not_call"):
+            continue
+        if not (r.get("apollo_person_id") or r.get("linkedin_url")
+                or r.get("email")):
+            continue
+        is_reachable = (
+            r.get("has_email") is True
+            or (r.get("has_direct_phone") or "").lower() == "yes"
+        )
+        if not is_reachable:
+            continue
+        reachable.append(r)
+        if len(reachable) >= budget:
+            break
+
+    summary["attempted"] = len(reachable)
+    if not reachable:
+        return summary
+
+    public_url = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+    for r in reachable:
+        cid = r["id"]
+        reveal_phone = (
+            (r.get("has_direct_phone") or "").lower() == "yes"
+            and not r.get("do_not_call")
+            and bool(public_url)
+        )
+        webhook_url: str | None = None
+        request_id: str | None = None
+        if reveal_phone:
+            request_id = uuid.uuid4().hex
+            sig = webhook_signing.sign_phone_reveal(request_id, cid)
+            webhook_url = (f"{public_url}/api/apollo/phone-webhook"
+                           f"?request_id={request_id}&candidate_id={cid}&sig={sig}")
+            try:
+                db.pending_phone_reveal_create(request_id, cid, requested_by)
+            except Exception:
+                log.exception(
+                    "auto_reveal: pending_phone_reveals insert failed for %s",
+                    cid)
+                request_id = None
+                webhook_url = None
+                reveal_phone = False
+        try:
+            person = _run_async(sourcing.apollo_people_match(
+                apollo_person_id=r.get("apollo_person_id"),
+                linkedin_url=r.get("linkedin_url"),
+                email=r.get("email"),
+                reveal_phone_number=reveal_phone,
+                webhook_url=webhook_url,
+            ))
+        except RuntimeError as e:
+            msg = str(e)
+            if "credits_exhausted" in msg:
+                log.warning("auto_reveal: credits exhausted at cid=%s", cid)
+                break
+            log.warning("auto_reveal: /people/match failed for %s: %s",
+                        cid, msg)
+            summary["errors"] += 1
+            continue
+
+        patch: dict = {}
+        if person.get("name"):
+            patch["name"] = person["name"]
+        sync_email = person.get("email")
+        if not sync_email:
+            pe = person.get("personal_emails")
+            if isinstance(pe, list) and pe:
+                first = pe[0]
+                sync_email = (first if isinstance(first, str)
+                              else (first.get("email") if isinstance(first, dict) else ""))
+        if sync_email:
+            patch["email"] = sync_email
+        phone_list = person.get("phone_numbers") or []
+        if phone_list and isinstance(phone_list[0], dict):
+            p0 = phone_list[0]
+            phone_val = p0.get("sanitized_number") or p0.get("raw_number")
+            if phone_val:
+                patch["phone"] = phone_val
+        if patch:
+            patch["enriched_at"] = datetime.now(timezone.utc).isoformat()
+            try:
+                db.update_candidate(cid, patch)
+            except Exception:
+                log.exception("auto_reveal: update_candidate failed for %s", cid)
+        if patch.get("email"):
+            summary["revealed_email"] += 1
+        if reveal_phone and request_id:
+            summary["revealed_phone_pending"] += 1
+
+    _apollo_credits_cache.clear()
+    return summary
 
 
 def get_phone_reveal_status(cid: str) -> dict:
@@ -3666,7 +3817,7 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         coros = []
         if apollo_enabled:
             task_names.append("apollo")
-            coros.append(sourcing.source_apollo_structured(
+            coros.append(sourcing.source_apollo_structured_adaptive(
                 apollo_params, market))
         if github_enabled:
             task_names.append("github")
@@ -3684,25 +3835,32 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         gathered = []
         channel_errors["sourcing"] = str(exc)
 
-    region_default = "Singapore" if market == "SG" else "India"
-    fallback_loc = (apollo_params.get("person_locations")
-                    or [region_default])[0]
     apollo_received = 0
     apollo_upsert_errs: list[str] = []
     apollo_skipped_no_key = 0
+    apollo_skipped_unreachable = 0
+    apollo_iteration_log: list[dict] = []
     for name, result in gathered:
         if isinstance(result, Exception):
             channel_errors[name] = f"{type(result).__name__}: {result}"
             continue
         if name == "apollo":
+            # Adaptive wrapper returns (candidates, iteration_log).
+            if isinstance(result, tuple) and len(result) == 2:
+                result, apollo_iteration_log = result
             apollo_received = len(result)
         for cand in result:
             if name == "apollo":
-                # Apollo redacts name / email / location at search tier.
-                # Stamp placeholders so the row survives upsert + scoring;
-                # the UI's reveal button can upgrade these later.
-                if not cand.get("current_location"):
-                    cand["current_location"] = fallback_loc
+                # Apollo says no email AND no/maybe phone -> unreachable. Skip.
+                hp = (cand.get("has_direct_phone") or "").lower()
+                if cand.get("has_email") is False and hp in ("", "no"):
+                    apollo_skipped_unreachable += 1
+                    continue
+                # Apollo redacts `name` at search tier. Synthesize a placeholder
+                # so the row survives upsert + scoring; the UI's reveal button
+                # can upgrade it later. We deliberately do NOT fabricate
+                # `current_location` — leave it NULL when Apollo doesn't
+                # return one.
                 if not cand.get("name"):
                     title = cand.get("current_job_title") or "Unknown role"
                     employer = cand.get("current_employer") or "unknown employer"
@@ -3765,6 +3923,9 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
             and source_counts["apollo"] == 0
             and "apollo" not in channel_errors):
         parts = [f"received {apollo_received} rows"]
+        if apollo_skipped_unreachable:
+            parts.append(f"{apollo_skipped_unreachable} skipped "
+                         f"(Apollo-marked unreachable)")
         if apollo_skipped_no_key:
             parts.append(f"{apollo_skipped_no_key} skipped "
                          f"(no email/name after synthesis)")
@@ -3776,11 +3937,17 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         channel_errors["apollo"] = "post-sourcing drop — " + "; ".join(parts)
 
     pool = list(pool_by_id.values())
-    yield _sse({"event": "agent_done", "agent": "sourcing", "payload": {
+    sourcing_payload: dict[str, Any] = {
         "counts": source_counts,
         "total_unique": len(pool),
         "channel_errors": channel_errors,
-    }})
+    }
+    if apollo_skipped_unreachable:
+        sourcing_payload["apollo_skipped_unreachable"] = apollo_skipped_unreachable
+    if apollo_iteration_log:
+        sourcing_payload["apollo_iterations"] = apollo_iteration_log
+    yield _sse({"event": "agent_done", "agent": "sourcing",
+                "payload": sourcing_payload})
 
     if not pool:
         yield _sse({"event": "error",
@@ -3817,12 +3984,29 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 db.upsert_match_scores(requirement_id, new_scores)
         top = (db.get_match_scores_above(
             requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
+        # Auto-reveal: budget=5. Walks the score-ordered top list and reveals
+        # the highest-scoring Apollo rows Apollo itself flagged reachable.
+        # Runs BEFORE _enrich so freshly-revealed emails flow into outreach.
+        try:
+            auto_reveal_summary = _auto_reveal_top_reachable(
+                requirement_id=requirement_id,
+                candidate_ids_by_score=[t["candidate_id"] for t in top
+                                        if t.get("candidate_id")],
+                requested_by=user_email,
+                budget=5,
+            )
+        except Exception:
+            log.exception("agentic boost: auto-reveal pass failed")
+            auto_reveal_summary = None
         top_enriched = _enrich_top_candidates(
             top, requirement_id, user_email)
         yield _sse({"event": "agent_done", "agent": "screener", "payload": {
             "scored_total": len(pool),
             "top_count": len(top_enriched),
         }})
+        if auto_reveal_summary is not None:
+            yield _sse({"event": "agent_done", "agent": "auto_reveal",
+                        "payload": auto_reveal_summary})
     except Exception as exc:
         log.exception("agentic boost: screener failed")
         yield _sse({"event": "agent_error", "agent": "screener",

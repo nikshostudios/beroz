@@ -340,6 +340,22 @@ alter table candidates
 create index if not exists idx_candidates_github_url
   on candidates(github_url) where github_url is not null;
 
+-- Apollo pre-reveal signals: free-tier search responses include these flags
+-- before any credit is spent. Capturing them lets us drop unreachable rows
+-- at ingest and rank reachable rows for conservative auto-reveal.
+alter table candidates
+  add column if not exists has_email                boolean,
+  add column if not exists has_direct_phone         text,         -- "Yes" / "No" / "Maybe..."
+  add column if not exists has_country              boolean,
+  add column if not exists apollo_last_refreshed_at timestamptz,
+  add column if not exists first_name               text,
+  add column if not exists last_name_obfuscated     text;
+
+create index if not exists idx_candidates_has_email
+  on candidates(has_email) where source = 'apollo';
+create index if not exists idx_candidates_has_phone_apollo
+  on candidates(has_direct_phone) where source = 'apollo';
+
 create table if not exists company_enrichment (
   apollo_organization_id text primary key,
   name                   text,
