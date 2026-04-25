@@ -646,6 +646,231 @@ async def source_huggingface(skills: list[str], market: str) -> list[dict]:
     return _normalize_hf_users(users, skills, market)
 
 
+# ── Apify multi-actor (LinkedIn People Search + YC directory) ─
+
+APIFY_API_BASE = "https://api.apify.com/v2"
+DEFAULT_APIFY_LINKEDIN_ACTOR = "curious_coder/linkedin-search-scraper"
+DEFAULT_APIFY_YC_ACTOR = "michael.g/y-conductor-scraper"
+
+_YC_ROLE_TRIGGERS = (
+    "founder", "founding", "early-stage", "early stage",
+    "startup", "first hire",
+)
+
+
+async def _apify_run_actor(actor_id: str, body: dict,
+                           token: str, timeout_sec: int = 60) -> list[dict]:
+    """Sync-run an Apify actor and return the dataset items inline.
+
+    Wraps `POST /v2/acts/{actor}/run-sync-get-dataset-items`. Returns [] on
+    any non-2xx so a single failing actor doesn't blow up the whole source.
+    """
+    url = (f"{APIFY_API_BASE}/acts/{actor_id.replace('/', '~')}"
+           f"/run-sync-get-dataset-items")
+    async with httpx.AsyncClient(timeout=timeout_sec) as client:
+        resp = await client.post(url, params={"token": token}, json=body)
+        if resp.status_code not in (200, 201):
+            log.warning("apify actor %s HTTP %s: %s",
+                        actor_id, resp.status_code, resp.text[:300])
+            return []
+        try:
+            data = resp.json() or []
+        except Exception:
+            log.warning("apify actor %s returned non-JSON body", actor_id)
+            return []
+        if isinstance(data, dict):
+            data = data.get("items") or []
+        return data if isinstance(data, list) else []
+
+
+def _normalize_apify_linkedin(items: list[dict],
+                              match_skills: list[str],
+                              market: str) -> list[dict]:
+    """Map Apify LinkedIn People Search items to candidate dict shape.
+
+    The actor returns name/headline/location/profile URL/current company
+    (field names vary by provider, so we accept several aliases).
+    """
+    results = []
+    for it in items:
+        name = (it.get("name") or it.get("fullName")
+                or it.get("title") or "")
+        if not name:
+            continue
+        headline = (it.get("headline") or it.get("jobTitle")
+                    or it.get("subtitle") or "")
+        company = (it.get("companyName") or it.get("company")
+                   or it.get("currentCompany") or None)
+        if isinstance(company, dict):
+            company = company.get("name") or company.get("title")
+        location = (it.get("location") or it.get("locationName")
+                    or it.get("city") or None)
+        profile_url = (it.get("profileUrl") or it.get("url")
+                       or it.get("link") or it.get("publicProfileUrl"))
+        # Tag any match_skill mentioned in the headline so the screener
+        # has signal to bite on.
+        h_lower = headline.lower()
+        skills = [s for s in match_skills if s and s.lower() in h_lower]
+        if not skills:
+            skills = list(match_skills)
+        results.append({
+            "name": name,
+            "email": None,
+            "current_employer": company,
+            "current_job_title": headline[:200] if headline else None,
+            "current_location": location,
+            "skills": skills,
+            "source": "linkedin_apify",
+            "market": market,
+            "source_profile_url": profile_url,
+            "source_metadata": {
+                "apify_actor": "linkedin",
+                "linkedin_url": profile_url,
+                "raw_headline": headline or None,
+            },
+        })
+    return results
+
+
+def _normalize_apify_yc(items: list[dict], market: str) -> list[dict]:
+    """Map Apify YC company items to one candidate per founder.
+
+    Each YC company emits 0..N founder rows; if no founders are listed we
+    fall back to a single company-level row anchored on the company name.
+    """
+    results = []
+    for company in items:
+        company_name = (company.get("name") or company.get("companyName")
+                        or company.get("title") or "")
+        if not company_name:
+            continue
+        company_url = (company.get("website") or company.get("url")
+                       or company.get("yc_url"))
+        batch = company.get("batch") or company.get("ycBatch")
+        industry = (company.get("industry") or company.get("vertical")
+                    or company.get("industries"))
+        if isinstance(industry, list):
+            industry = ", ".join(str(i) for i in industry if i) or None
+        founders = (company.get("founders") or company.get("team")
+                    or company.get("people") or [])
+        if not founders:
+            results.append({
+                "name": company_name,
+                "email": None,
+                "current_employer": company_name,
+                "current_job_title": "Startup (YC)",
+                "current_location": company.get("location") or None,
+                "skills": [],
+                "source": "yc",
+                "market": market,
+                "source_profile_url": company_url,
+                "source_metadata": {
+                    "apify_actor": "yc",
+                    "yc_batch": batch,
+                    "industry": industry,
+                    "company": company_name,
+                },
+            })
+            continue
+        for f in founders:
+            if not isinstance(f, dict):
+                continue
+            fname = (f.get("name") or f.get("fullName") or "").strip()
+            if not fname:
+                continue
+            results.append({
+                "name": fname,
+                "email": f.get("email") or None,
+                "current_employer": company_name,
+                "current_job_title": (f.get("title") or "Founder"),
+                "current_location": (f.get("location")
+                                     or company.get("location") or None),
+                "skills": [],
+                "source": "yc",
+                "market": market,
+                "source_profile_url": (f.get("linkedinUrl")
+                                       or f.get("linkedin")
+                                       or company_url),
+                "source_metadata": {
+                    "apify_actor": "yc",
+                    "yc_batch": batch,
+                    "industry": industry,
+                    "company": company_name,
+                    "company_url": company_url,
+                },
+            })
+    return results
+
+
+async def source_apify(skills: list[str], location: str | None,
+                       market: str, role_title: str | None = None) -> list[dict]:
+    """Run LinkedIn (always) + YC (only when role hints startup) via Apify.
+
+    LinkedIn is the workhorse for IN/SG mid-level engineers; YC is a small
+    secondary channel that only fires for startup-flavored requirements
+    (founder/early-stage/first hire). Both actors are run in parallel.
+    """
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        raise RuntimeError("APIFY_TOKEN not set")
+
+    linkedin_actor = (os.environ.get("APIFY_LINKEDIN_ACTOR_ID")
+                      or DEFAULT_APIFY_LINKEDIN_ACTOR)
+    yc_actor = (os.environ.get("APIFY_YC_ACTOR_ID")
+                or DEFAULT_APIFY_YC_ACTOR)
+
+    keyword = " ".join(s for s in (skills or []) if s).strip()
+    if not keyword and role_title:
+        keyword = role_title
+    geo = location or ("Singapore" if market == "SG" else "India")
+
+    # LinkedIn People Search URL — filter by people, keywords, and a free-text
+    # location string (Apify's actor accepts this form per their docs).
+    from urllib.parse import quote_plus
+    search_url = ("https://www.linkedin.com/search/results/people/"
+                  f"?keywords={quote_plus(keyword)}"
+                  f"&origin=GLOBAL_SEARCH_HEADER")
+    if geo:
+        search_url += f"&location={quote_plus(geo)}"
+
+    linkedin_body = {
+        "searchUrl": search_url,
+        "maxResults": 30,
+        # Some actor variants use these alternate keys; harmless if ignored.
+        "keywords": keyword,
+        "location": geo,
+        "limit": 30,
+    }
+    yc_body = {
+        # Default to recent batches; user can override actor input via the
+        # APIFY_YC_ACTOR_ID swap if they want a different shape.
+        "batches": ["W26", "S25", "W25", "S24"],
+        "maxItems": 25,
+    }
+
+    role_lower = (role_title or "").lower()
+    run_yc = any(trig in role_lower for trig in _YC_ROLE_TRIGGERS)
+
+    coros = [_apify_run_actor(linkedin_actor, linkedin_body, token)]
+    if run_yc:
+        coros.append(_apify_run_actor(yc_actor, yc_body, token))
+    gathered = await asyncio.gather(*coros, return_exceptions=True)
+
+    out: list[dict] = []
+    li_items = gathered[0]
+    if isinstance(li_items, Exception):
+        log.warning("apify linkedin actor failed: %s", li_items)
+    else:
+        out.extend(_normalize_apify_linkedin(li_items, skills, market))
+    if run_yc:
+        yc_items = gathered[1]
+        if isinstance(yc_items, Exception):
+            log.warning("apify yc actor failed: %s", yc_items)
+        else:
+            out.extend(_normalize_apify_yc(yc_items, market))
+    return out
+
+
 # ── Naukri Recruiter API (cookie auth, India's #1 resume DB) ──
 
 NAUKRI_RESDEX_DOMAIN = os.environ.get(
@@ -849,6 +1074,12 @@ async def run_all_sources(requirement: dict) -> dict:
     # auth, so a token check alone wouldn't be enough of a gate).
     if os.environ.get("HF_ENABLED") or os.environ.get("HF_TOKEN"):
         tasks.append(("huggingface", source_huggingface(skills, market)))
+
+    # Apify — LinkedIn People Search (always) + YC directory (only for
+    # startup-flavored requirements). Workhorse for IN/SG mid-level roles.
+    if os.environ.get("APIFY_TOKEN"):
+        tasks.append(("apify", source_apify(
+            skills, location, market, requirement.get("role_title"))))
 
     # Run in parallel
     results_by_source: dict[str, int] = {}
