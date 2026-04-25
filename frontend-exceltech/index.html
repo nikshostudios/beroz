@@ -7101,8 +7101,8 @@
           const desc = document.getElementById('agent-desc-sourcing');
           // Data-driven label so new sources (GitHub, etc.) auto-appear
           // without a JS edit. Order matches the sourcing pipeline priority.
-          const sourceOrder = ['internal_db', 'apollo', 'github'];
-          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub' };
+          const sourceOrder = ['internal_db', 'apollo', 'github', 'huggingface'];
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face' };
           const seen = new Set();
           const parts = [];
           sourceOrder.forEach(k => {
@@ -7149,7 +7149,7 @@
         let msg = 'Pipeline error: ' + evt.message;
         const c = boostState.sourcingCounts;
         if (c) {
-          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub' };
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face' };
           const lines = Object.entries(c).map(([k, v]) =>
             `  • ${labelMap[k] || k}: ${v || 0}`);
           msg += `\n\nSourcing results:\n${lines.join('\n')}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
@@ -7794,6 +7794,7 @@
       const palette = {
         apollo:      { bg: 'rgba(124,58,237,0.12)', fg: '#7c3aed', label: 'Apollo' },
         github:      { bg: '#1115',                  fg: '#0d1117', label: 'GitHub' },
+        huggingface: { bg: '#fff7ed',                fg: '#c2410c', label: 'HF' },
         internal_db: { bg: 'rgba(16,185,129,0.12)', fg: '#047857', label: 'Internal' },
         foundit:     { bg: 'rgba(244,114,182,0.12)', fg: '#be185d', label: 'Foundit' },
         naukri:      { bg: 'rgba(59,130,246,0.12)', fg: '#1d4ed8', label: 'Naukri' },

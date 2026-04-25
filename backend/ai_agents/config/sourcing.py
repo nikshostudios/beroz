@@ -507,6 +507,145 @@ async def source_github(skills: list[str], location: str | None,
     return _normalize_github_users(users, skills, market)
 
 
+# ── Hugging Face API (free, ML/AI engineers) ───────────────────
+
+HF_API_BASE = "https://huggingface.co/api"
+
+
+def _normalize_hf_users(users: list[dict],
+                        match_skills: list[str],
+                        market: str) -> list[dict]:
+    """Map Hugging Face `/users/{username}/overview` payloads to candidate dicts.
+
+    HF doesn't expose location/email publicly. We rely on `fullname`, `details`
+    (bio), and `orgs` for the basic profile, and stuff the model/dataset/like
+    counts into `source_metadata` for downstream filtering.
+    """
+    results = []
+    for u in users:
+        username = u.get("user") or u.get("username") or ""
+        if not username:
+            continue
+        fullname = u.get("fullname") or f"@{username}"
+        bio = (u.get("details") or "").strip()
+        num_models = u.get("numModels") or 0
+        num_datasets = u.get("numDatasets") or 0
+        num_likes = u.get("numLikes") or 0
+        orgs_raw = u.get("orgs") or []
+        orgs = []
+        for o in orgs_raw:
+            if isinstance(o, dict):
+                orgs.append({
+                    "name": o.get("fullname") or o.get("name") or o.get("user"),
+                    "type": o.get("type"),
+                })
+        first_org = next((o.get("name") for o in orgs if o.get("name")), None)
+        if bio:
+            title = bio[:200]
+        else:
+            title = f"ML engineer ({num_models} models on Hugging Face)"
+        # Tag any match_skill mentioned in the bio so the screener has signal.
+        bio_lower = bio.lower()
+        skills = [s for s in match_skills if s and s.lower() in bio_lower]
+        if not skills:
+            skills = list(match_skills)
+        profile_url = f"https://huggingface.co/{username}"
+        results.append({
+            "name": fullname,
+            "email": None,
+            "current_employer": first_org,
+            "current_job_title": title,
+            "current_location": None,
+            "skills": skills,
+            "source": "huggingface",
+            "market": market,
+            "source_profile_url": profile_url,
+            "source_metadata": {
+                "hf_username": username,
+                "num_models": num_models,
+                "num_datasets": num_datasets,
+                "num_likes": num_likes,
+                "orgs": orgs,
+            },
+        })
+    return results
+
+
+async def source_huggingface(skills: list[str], market: str) -> list[dict]:
+    """Search Hugging Face model authors via the public API.
+
+    Flow: search models by each skill (treated as tag/keyword), dedupe authors
+    across results, then enrich the top 30 with /users/{username}/overview.
+
+    `HF_TOKEN` is optional — only used to bump rate limits. Gating happens at
+    the caller via `HF_ENABLED`.
+    """
+    if not skills:
+        raise RuntimeError("huggingface needs at least one skill to query")
+
+    token = os.environ.get("HF_TOKEN")
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    # Pick up to 3 ML-leaning skills to drive the model search. Cap to avoid
+    # blowing through the rate limit on a 10-skill JD.
+    queries = [s for s in skills if s][:3]
+    if not queries:
+        return []
+
+    seen_authors: set[str] = set()
+    async with httpx.AsyncClient(timeout=30) as client:
+        for q in queries:
+            try:
+                resp = await client.get(
+                    f"{HF_API_BASE}/models",
+                    headers=headers,
+                    params={"search": q, "limit": 50},
+                )
+                if resp.status_code != 200:
+                    log.warning("hf models search %r HTTP %s: %s",
+                                q, resp.status_code, resp.text[:200])
+                    continue
+                for model in resp.json() or []:
+                    author = model.get("author")
+                    if author and author not in seen_authors:
+                        seen_authors.add(author)
+                        if len(seen_authors) >= 60:
+                            break
+            except Exception:
+                log.warning("hf models search failed for %r", q,
+                            exc_info=True)
+            if len(seen_authors) >= 60:
+                break
+
+        # Cap enrichment at 30 authors per requirement.
+        author_list = list(seen_authors)[:30]
+        sem = asyncio.Semaphore(5)
+
+        async def _fetch_user(username: str) -> dict | None:
+            async with sem:
+                try:
+                    r = await client.get(
+                        f"{HF_API_BASE}/users/{username}/overview",
+                        headers=headers,
+                    )
+                    if r.status_code == 200:
+                        data = r.json() or {}
+                        data.setdefault("user", username)
+                        return data
+                except Exception:
+                    log.warning("hf /users/%s/overview failed", username,
+                                exc_info=True)
+                return None
+
+        full = await asyncio.gather(
+            *[_fetch_user(a) for a in author_list])
+        users = [u for u in full if u]
+
+    return _normalize_hf_users(users, skills, market)
+
+
 # ── Naukri Recruiter API (cookie auth, India's #1 resume DB) ──
 
 NAUKRI_RESDEX_DOMAIN = os.environ.get(
@@ -704,6 +843,12 @@ async def run_all_sources(requirement: dict) -> dict:
     # GitHub — global engineering, free with PAT
     if os.environ.get("GITHUB_TOKEN"):
         tasks.append(("github", source_github(skills, location, market)))
+
+    # Hugging Face — ML/AI engineers, free public API. Gate on a separate flag
+    # so we don't fire HF on every requirement (the public API works without
+    # auth, so a token check alone wouldn't be enough of a gate).
+    if os.environ.get("HF_ENABLED") or os.environ.get("HF_TOKEN"):
+        tasks.append(("huggingface", source_huggingface(skills, market)))
 
     # Run in parallel
     results_by_source: dict[str, int] = {}
