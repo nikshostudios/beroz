@@ -3777,17 +3777,20 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     yield _sse({"event": "agent_done", "agent": "boolean_builder",
                 "payload": boolean_output})
 
-    # ── Agent 3: Sourcing (Apollo + GitHub + HF + Apify + Internal DB) ──
+    # ── Agent 3: Sourcing (Apollo + GitHub + HF + Apify + WebAgent + DB) ──
     apollo_enabled = bool(os.environ.get("APOLLO_API_KEY")
                           or os.environ.get("APOLLO_API"))
     github_enabled = bool(os.environ.get("GITHUB_TOKEN"))
     hf_enabled = bool(os.environ.get("HF_ENABLED")
                       or os.environ.get("HF_TOKEN"))
     apify_enabled = bool(os.environ.get("APIFY_TOKEN"))
+    web_agent_enabled = bool(os.environ.get("BRAVE_SEARCH_API_KEY")
+                             or os.environ.get("SERPAPI_KEY"))
     channel_errors: dict[str, str] = {}
     source_counts: dict[str, int] = {"apollo": 0, "internal_db": 0,
                                      "github": 0, "huggingface": 0,
-                                     "linkedin_apify": 0, "yc": 0}
+                                     "linkedin_apify": 0, "yc": 0,
+                                     "web_agent": 0}
     pool_by_id: dict[str, dict] = {}
     apollo_params = boolean_output.get("apollo_params") or {}
 
@@ -3800,6 +3803,8 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         enabled_labels.append("Hugging Face")
     if apify_enabled:
         enabled_labels.append("Apify")
+    if web_agent_enabled:
+        enabled_labels.append("Web Agent")
     yield _sse({"event": "agent_start", "agent": "sourcing", "idx": 3,
                 "label": "Sourcing " + " + ".join(enabled_labels)})
 
@@ -3836,6 +3841,18 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     if not apify_enabled:
         channel_errors["apify"] = "skipped — APIFY_TOKEN not set on server"
 
+    web_skills = (requirement.get("skills_required") or [])[:6]
+    web_role = requirement.get("role_title")
+    web_location = requirement.get("location") or (
+        "Singapore" if market == "SG" else "India")
+    if web_agent_enabled and not web_skills:
+        channel_errors["web_agent"] = (
+            "skipped — no skills_required to seed search queries")
+        web_agent_enabled = False
+    elif not web_agent_enabled:
+        channel_errors["web_agent"] = (
+            "skipped — neither BRAVE_SEARCH_API_KEY nor SERPAPI_KEY set")
+
     async def _run_sourcing():
         task_names: list[str] = []
         coros = []
@@ -3854,6 +3871,10 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
             task_names.append("apify")
             coros.append(sourcing.source_apify(
                 apify_skills, apify_location, market, apify_role))
+        if web_agent_enabled:
+            task_names.append("web_agent")
+            coros.append(sourcing.source_web_agent(
+                web_role, web_location, web_skills, market))
         task_names.append("internal_db")
         coros.append(_internal_db_search(requirement, limit=200))
         gathered = await asyncio.gather(*coros, return_exceptions=True)
@@ -3974,6 +3995,20 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 if row and row.get("id") and row["id"] not in pool_by_id:
                     pool_by_id[row["id"]] = row
                     source_counts[sub] = source_counts.get(sub, 0) + 1
+            elif name == "web_agent":
+                # Web agent extractions never have email; upsert by name.
+                try:
+                    if cand.get("name"):
+                        row = db.upsert_candidate_by_name(cand)
+                    else:
+                        continue
+                except Exception:
+                    log.exception("web_agent upsert failed for %s",
+                                  cand.get("name"))
+                    continue
+                if row and row.get("id") and row["id"] not in pool_by_id:
+                    pool_by_id[row["id"]] = row
+                    source_counts["web_agent"] += 1
             else:  # internal_db
                 cid = cand.get("id")
                 if cid and cid not in pool_by_id:

@@ -7101,8 +7101,8 @@
           const desc = document.getElementById('agent-desc-sourcing');
           // Data-driven label so new sources (GitHub, etc.) auto-appear
           // without a JS edit. Order matches the sourcing pipeline priority.
-          const sourceOrder = ['internal_db', 'apollo', 'github', 'huggingface', 'linkedin_apify', 'yc'];
-          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face', linkedin_apify: 'LinkedIn', yc: 'YC' };
+          const sourceOrder = ['internal_db', 'apollo', 'github', 'huggingface', 'linkedin_apify', 'yc', 'web_agent'];
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face', linkedin_apify: 'LinkedIn', yc: 'YC', web_agent: 'Web Agent' };
           const seen = new Set();
           const parts = [];
           sourceOrder.forEach(k => {
@@ -7149,7 +7149,7 @@
         let msg = 'Pipeline error: ' + evt.message;
         const c = boostState.sourcingCounts;
         if (c) {
-          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face', linkedin_apify: 'LinkedIn', yc: 'YC' };
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub', huggingface: 'Hugging Face', linkedin_apify: 'LinkedIn', yc: 'YC', web_agent: 'Web Agent' };
           const lines = Object.entries(c).map(([k, v]) =>
             `  • ${labelMap[k] || k}: ${v || 0}`);
           msg += `\n\nSourcing results:\n${lines.join('\n')}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
@@ -7797,6 +7797,7 @@
         huggingface:    { bg: '#fff7ed',                fg: '#c2410c', label: 'HF' },
         linkedin_apify: { bg: 'rgba(10,102,194,0.12)', fg: '#0a66c2', label: 'LinkedIn' },
         yc:             { bg: 'rgba(255,102,0,0.12)',  fg: '#ff6600', label: 'YC' },
+        web_agent:      { bg: 'rgba(99,102,241,0.12)', fg: '#4338ca', label: 'Web' },
         internal_db:    { bg: 'rgba(16,185,129,0.12)', fg: '#047857', label: 'Internal' },
         foundit:        { bg: 'rgba(244,114,182,0.12)', fg: '#be185d', label: 'Foundit' },
         naukri:         { bg: 'rgba(59,130,246,0.12)', fg: '#1d4ed8', label: 'Naukri' },

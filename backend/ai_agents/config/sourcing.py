@@ -12,6 +12,7 @@ not candidate profiles.
 """
 
 import asyncio
+import json
 import logging
 import os
 
@@ -871,6 +872,264 @@ async def source_apify(skills: list[str], location: str | None,
     return out
 
 
+# ── Web-search agent (Claude + Brave/SerpAPI) ──────────────────
+
+WEB_AGENT_QUERY_MODEL = "claude-haiku-4-5-20251001"
+WEB_AGENT_EXTRACT_MODEL = "claude-sonnet-4-20250514"
+WEB_AGENT_MAX_QUERIES = 5
+WEB_AGENT_MAX_PAGES = 30
+WEB_AGENT_MAX_CANDIDATES = 30
+WEB_AGENT_TOTAL_TIMEOUT_SEC = 60
+
+
+def _strip_llm_json(text: str) -> str:
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+    return cleaned
+
+
+async def _brave_search(query: str, count: int = 10) -> list[dict]:
+    """Call Brave Search Web API. Returns the `results` list or []."""
+    api_key = os.environ.get("BRAVE_SEARCH_API_KEY")
+    if not api_key:
+        return []
+    headers = {
+        "Accept": "application/json",
+        "X-Subscription-Token": api_key,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            headers=headers,
+            params={"q": query, "count": count},
+        )
+        if resp.status_code != 200:
+            log.warning("brave search %r HTTP %s: %s",
+                        query, resp.status_code, resp.text[:200])
+            return []
+        data = resp.json() or {}
+        return ((data.get("web") or {}).get("results")) or []
+
+
+async def _serpapi_search(query: str, count: int = 10) -> list[dict]:
+    """Call SerpAPI as a Brave fallback. Returns `organic_results` or []."""
+    api_key = os.environ.get("SERPAPI_KEY")
+    if not api_key:
+        return []
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://serpapi.com/search.json",
+            params={"q": query, "engine": "google",
+                    "num": count, "api_key": api_key},
+        )
+        if resp.status_code != 200:
+            log.warning("serpapi %r HTTP %s: %s",
+                        query, resp.status_code, resp.text[:200])
+            return []
+        data = resp.json() or {}
+        return data.get("organic_results") or []
+
+
+async def _generate_search_queries(role_title: str | None,
+                                   location: str | None,
+                                   skills: list[str]) -> list[str]:
+    """Ask Claude Haiku for 3-5 Google-style search queries."""
+    import anthropic  # local import — keeps cold-start light for non-LLM sources
+
+    n = WEB_AGENT_MAX_QUERIES
+    skills_str = ", ".join(skills[:6]) if skills else "(none)"
+    prompt = (
+        f"Generate {n} Google-style search queries to find {role_title or 'engineer'} "
+        f"candidates in {location or 'India / SE Asia'} with skills {skills_str}. "
+        "Bias toward queries that surface personal blogs, conference talks, "
+        "GitHub READMEs, and Indian/SE-Asian tech community sites (Hashnode, "
+        "Dev.to, Medium). Return ONLY a JSON array of strings, no commentary."
+    )
+
+    def _sync_call() -> str:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=WEB_AGENT_QUERY_MODEL,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.content[0].text if resp.content else ""
+
+    try:
+        text = await asyncio.to_thread(_sync_call)
+    except Exception as exc:
+        log.warning("web_agent query gen failed: %s", exc)
+        return []
+    parsed = None
+    try:
+        parsed = json.loads(_strip_llm_json(text))
+    except Exception:
+        log.warning("web_agent query gen returned non-JSON: %s", text[:200])
+    if not isinstance(parsed, list):
+        return []
+    return [str(q) for q in parsed if q][:WEB_AGENT_MAX_QUERIES]
+
+
+async def _fetch_pages(urls: list[str]) -> list[tuple[str, str]]:
+    """Fetch up to WEB_AGENT_MAX_PAGES URLs concurrently. Returns (url, html)."""
+    sem = asyncio.Semaphore(8)
+
+    async def _fetch_one(url: str) -> tuple[str, str] | None:
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=5,
+                                             follow_redirects=True) as client:
+                    r = await client.get(url, headers={
+                        "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac "
+                                       "OS X 10_15_7) AppleWebKit/537.36 "
+                                       "(KHTML, like Gecko) "
+                                       "Chrome/146.0.0.0 Safari/537.36")})
+                if r.status_code == 200 and r.text:
+                    return (url, r.text[:8000])
+            except Exception:
+                pass
+            return None
+
+    results = await asyncio.gather(
+        *[_fetch_one(u) for u in urls[:WEB_AGENT_MAX_PAGES]])
+    return [r for r in results if r]
+
+
+async def _extract_candidates_from_corpus(
+    corpus: list[tuple[str, str]],
+    role_title: str | None,
+    location: str | None,
+    skills: list[str],
+    market: str,
+) -> list[dict]:
+    """Hand the page corpus to Claude Sonnet for candidate extraction."""
+    import anthropic
+
+    if not corpus:
+        return []
+
+    skills_str = ", ".join(skills[:6]) if skills else "(any)"
+    snippets = "\n\n---\n\n".join(
+        f"URL: {url}\n{html}" for url, html in corpus)
+    prompt = (
+        f"Requirement: role={role_title or 'engineer'}; "
+        f"location={location or 'India/SE Asia'}; skills={skills_str}.\n\n"
+        "From the following web pages, extract people who clearly match "
+        "the requirement. For each, return a JSON object with: name, "
+        "current_job_title, current_employer, current_location, "
+        "source_profile_url (the most relevant URL for that person), "
+        "and evidence_quote (a short quote from the page that proves the "
+        "match). Only include people whose page clearly establishes them as "
+        f"fitting the requirement. Cap at {WEB_AGENT_MAX_CANDIDATES}. "
+        "Return ONLY a JSON array, no commentary.\n\n"
+        f"PAGES:\n{snippets}"
+    )
+
+    def _sync_call() -> str:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=WEB_AGENT_EXTRACT_MODEL,
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.content[0].text if resp.content else ""
+
+    try:
+        text = await asyncio.to_thread(_sync_call)
+    except Exception as exc:
+        log.warning("web_agent extraction failed: %s", exc)
+        return []
+    try:
+        parsed = json.loads(_strip_llm_json(text))
+    except Exception:
+        log.warning("web_agent extraction returned non-JSON: %s", text[:200])
+        return []
+    if not isinstance(parsed, list):
+        return []
+
+    out = []
+    for item in parsed[:WEB_AGENT_MAX_CANDIDATES]:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or "").strip()
+        if not name:
+            continue
+        out.append({
+            "name": name,
+            "email": None,
+            "current_employer": item.get("current_employer") or None,
+            "current_job_title": item.get("current_job_title") or None,
+            "current_location": item.get("current_location") or None,
+            "skills": list(skills) if skills else [],
+            "source": "web_agent",
+            "market": market,
+            "source_profile_url": item.get("source_profile_url") or None,
+            "source_metadata": {
+                "evidence_quote": item.get("evidence_quote") or None,
+                "search_engine": ("brave" if os.environ.get(
+                    "BRAVE_SEARCH_API_KEY") else "serpapi"),
+            },
+        })
+    return out
+
+
+async def source_web_agent(role_title: str | None, location: str | None,
+                           skills: list[str], market: str) -> list[dict]:
+    """Autonomously discover candidates from the open web via search + LLM.
+
+    Pipeline: Claude Haiku generates queries -> Brave (fallback SerpAPI) ->
+    fetch pages -> Claude Sonnet extracts people. Hard-capped at
+    WEB_AGENT_TOTAL_TIMEOUT_SEC so a slow page can't block the boost.
+    """
+    if not skills:
+        raise RuntimeError("web_agent needs skills_required to seed queries")
+    if not (os.environ.get("BRAVE_SEARCH_API_KEY")
+            or os.environ.get("SERPAPI_KEY")):
+        raise RuntimeError("web_agent needs BRAVE_SEARCH_API_KEY or SERPAPI_KEY")
+
+    async def _run() -> list[dict]:
+        queries = await _generate_search_queries(role_title, location, skills)
+        if not queries:
+            return []
+
+        urls: list[str] = []
+        seen: set[str] = set()
+        for q in queries:
+            results = await _brave_search(q, count=10)
+            engine = "brave"
+            if not results:
+                results = await _serpapi_search(q, count=10)
+                engine = "serpapi"
+            for r in results:
+                u = r.get("url") or r.get("link")
+                if u and u not in seen:
+                    seen.add(u)
+                    urls.append(u)
+                if len(urls) >= WEB_AGENT_MAX_PAGES:
+                    break
+            log.info("web_agent query=%r engine=%s urls_total=%d",
+                     q, engine, len(urls))
+            if len(urls) >= WEB_AGENT_MAX_PAGES:
+                break
+
+        if not urls:
+            return []
+        corpus = await _fetch_pages(urls)
+        return await _extract_candidates_from_corpus(
+            corpus, role_title, location, skills, market)
+
+    try:
+        return await asyncio.wait_for(_run(),
+                                      timeout=WEB_AGENT_TOTAL_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        log.warning("web_agent hit %ds total timeout",
+                    WEB_AGENT_TOTAL_TIMEOUT_SEC)
+        return []
+
+
 # ── Naukri Recruiter API (cookie auth, India's #1 resume DB) ──
 
 NAUKRI_RESDEX_DOMAIN = os.environ.get(
@@ -1080,6 +1339,13 @@ async def run_all_sources(requirement: dict) -> dict:
     if os.environ.get("APIFY_TOKEN"):
         tasks.append(("apify", source_apify(
             skills, location, market, requirement.get("role_title"))))
+
+    # Web-search agent — Claude + Brave/SerpAPI. Discovers people no other
+    # channel surfaces (personal blogs, conference talks, GitHub READMEs).
+    if (skills and (os.environ.get("BRAVE_SEARCH_API_KEY")
+                    or os.environ.get("SERPAPI_KEY"))):
+        tasks.append(("web_agent", source_web_agent(
+            requirement.get("role_title"), location, skills, market)))
 
     # Run in parallel
     results_by_source: dict[str, int] = {}
