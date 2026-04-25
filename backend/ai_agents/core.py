@@ -867,6 +867,17 @@ def reveal_candidate_field(cid: str, field: str,
         except Exception as e:
             log.warning("Failed to insert pending_phone_reveals row: %s", e)
 
+    # Pre-flight credit gate for email reveals — Apollo may return a 200
+    # with no email rather than a 402 when an account is depleted, so we
+    # check our cached balance first and re-fetch once if it reads zero.
+    if field == "email":
+        cached = (_apollo_credits_cache.get("data") or {})
+        if cached.get("email_credits", 1) <= 0:
+            _apollo_credits_cache.clear()
+            fresh = get_apollo_credits()
+            if fresh.get("email_credits", 0) <= 0:
+                raise CoreError(402, "out_of_credits")
+
     try:
         person = asyncio.run(sourcing.apollo_people_match(
             apollo_person_id=apollo_id,
@@ -920,7 +931,26 @@ def reveal_candidate_field(cid: str, field: str,
             value = emails[0] if emails else ""
         else:
             value = str(emails)
-    return {"field": field, "value": value, "candidate_id": cid}
+
+    revealed = bool(value)
+    reason = None if revealed else (
+        "no_email_on_apollo_record" if person else "apollo_no_match")
+
+    if not revealed and field == "email":
+        # Diagnostic: log what Apollo returned so we can tell whether the
+        # cause is plan-tier (email_status='unavailable'), per-candidate
+        # (Apollo has the person but no email on file), or genuinely empty.
+        # Allowlist of keys avoids dumping the full enrichment payload.
+        diag_keys = ("id", "email_status", "extrapolated_email_confidence_level",
+                     "personal_emails", "email", "linkedin_url", "organization_id")
+        redact_keys = ("email", "personal_emails", "phone_numbers")
+        redacted = {k: ("<redacted>" if k in redact_keys else v)
+                    for k, v in (person or {}).items() if k in diag_keys}
+        log.info("apollo reveal returned no email cid=%s payload_keys=%s redacted=%s",
+                 cid, sorted((person or {}).keys()), redacted)
+
+    return {"field": field, "value": value, "revealed": revealed,
+            "reason": reason, "candidate_id": cid}
 
 
 def _auto_reveal_top_reachable(
@@ -1322,8 +1352,10 @@ def update_requirement(req_id, payload, user_role, user_email):
     _require_role(user_role, ["tl"])
     if not payload or not isinstance(payload, dict):
         raise ValueError("Missing payload")
-    allowed = {"role_title", "client_name", "status", "skillset", "location",
-               "contract_type", "notice_period", "salary_budget"}
+    allowed = {"role_title", "client_name", "market", "status", "skillset",
+               "skills_required", "location", "contract_type", "notice_period",
+               "salary_budget", "experience_min", "jd_text",
+               "assigned_recruiters"}
     updates = {k: v for k, v in payload.items() if k in allowed and v is not None}
     if not updates:
         raise ValueError("No valid fields to update")

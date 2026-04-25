@@ -595,8 +595,14 @@
       transition:all .15s; }
     .reveal-pill:hover:not(:disabled) { border-color:var(--brand-purple);
       color:var(--brand-purple); background:#faf7ff; }
-    .reveal-pill:disabled { opacity:.55; cursor:not-allowed; }
+    .reveal-pill:disabled,
+    .reveal-pill.disabled { opacity:.55; cursor:not-allowed; }
+    .reveal-pill.disabled:hover { border-color:var(--border-color);
+      color:var(--text-secondary); background:#fff; }
     .reveal-pill .material-icons-outlined { font-size:12px; }
+    .reveal-empty { display:inline-flex; align-items:center; padding:3px 9px;
+      border-radius:20px; background:#f3f4f6; color:var(--text-muted);
+      font-size:11px; white-space:nowrap; cursor:help; }
     .reveal-cost { display:inline-flex; align-items:center; gap:2px; margin-left:6px;
                    padding:1px 6px; border-radius:10px; background:rgba(0,0,0,.06);
                    font-size:11px; font-weight:600; color:var(--text-primary); }
@@ -4112,8 +4118,8 @@
               <td>${esc(assignedLabel)}</td>
               <td>${matchedCount > 0 ? `<a href="#" onclick="event.preventDefault();viewSourcedCandidates('${req.id}')" style="color:var(--brand-blue);text-decoration:none">${matchedCount} found</a>` : '<span style="color:var(--text-muted)">—</span>'}</td>
               <td>
-                <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="viewRequirement('${req.id}')">Details</button>
-                ${isTL ? `<button class="req-card-close" style="margin-left:4px" onclick="closeRequirement('${req.id}', this)"><span class="material-icons-outlined" style="font-size:12px">archive</span></button>` : ''}
+                <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="event.stopPropagation();viewRequirement('${req.id}')">Details</button>
+                ${isTL ? `<button class="req-card-close" style="margin-left:4px;padding:4px 10px;font-size:12px" onclick="event.stopPropagation();closeRequirement('${req.id}', this)">Close</button>` : ''}
               </td>
             `;
             tr.addEventListener('click', () => viewRequirement(req.id));
@@ -7909,6 +7915,11 @@
              </button>`
           : `<button class="arow-name-btn" onclick="(window._drawerOpener || openApolloDrawer)('${cid}')">${esc(c.name)}</button>`;
 
+        // Credit-aware pill rendering: when our cached Apollo balance is
+        // zero we disable the pill so the user can't waste a click.
+        const noEmailCredits = (state._apolloCredits?.email_credits ?? 1) <= 0;
+        const noPhoneCredits = (state._apolloCredits?.phone_credits ?? 1) <= 0;
+
         // Email cell
         let emailCell;
         if (c.do_not_email) {
@@ -7916,7 +7927,10 @@
         } else if (c.email) {
           emailCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`;
         } else {
-          emailCell = `<button class="reveal-pill" onclick="revealField('${cid}','email',this)" data-cid="${cid}">
+          const cls = noEmailCredits ? 'reveal-pill disabled' : 'reveal-pill';
+          const onClick = noEmailCredits ? '' : `onclick="revealField('${cid}','email',this)"`;
+          const tip = noEmailCredits ? ' title="Out of email credits — top up Apollo"' : '';
+          emailCell = `<button class="${cls}"${tip} ${onClick} data-cid="${cid}">
             <span class="material-icons-outlined">email</span> Access email <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
           </button>`;
         }
@@ -7928,7 +7942,10 @@
         } else if (c.phone) {
           phoneCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`;
         } else {
-          phoneCell = `<button class="reveal-pill" onclick="revealField('${cid}','phone',this)" data-cid="${cid}">
+          const cls = noPhoneCredits ? 'reveal-pill disabled' : 'reveal-pill';
+          const onClick = noPhoneCredits ? '' : `onclick="revealField('${cid}','phone',this)"`;
+          const tip = noPhoneCredits ? ' title="Out of phone credits — top up Apollo"' : '';
+          phoneCell = `<button class="${cls}"${tip} ${onClick} data-cid="${cid}">
             <span class="material-icons-outlined">phone</span> Access mobile <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
           </button>`;
         }
@@ -8084,6 +8101,22 @@
           return { pending: true };
         }
 
+        // Backend tells us when Apollo returned no value (e.g. plan tier
+        // doesn't include the email, or no record on file). Surface that
+        // distinctly so the user isn't left staring at an empty pill.
+        if (data?.revealed === false && (field === 'email' || field === 'phone')) {
+          const labels = { email: 'No email on record', phone: 'No phone on record' };
+          const tips = {
+            apollo_no_match: 'Apollo had no record for this candidate',
+            no_email_on_apollo_record: 'Apollo has no email on file for this candidate',
+            no_phone_on_apollo_record: 'Apollo has no phone on file for this candidate',
+          };
+          const tip = tips[data?.reason] || 'Apollo returned no value for this candidate';
+          btn.outerHTML = `<span class="reveal-empty" title="${esc(tip)}">${labels[field]}</span>`;
+          fetchApolloCredits().catch(() => {});
+          return { revealed: false, reason: data?.reason };
+        }
+
         const value = data?.value || '';
         let displayHtml;
         if (field === 'email') {
@@ -8103,15 +8136,18 @@
         }
         // Refresh credits silently
         fetchApolloCredits().catch(() => {});
+        return { revealed: true, value };
       } catch (err) {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
         const msg = err.message || '';
-        if (msg.includes('credits_exhausted') || msg.includes('402')) {
+        if (msg.includes('credits_exhausted') || msg.includes('out_of_credits') || msg.includes('402')) {
           btn.outerHTML = `<span style="font-size:11px;color:#b91c1c">Out of credits · <a href="https://app.apollo.io/settings/credits" target="_blank" style="color:#b91c1c">top up</a></span>`;
+          fetchApolloCredits().catch(() => {});
         } else {
           showToast('Reveal failed: ' + msg, 'error');
         }
+        return { revealed: false, error: msg };
       }
     }
 
@@ -8304,6 +8340,10 @@
       // span is being polled in place, so DON'T re-render the drawer (would
       // wipe it out and orphan the polling).
       if (result?.pending) return;
+      // When Apollo returned no value, revealField has already swapped the
+      // pill for a "No email on record" indicator. Re-rendering from the DB
+      // would overwrite that with the original pill again.
+      if (result?.revealed === false) return;
       try {
         const data = await api(`/api/candidates/${candidateId}/detail`);
         const c = data?.candidate || {};
