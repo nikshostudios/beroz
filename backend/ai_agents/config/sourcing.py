@@ -654,6 +654,10 @@ APIFY_API_BASE = "https://api.apify.com/v2"
 # (`searchQuery`, `currentJobTitles`, `locations`, `maxItems`). Pricing:
 # $0.1 per search page + $0.004 per full profile (~$0.22 per 30-profile run).
 DEFAULT_APIFY_LINKEDIN_ACTOR = "harvestapi/linkedin-profile-search"
+# harvestapi/linkedin-profile-scraper — URL-in / profile-out enrichment.
+# Default mode "Profile details no email" ($4 / 1k); switch via env var
+# APIFY_LINKEDIN_ENRICH_MODE to a with-email mode to recover contact info.
+DEFAULT_APIFY_LINKEDIN_ENRICH_ACTOR = "harvestapi/linkedin-profile-scraper"
 DEFAULT_APIFY_YC_ACTOR = "michael.g/y-conductor-scraper"
 
 _YC_ROLE_TRIGGERS = (
@@ -899,6 +903,73 @@ async def source_apify(skills: list[str], location: str | None,
             log.warning("apify yc actor failed: %s", yc_items)
         else:
             out.extend(_normalize_apify_yc(yc_items, market))
+    return out
+
+
+async def enrich_linkedin_with_apify(
+    linkedin_urls: list[str],
+    *,
+    mode: str | None = None,
+    max_profiles: int = 5,
+) -> dict[str, dict]:
+    """Enrich a small batch of LinkedIn URLs with email + phone + bio.
+
+    Calls harvestapi/linkedin-profile-scraper. The actor's
+    `profileScraperMode` selects the price/payload tier — the cheap default
+    "Profile details no email" gives full profile minus email; pass a
+    with-email mode (look up the exact string in Apify Console; varies by
+    actor build) to recover contact info. Mode resolution order:
+      1. explicit `mode` argument
+      2. APIFY_LINKEDIN_ENRICH_MODE env var
+      3. fallback to "Profile + email" (most common harvestapi key)
+
+    Returns {linkedin_url: {email, phone, headline, ...}} for URLs the actor
+    successfully resolved. Failed URLs are silently dropped.
+    """
+    if not linkedin_urls:
+        return {}
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        return {}
+
+    actor_id = (os.environ.get("APIFY_LINKEDIN_ENRICH_ACTOR_ID")
+                or DEFAULT_APIFY_LINKEDIN_ENRICH_ACTOR)
+    chosen_mode = (mode
+                   or os.environ.get("APIFY_LINKEDIN_ENRICH_MODE")
+                   or "Profile + email")
+
+    # Cap to control cost — top-N enrichment shouldn't ever balloon.
+    urls = [u for u in linkedin_urls if u][:max_profiles]
+    if not urls:
+        return {}
+
+    body = {
+        "profileScraperMode": chosen_mode,
+        "queries": urls,         # alias accepted by recent harvestapi builds
+        "targetUrls": urls,      # alias accepted by older builds
+        "urls": urls,            # generic fallback
+        "maxItems": len(urls),
+    }
+    items = await _apify_run_actor(actor_id, body, token, timeout_sec=120)
+
+    out: dict[str, dict] = {}
+    for it in items:
+        url = (it.get("linkedinUrl") or it.get("publicProfileUrl")
+               or it.get("profileUrl") or it.get("url") or it.get("input"))
+        if not url:
+            continue
+        # Strip any trailing slash / query so we match the input form.
+        norm_url = url.rstrip("/").split("?")[0]
+        email = it.get("email") or it.get("emailAddress")
+        phone = (it.get("phoneNumber") or it.get("phone")
+                 or it.get("mobile"))
+        out[norm_url] = {
+            "email": email,
+            "phone": phone,
+            "headline": it.get("headline") or it.get("title"),
+            "linkedin_url": url,
+            "raw": it,
+        }
     return out
 
 

@@ -1071,6 +1071,91 @@ def _auto_reveal_top_reachable(
     return summary
 
 
+async def _auto_enrich_linkedin_top(
+    candidate_ids_by_score: list[str],
+    budget: int = 5,
+) -> dict:
+    """Auto-enrich up to `budget` non-Apollo top rows that have a LinkedIn URL
+    and no email yet.
+
+    Mirrors the Apollo `_auto_reveal_top_reachable` shape but routes through
+    harvestapi/linkedin-profile-scraper. We pull source_profile_url for rows
+    sourced from linkedin_apify / web_agent / github / huggingface, keep only
+    LinkedIn URLs that lack an email, cap at `budget`, and patch any
+    {email, phone} we get back.
+
+    Returns: {attempted, patched_email, patched_phone, errors}.
+    """
+    summary = {"attempted": 0, "patched_email": 0,
+               "patched_phone": 0, "errors": 0}
+    if not candidate_ids_by_score:
+        return summary
+
+    client = db.get_client()
+    try:
+        rows = (client.table("candidates")
+                .select("id, source, email, source_profile_url")
+                .in_("id", candidate_ids_by_score).execute().data) or []
+    except Exception:
+        log.exception("linkedin_enrich: candidates fetch failed")
+        return summary
+    rows_by_id = {r["id"]: r for r in rows}
+
+    targets: list[dict] = []
+    for cid in candidate_ids_by_score:
+        r = rows_by_id.get(cid)
+        if not r:
+            continue
+        if r.get("email"):
+            continue
+        url = (r.get("source_profile_url") or "").strip()
+        if "linkedin.com/in/" not in url:
+            continue
+        targets.append(r)
+        if len(targets) >= budget:
+            break
+
+    summary["attempted"] = len(targets)
+    if not targets:
+        return summary
+
+    urls = [t["source_profile_url"] for t in targets]
+    try:
+        enriched = await sourcing.enrich_linkedin_with_apify(
+            urls, max_profiles=budget)
+    except Exception:
+        log.exception("linkedin_enrich: apify call failed")
+        summary["errors"] += 1
+        return summary
+
+    for t in targets:
+        url = (t.get("source_profile_url") or "").rstrip("/").split("?")[0]
+        info = enriched.get(url)
+        if not info:
+            continue
+        patch: dict = {}
+        if info.get("email"):
+            patch["email"] = info["email"]
+        if info.get("phone"):
+            patch["phone"] = info["phone"]
+        if not patch:
+            continue
+        patch["enriched_at"] = datetime.now(timezone.utc).isoformat()
+        try:
+            db.update_candidate(t["id"], patch)
+        except Exception:
+            log.exception("linkedin_enrich: update_candidate failed for %s",
+                          t["id"])
+            summary["errors"] += 1
+            continue
+        if patch.get("email"):
+            summary["patched_email"] += 1
+        if patch.get("phone"):
+            summary["patched_phone"] += 1
+
+    return summary
+
+
 def get_phone_reveal_status(cid: str) -> dict:
     """Return latest phone-reveal status for a candidate (for frontend polling).
 
@@ -4097,6 +4182,23 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         except Exception:
             log.exception("agentic boost: auto-reveal pass failed")
             auto_reveal_summary = None
+        # LinkedIn enrichment: budget=5. Mirrors the Apollo auto-reveal but
+        # for non-Apollo top rows that have a LinkedIn URL and no email.
+        # Hits harvestapi/linkedin-profile-scraper to backfill email + phone
+        # so outreach drafting has something to send to.
+        linkedin_enrich_summary = None
+        if os.environ.get("APIFY_TOKEN"):
+            try:
+                linkedin_enrich_summary = _run_async(
+                    _auto_enrich_linkedin_top(
+                        candidate_ids_by_score=[
+                            t["candidate_id"] for t in top
+                            if t.get("candidate_id")],
+                        budget=5,
+                    ))
+            except Exception:
+                log.exception("agentic boost: linkedin enrichment failed")
+                linkedin_enrich_summary = None
         top_enriched = _enrich_top_candidates(
             top, requirement_id, user_email)
         yield _sse({"event": "agent_done", "agent": "screener", "payload": {
@@ -4106,6 +4208,9 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         if auto_reveal_summary is not None:
             yield _sse({"event": "agent_done", "agent": "auto_reveal",
                         "payload": auto_reveal_summary})
+        if linkedin_enrich_summary is not None:
+            yield _sse({"event": "agent_done", "agent": "linkedin_enrich",
+                        "payload": linkedin_enrich_summary})
     except Exception as exc:
         log.exception("agentic boost: screener failed")
         yield _sse({"event": "agent_error", "agent": "screener",
