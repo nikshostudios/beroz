@@ -183,6 +183,16 @@
 
     .header-title { font-size: 16px; font-weight: 600; flex: 1; }
 
+    .back-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-secondary); padding: 6px; margin-right: 4px;
+      border-radius: var(--radius); display: flex; align-items: center;
+      justify-content: center; transition: background 0.15s, color 0.15s;
+    }
+    .back-btn:hover { background: rgba(0,0,0,0.04); color: var(--text-primary); }
+    .back-btn[hidden] { display: none; }
+    .back-btn .material-icons-outlined { font-size: 20px; }
+
     .header-actions { display: flex; align-items: center; gap: 8px; }
 
     .icon-btn {
@@ -2064,6 +2074,9 @@
     <div class="main">
       <!-- Header -->
       <header class="header">
+        <button class="back-btn" id="back-btn" aria-label="Back to previous page" title="Back" hidden>
+          <span class="material-icons-outlined">arrow_back</span>
+        </button>
         <div class="header-title" id="page-title">Requirements</div>
         <div class="header-actions">
           <div style="position:relative">
@@ -3899,7 +3912,24 @@
       'settings': 'Settings'
     };
 
-    function switchPage(pageId) {
+    state.pageHistory = [];
+    state.currentPageId = null;
+
+    function updateBackButton() {
+      const btn = document.getElementById('back-btn');
+      if (!btn) return;
+      btn.hidden = state.pageHistory.length === 0;
+    }
+
+    function switchPage(pageId, opts) {
+      opts = opts || {};
+      if (pageId === state.currentPageId) return;
+      if (!opts.skipHistory && state.currentPageId) {
+        state.pageHistory.push(state.currentPageId);
+        if (state.pageHistory.length > 50) state.pageHistory.shift();
+      }
+      state.currentPageId = pageId;
+
       pages.forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -3924,7 +3954,13 @@
       if (pageId === 'submissions') loadSubmissions();
       if (pageId === 'sequences') loadSequencesPageV2();
       renderRequirementContext();
+      updateBackButton();
     }
+
+    document.getElementById('back-btn')?.addEventListener('click', () => {
+      const prev = state.pageHistory.pop();
+      if (prev) switchPage(prev, { skipHistory: true });
+    });
 
     navItems.forEach(item => {
       item.addEventListener('click', (e) => {
