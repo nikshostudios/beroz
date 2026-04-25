@@ -650,7 +650,10 @@ async def source_huggingface(skills: list[str], market: str) -> list[dict]:
 # ── Apify multi-actor (LinkedIn People Search + YC directory) ─
 
 APIFY_API_BASE = "https://api.apify.com/v2"
-DEFAULT_APIFY_LINKEDIN_ACTOR = "curious_coder/linkedin-search-scraper"
+# harvestapi/linkedin-profile-search — 4.7★, no-cookie, structured input
+# (`searchQuery`, `currentJobTitles`, `locations`, `maxItems`). Pricing:
+# $0.1 per search page + $0.004 per full profile (~$0.22 per 30-profile run).
+DEFAULT_APIFY_LINKEDIN_ACTOR = "harvestapi/linkedin-profile-search"
 DEFAULT_APIFY_YC_ACTOR = "michael.g/y-conductor-scraper"
 
 _YC_ROLE_TRIGGERS = (
@@ -687,36 +690,63 @@ async def _apify_run_actor(actor_id: str, body: dict,
 def _normalize_apify_linkedin(items: list[dict],
                               match_skills: list[str],
                               market: str) -> list[dict]:
-    """Map Apify LinkedIn People Search items to candidate dict shape.
+    """Map harvestapi/linkedin-profile-search items to candidate dict shape.
 
-    The actor returns name/headline/location/profile URL/current company
-    (field names vary by provider, so we accept several aliases).
+    The actor returns one item per LinkedIn profile with fields like:
+      name / firstName + lastName, headline, location (string or object),
+      currentPosition (object with companyName/title) or experience[0],
+      linkedinUrl / publicProfileUrl. Field aliases kept loose so a swap to
+      another harvestapi profile actor doesn't break the normalizer.
     """
     results = []
     for it in items:
         name = (it.get("name") or it.get("fullName")
-                or it.get("title") or "")
+                or " ".join(filter(None, [it.get("firstName"),
+                                          it.get("lastName")])).strip()
+                or "")
         if not name:
             continue
         headline = (it.get("headline") or it.get("jobTitle")
                     or it.get("subtitle") or "")
-        company = (it.get("companyName") or it.get("company")
-                   or it.get("currentCompany") or None)
-        if isinstance(company, dict):
-            company = company.get("name") or company.get("title")
-        location = (it.get("location") or it.get("locationName")
-                    or it.get("city") or None)
-        profile_url = (it.get("profileUrl") or it.get("url")
-                       or it.get("link") or it.get("publicProfileUrl"))
+
+        current = (it.get("currentPosition") or it.get("currentCompany")
+                   or it.get("position") or {})
+        if isinstance(current, list) and current:
+            current = current[0] if isinstance(current[0], dict) else {}
+        if not isinstance(current, dict):
+            current = {}
+        company = (current.get("companyName") or current.get("company")
+                   or current.get("name") or it.get("companyName")
+                   or it.get("company"))
+        # Fall back to first experience entry when currentPosition missing.
+        if not company:
+            exp = it.get("experience") or it.get("experiences") or []
+            if isinstance(exp, list) and exp and isinstance(exp[0], dict):
+                company = (exp[0].get("companyName")
+                           or exp[0].get("company")
+                           or (exp[0].get("organization") or {}).get("name"))
+
+        loc_raw = (it.get("location") or it.get("locationName")
+                   or it.get("geoLocation") or it.get("city"))
+        if isinstance(loc_raw, dict):
+            location = (loc_raw.get("name") or loc_raw.get("text")
+                        or loc_raw.get("city"))
+        else:
+            location = loc_raw or None
+
+        profile_url = (it.get("linkedinUrl") or it.get("publicProfileUrl")
+                       or it.get("profileUrl") or it.get("url")
+                       or it.get("link"))
+
         # Tag any match_skill mentioned in the headline so the screener
         # has signal to bite on.
-        h_lower = headline.lower()
+        h_lower = (headline or "").lower()
         skills = [s for s in match_skills if s and s.lower() in h_lower]
         if not skills:
             skills = list(match_skills)
         results.append({
             "name": name,
-            "email": None,
+            "email": it.get("email") or None,
             "current_employer": company,
             "current_job_title": headline[:200] if headline else None,
             "current_location": location,
@@ -726,8 +756,11 @@ def _normalize_apify_linkedin(items: list[dict],
             "source_profile_url": profile_url,
             "source_metadata": {
                 "apify_actor": "linkedin",
+                "actor_id": "harvestapi/linkedin-profile-search",
                 "linkedin_url": profile_url,
                 "raw_headline": headline or None,
+                "follower_count": it.get("followerCount"),
+                "connections_count": it.get("connectionsCount"),
             },
         })
     return results
@@ -820,28 +853,25 @@ async def source_apify(skills: list[str], location: str | None,
     yc_actor = (os.environ.get("APIFY_YC_ACTOR_ID")
                 or DEFAULT_APIFY_YC_ACTOR)
 
+    # harvestapi/linkedin-profile-search takes structured filters, not a
+    # search URL. searchQuery is the fuzzy free-text field; currentJobTitles
+    # / locations are array-typed structured filters that compose with it.
     keyword = " ".join(s for s in (skills or []) if s).strip()
     if not keyword and role_title:
         keyword = role_title
     geo = location or ("Singapore" if market == "SG" else "India")
 
-    # LinkedIn People Search URL — filter by people, keywords, and a free-text
-    # location string (Apify's actor accepts this form per their docs).
-    from urllib.parse import quote_plus
-    search_url = ("https://www.linkedin.com/search/results/people/"
-                  f"?keywords={quote_plus(keyword)}"
-                  f"&origin=GLOBAL_SEARCH_HEADER")
-    if geo:
-        search_url += f"&location={quote_plus(geo)}"
-
-    linkedin_body = {
-        "searchUrl": search_url,
-        "maxResults": 30,
-        # Some actor variants use these alternate keys; harmless if ignored.
-        "keywords": keyword,
-        "location": geo,
-        "limit": 30,
+    linkedin_body: dict = {
+        "profileScraperMode": "Full",
+        "maxItems": 30,
+        "startPage": 1,
     }
+    if keyword:
+        linkedin_body["searchQuery"] = keyword
+    if role_title:
+        linkedin_body["currentJobTitles"] = [role_title]
+    if geo:
+        linkedin_body["locations"] = [geo]
     yc_body = {
         # Default to recent batches; user can override actor input via the
         # APIFY_YC_ACTOR_ID swap if they want a different shape.
