@@ -7877,19 +7877,6 @@
       return html + '</div>';
     }
 
-    function _maskEmail(email) {
-      if (!email) return '';
-      const [local, domain] = email.split('@');
-      if (!domain) return email;
-      return local[0] + '***@' + domain;
-    }
-
-    function _maskPhone(phone) {
-      if (!phone) return '';
-      const digits = phone.replace(/\D/g, '');
-      return phone.slice(0, 2) + '•'.repeat(Math.max(0, digits.length - 4)) + digits.slice(-4);
-    }
-
     function renderTableView(candidates, softCriteria, withCheckboxes) {
       const criteria = (softCriteria || []).map(sc => typeof sc === 'string' ? sc : (sc.criterion || sc.name || String(sc)));
       let html = '<div class="apollo-table-wrap"><table class="apollo-table"><thead><tr>';
@@ -7925,7 +7912,7 @@
         if (c.do_not_email) {
           emailCell = '<span class="dnc-pill">No email</span>';
         } else if (c.email) {
-          emailCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`;
+          emailCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(c.email)}</span>`;
         } else {
           const cls = noEmailCredits ? 'reveal-pill disabled' : 'reveal-pill';
           const onClick = noEmailCredits ? '' : `onclick="revealField('${cid}','email',this)"`;
@@ -7940,7 +7927,7 @@
         if (c.do_not_call) {
           phoneCell = '<span class="dnc-pill">DNC</span>';
         } else if (c.phone) {
-          phoneCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`;
+          phoneCell = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(c.phone)}</span>`;
         } else {
           const cls = noPhoneCredits ? 'reveal-pill disabled' : 'reveal-pill';
           const onClick = noPhoneCredits ? '' : `onclick="revealField('${cid}','phone',this)"`;
@@ -8120,9 +8107,9 @@
         const value = data?.value || '';
         let displayHtml;
         if (field === 'email') {
-          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskEmail(value))}</span>`;
+          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(value)}</span>`;
         } else if (field === 'phone') {
-          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(value))}</span>`;
+          displayHtml = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(value)}</span>`;
         } else {
           // name — replace the pill with a proper name button
           displayHtml = `<button class="arow-name-btn" onclick="openApolloDrawer('${esc(candidateId)}')">${esc(value || 'Unknown')}</button>`;
@@ -8174,7 +8161,7 @@
 
       const status = data?.status;
       if (status === 'received' && data.phone) {
-        span.outerHTML = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(_maskPhone(data.phone))}</span>`;
+        span.outerHTML = `<span class="reveal-value masked" title="Click to reveal" onclick="this.classList.remove('masked')">${esc(data.phone)}</span>`;
         fetchApolloCredits().catch(() => {});
         return;
       }
@@ -8245,7 +8232,7 @@
       const emailReveal = c.do_not_email
         ? '<span class="dnc-pill">No email (DNC)</span>'
         : c.email
-          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskEmail(c.email))}</span>`
+          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(c.email)}</span>`
           : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','email',this)">
                <span class="material-icons-outlined">email</span> Access email <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
              </button>`;
@@ -8253,7 +8240,7 @@
       const phoneReveal = c.do_not_call
         ? '<span class="dnc-pill">DNC</span>'
         : c.phone
-          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(_maskPhone(c.phone))}</span>`
+          ? `<span class="reveal-value masked" onclick="this.classList.remove('masked')">${esc(c.phone)}</span>`
           : `<button class="reveal-pill" onclick="revealFieldDrawer('${cid}','phone',this)">
                <span class="material-icons-outlined">phone</span> Access mobile <span class="reveal-cost"><span class="material-icons-outlined">auto_awesome</span>1</span>
              </button>`;
