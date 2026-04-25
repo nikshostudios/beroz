@@ -655,9 +655,15 @@ APIFY_API_BASE = "https://api.apify.com/v2"
 # $0.1 per search page + $0.004 per full profile (~$0.22 per 30-profile run).
 DEFAULT_APIFY_LINKEDIN_ACTOR = "harvestapi/linkedin-profile-search"
 # harvestapi/linkedin-profile-scraper — URL-in / profile-out enrichment.
-# Default mode "Profile details no email" ($4 / 1k); switch via env var
-# APIFY_LINKEDIN_ENRICH_MODE to a with-email mode to recover contact info.
+# Actor input enum (confirmed against the build's inputSchema):
+#   - "Profile details no email ($4 per 1k)"
+#   - "Profile details + email search ($10 per 1k)"
+# Default to the with-email tier so enrichment actually recovers contact
+# info — that's the whole point of running it on top of the search results.
+# Override via APIFY_LINKEDIN_ENRICH_MODE if you want the cheap tier.
 DEFAULT_APIFY_LINKEDIN_ENRICH_ACTOR = "harvestapi/linkedin-profile-scraper"
+DEFAULT_APIFY_LINKEDIN_ENRICH_MODE = (
+    "Profile details + email search ($10 per 1k)")
 DEFAULT_APIFY_YC_ACTOR = "michael.g/y-conductor-scraper"
 
 _YC_ROLE_TRIGGERS = (
@@ -733,14 +739,33 @@ def _normalize_apify_linkedin(items: list[dict],
         loc_raw = (it.get("location") or it.get("locationName")
                    or it.get("geoLocation") or it.get("city"))
         if isinstance(loc_raw, dict):
-            location = (loc_raw.get("name") or loc_raw.get("text")
-                        or loc_raw.get("city"))
+            parsed = loc_raw.get("parsed") or {}
+            if not isinstance(parsed, dict):
+                parsed = {}
+            location = (loc_raw.get("linkedinText")
+                        or loc_raw.get("name")
+                        or loc_raw.get("text")
+                        or loc_raw.get("city")
+                        or parsed.get("text")
+                        or parsed.get("city"))
         else:
             location = loc_raw or None
 
         profile_url = (it.get("linkedinUrl") or it.get("publicProfileUrl")
                        or it.get("profileUrl") or it.get("url")
                        or it.get("link"))
+
+        email_field = it.get("email")
+        if not email_field:
+            emails_list = it.get("emails")
+            if isinstance(emails_list, list) and emails_list:
+                first = emails_list[0]
+                if isinstance(first, str):
+                    email_field = first
+                elif isinstance(first, dict):
+                    email_field = (first.get("email")
+                                   or first.get("address")
+                                   or first.get("value"))
 
         # Tag any match_skill mentioned in the headline so the screener
         # has signal to bite on.
@@ -750,7 +775,7 @@ def _normalize_apify_linkedin(items: list[dict],
             skills = list(match_skills)
         results.append({
             "name": name,
-            "email": it.get("email") or None,
+            "email": email_field or None,
             "current_employer": company,
             "current_job_title": headline[:200] if headline else None,
             "current_location": location,
@@ -915,13 +940,14 @@ async def enrich_linkedin_with_apify(
     """Enrich a small batch of LinkedIn URLs with email + phone + bio.
 
     Calls harvestapi/linkedin-profile-scraper. The actor's
-    `profileScraperMode` selects the price/payload tier — the cheap default
-    "Profile details no email" gives full profile minus email; pass a
-    with-email mode (look up the exact string in Apify Console; varies by
-    actor build) to recover contact info. Mode resolution order:
+    `profileScraperMode` selects the price/payload tier; valid values per
+    the actor's input schema are:
+      - "Profile details no email ($4 per 1k)"
+      - "Profile details + email search ($10 per 1k)"  ← default
+    Mode resolution order:
       1. explicit `mode` argument
       2. APIFY_LINKEDIN_ENRICH_MODE env var
-      3. fallback to "Profile + email" (most common harvestapi key)
+      3. DEFAULT_APIFY_LINKEDIN_ENRICH_MODE (with-email tier)
 
     Returns {linkedin_url: {email, phone, headline, ...}} for URLs the actor
     successfully resolved. Failed URLs are silently dropped.
@@ -936,19 +962,19 @@ async def enrich_linkedin_with_apify(
                 or DEFAULT_APIFY_LINKEDIN_ENRICH_ACTOR)
     chosen_mode = (mode
                    or os.environ.get("APIFY_LINKEDIN_ENRICH_MODE")
-                   or "Profile + email")
+                   or DEFAULT_APIFY_LINKEDIN_ENRICH_MODE)
 
     # Cap to control cost — top-N enrichment shouldn't ever balloon.
     urls = [u for u in linkedin_urls if u][:max_profiles]
     if not urls:
         return {}
 
+    # Per actor inputSchema, valid top-level URL keys are
+    # {queries, urls, publicIdentifiers, profileIds}; `queries` is titled
+    # "Target URLs" and is what the official Python client sample uses.
     body = {
         "profileScraperMode": chosen_mode,
-        "queries": urls,         # alias accepted by recent harvestapi builds
-        "targetUrls": urls,      # alias accepted by older builds
-        "urls": urls,            # generic fallback
-        "maxItems": len(urls),
+        "queries": urls,
     }
     items = await _apify_run_actor(actor_id, body, token, timeout_sec=120)
 
@@ -960,9 +986,40 @@ async def enrich_linkedin_with_apify(
             continue
         # Strip any trailing slash / query so we match the input form.
         norm_url = url.rstrip("/").split("?")[0]
+
+        # harvestapi shape: `emails` is a list of {email, status, deliverable,
+        # qualityScore, ...}. Prefer the first deliverable + valid result, but
+        # fall back to whatever's there so we still capture lower-confidence
+        # hits the recruiter can vet manually.
         email = it.get("email") or it.get("emailAddress")
+        if not email:
+            emails_list = it.get("emails") or []
+            if isinstance(emails_list, list):
+                ranked = sorted(
+                    (e for e in emails_list if isinstance(e, dict)),
+                    key=lambda e: (
+                        0 if e.get("status") == "valid" else 1,
+                        0 if e.get("deliverable") else 1,
+                        -(e.get("qualityScore") or 0),
+                    ),
+                )
+                if ranked:
+                    email = ranked[0].get("email")
+                elif emails_list and isinstance(emails_list[0], str):
+                    email = emails_list[0]
+
         phone = (it.get("phoneNumber") or it.get("phone")
                  or it.get("mobile"))
+        if not phone:
+            phones_list = it.get("phoneNumbers") or []
+            if isinstance(phones_list, list) and phones_list:
+                first = phones_list[0]
+                if isinstance(first, str):
+                    phone = first
+                elif isinstance(first, dict):
+                    phone = (first.get("number") or first.get("phone")
+                             or first.get("value"))
+
         out[norm_url] = {
             "email": email,
             "phone": phone,
