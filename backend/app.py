@@ -3513,7 +3513,11 @@ def api_sequences_v2_list():
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
     scope = request.args.get("scope", "mine")
-    return _ai_core_call(ai_core.list_sequences_v2, role, email, scope)
+    try:
+        days = int(request.args.get("days", 7))
+    except (TypeError, ValueError):
+        days = 7
+    return _ai_core_call(ai_core.list_sequences_v2, role, email, scope, days)
 
 
 @app.route("/api/sequences/generate", methods=["POST"])
@@ -3618,7 +3622,11 @@ def api_sequences_detail(seq_id):
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    return _ai_core_call(ai_core.get_sequence_detail, seq_id, role, email)
+    try:
+        days = int(request.args.get("days", 7))
+    except (TypeError, ValueError):
+        days = 7
+    return _ai_core_call(ai_core.get_sequence_detail, seq_id, role, email, days)
 
 
 @app.route("/api/sequences/<seq_id>", methods=["PUT"])
@@ -3638,6 +3646,15 @@ def api_sequences_delete(seq_id):
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
     return _ai_core_call(ai_core.delete_sequence, seq_id, role, email)
+
+
+@app.route("/api/sequences/<seq_id>/clone", methods=["POST"])
+def api_sequences_clone(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.clone_sequence, seq_id, role, email)
 
 
 @app.route("/api/sequences/<seq_id>/steps/<step_id>", methods=["PUT"])
@@ -3692,6 +3709,147 @@ def api_sequence_tick():
         return jsonify({"error": "Not authenticated"}), 401
     return _ai_core_call(ai_core.sequence_tick,
                          session.get("recruiter_role", "recruiter"))
+
+
+@app.route("/api/sequences/<seq_id>/test-send", methods=["POST"])
+def api_sequences_test_send(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.test_send_step, seq_id,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+# ── Signatures ───────────────────────────────────────────────
+
+@app.route("/api/signatures", methods=["GET"])
+def api_signatures_list():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.list_signatures_for_user, role, email)
+
+
+@app.route("/api/signatures", methods=["POST"])
+def api_signatures_create():
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_signature,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/signatures/<sig_id>", methods=["PUT"])
+def api_signatures_update(sig_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.update_signature_handler, sig_id,
+                         request.get_json(silent=True) or {}, role, email)
+
+
+@app.route("/api/signatures/<sig_id>", methods=["DELETE"])
+def api_signatures_delete(sig_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.delete_signature_handler, sig_id, role, email)
+
+
+# ── Sequence tracking + unsubscribe (public; no auth) ───────
+
+@app.route("/track/open/<token>.gif", methods=["GET"])
+def track_open(token):
+    """1×1 transparent GIF that records an open event."""
+    try:
+        gif_bytes, content_type = ai_core.track_open(token)
+    except Exception:
+        gif_bytes = ai_core._PIXEL_GIF
+        content_type = "image/gif"
+    return Response(
+        gif_bytes,
+        mimetype=content_type,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Content-Length": str(len(gif_bytes)),
+        },
+    )
+
+
+@app.route("/track/click/<token>", methods=["GET"])
+def track_click(token):
+    """Record a click event and 302 to the original URL."""
+    url_b64 = request.args.get("u", "")
+    try:
+        target = ai_core.track_click(token, url_b64)
+    except Exception:
+        target = "/"
+    return redirect(target, code=302)
+
+
+@app.route("/unsubscribe", methods=["GET"])
+def unsubscribe_page():
+    token = request.args.get("t", "")
+    try:
+        info = ai_core.unsubscribe_view(token)
+    except ai_core.CoreError as e:
+        return Response(
+            f"<html><body style='font-family:Arial;padding:40px'>"
+            f"<h2>Unsubscribe link is invalid</h2><p>{e.message}</p></body></html>",
+            mimetype="text/html",
+            status=e.status,
+        )
+    if info["already_unsubscribed"]:
+        msg = (f"<p>{info['email']} is already unsubscribed. "
+               "You won't receive any more messages from us.</p>")
+        button = ""
+    else:
+        msg = (f"<p>Click the button below to confirm you'd like to stop "
+               f"receiving emails from us at <strong>{info['email']}</strong>.</p>")
+        button = (
+            f"<form method='POST' action='/unsubscribe'>"
+            f"<input type='hidden' name='t' value='{token}'>"
+            f"<button type='submit' style='background:#7f56d9;color:white;"
+            f"border:0;padding:12px 24px;border-radius:8px;font-size:16px;"
+            f"cursor:pointer'>Confirm unsubscribe</button></form>"
+        )
+    html = (
+        f"<html><body style='font-family:Arial,Helvetica,sans-serif;"
+        f"max-width:520px;margin:60px auto;padding:24px;color:#222'>"
+        f"<h2 style='margin-top:0'>Unsubscribe</h2>{msg}{button}"
+        f"</body></html>"
+    )
+    return Response(html, mimetype="text/html")
+
+
+@app.route("/unsubscribe", methods=["POST"])
+def unsubscribe_commit():
+    token = request.form.get("t") or (request.get_json(silent=True) or {}).get("t", "")
+    try:
+        result = ai_core.unsubscribe_commit(token)
+    except ai_core.CoreError as e:
+        return Response(
+            f"<html><body style='font-family:Arial;padding:40px'>"
+            f"<h2>Unsubscribe link is invalid</h2><p>{e.message}</p></body></html>",
+            mimetype="text/html",
+            status=e.status,
+        )
+    html = (
+        f"<html><body style='font-family:Arial,Helvetica,sans-serif;"
+        f"max-width:520px;margin:60px auto;padding:24px;color:#222'>"
+        f"<h2>You're unsubscribed</h2>"
+        f"<p>{result['email']} has been removed from our mailing list. "
+        f"You won't receive any more messages from us.</p>"
+        f"</body></html>"
+    )
+    return Response(html, mimetype="text/html")
 
 
 @app.route("/api/requirements/<req_id>/linkedin")
@@ -3801,6 +3959,17 @@ def api_tl_reject():
     if session.get("recruiter_role") != "tl":
         return jsonify({"error": "TL only"}), 403
     return _ai_core_call(ai_core.tl_reject, request.get_json(silent=True), "tl")
+
+
+@app.route("/api/submissions/<submission_id>/client-feedback", methods=["POST"])
+def api_submissions_client_feedback(submission_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    if session.get("recruiter_role") != "tl":
+        return jsonify({"error": "TL only"}), 403
+    payload = request.get_json(silent=True) or {}
+    payload["submission_id"] = submission_id
+    return _ai_core_call(ai_core.tl_set_client_feedback, payload, "tl")
 
 
 @app.route("/api/submissions/my")

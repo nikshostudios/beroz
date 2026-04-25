@@ -410,6 +410,92 @@ async def _run_source_and_screen(requirement_id: str) -> dict:
 
 # ── Inbox ──────────────────────────────────────────────────────
 
+_BOUNCE_SENDER_PATTERNS = (
+    "mailer-daemon@", "postmaster@", "noreply-bounce@", "bounce@",
+)
+_BOUNCE_SUBJECT_PATTERNS = (
+    "undeliverable", "delivery status notification (failure)",
+    "mail delivery failed", "returned mail", "failure notice",
+)
+
+
+def _looks_like_bounce(msg: dict) -> bool:
+    sender = (msg.get("sender_email") or "").lower()
+    subject = (msg.get("subject") or "").lower()
+    if any(sender.startswith(p) for p in _BOUNCE_SENDER_PATTERNS):
+        return True
+    return any(subject.startswith(p) or p in subject
+               for p in _BOUNCE_SUBJECT_PATTERNS)
+
+
+def _extract_bounced_recipient(body: str) -> str | None:
+    if not body:
+        return None
+    m = re.search(r"Final-Recipient:\s*[^;]+;\s*([^\s\r\n]+)", body, re.IGNORECASE)
+    if m:
+        return m.group(1).strip().strip("<>").lower()
+    m = re.search(r"failed recipient[s]?:?\s*([^\s\r\n]+)", body, re.IGNORECASE)
+    if m:
+        return m.group(1).strip().strip("<>").lower()
+    m = re.search(r"<([^>@\s]+@[^>@\s]+)>", body)
+    if m:
+        return m.group(1).lower()
+    return None
+
+
+def _handle_bounce(recruiter_email: str, msg: dict) -> bool:
+    """Match a bounce notification to an outstanding outreach send and
+    mark the run as bounced. Returns True if handled."""
+    body = msg.get("body_text") or ""
+    bounced_email = _extract_bounced_recipient(body)
+    pending = db.get_pending_replies(recruiter_email) or []
+    matched = None
+    if bounced_email:
+        cand_rows = (db.get_client().table("candidates").select("id")
+                     .eq("email", bounced_email).limit(1).execute().data) or []
+        cand_id = cand_rows[0]["id"] if cand_rows else None
+        if cand_id:
+            matched = next((p for p in pending
+                            if p.get("candidate_id") == cand_id), None)
+    if not matched:
+        thread = msg.get("thread_id")
+        if thread:
+            matched = next((p for p in pending
+                            if p.get("outlook_thread_id") == thread), None)
+    if not matched:
+        return False
+    seq_run_id = matched.get("sequence_run_id")
+    if seq_run_id:
+        db.update_run_status(seq_run_id, "bounced", finished=True)
+        db.skip_scheduled_sends(seq_run_id, reason="bounced")
+        db.insert_run_event(seq_run_id, "bounced",
+                            metadata={"bounced_email": bounced_email,
+                                      "subject": msg.get("subject")})
+    try:
+        db.update_outreach_log(matched["id"],
+                               {"error_message": "bounced"})
+    except Exception:
+        pass
+    return True
+
+
+def _classify_reply_intent(body_text: str) -> str:
+    if not body_text:
+        return "other"
+    raw = _call_claude(
+        "claude-haiku-4-5-20251001",
+        ("Classify this candidate reply intent as exactly one of: "
+         "interested, not_interested, out_of_office, other. "
+         "Return only the single word."),
+        body_text[:1500],
+        max_tokens=10, endpoint="/inbox/classify-intent",
+    ).strip().lower()
+    for label in ("interested", "not_interested", "out_of_office"):
+        if label in raw:
+            return label
+    return "other"
+
+
 async def _run_process_inbox(recruiter_email: str | None) -> dict:
     if recruiter_email:
         recruiter_list = [recruiter_email]
@@ -417,7 +503,8 @@ async def _run_process_inbox(recruiter_email: str | None) -> dict:
         team_emails = os.environ.get("RECRUITER_EMAILS", "")
         recruiter_list = [e.strip() for e in team_emails.split(",") if e.strip()]
     totals = {"processed": 0, "candidate_replies": 0,
-              "new_requirements_flagged": 0, "chase_drafts_pending": 0, "errors": 0}
+              "new_requirements_flagged": 0, "chase_drafts_pending": 0,
+              "bounces": 0, "errors": 0}
     for email in recruiter_list:
         try:
             unread = outlook.get_unread_emails(email, hours_back=24)
@@ -426,6 +513,22 @@ async def _run_process_inbox(recruiter_email: str | None) -> dict:
             continue
         for msg in unread:
             totals["processed"] += 1
+
+            # 1. Bounce notifications first — they look like ordinary email
+            #    but should never reach the candidate-reply classifier.
+            if _looks_like_bounce(msg):
+                try:
+                    if _handle_bounce(email, msg):
+                        totals["bounces"] += 1
+                except Exception:
+                    log.exception("bounce handling failed")
+                    totals["errors"] += 1
+                try:
+                    outlook.mark_as_read(email, msg["message_id"])
+                except Exception:
+                    pass
+                continue
+
             classification = _call_claude(
                 "claude-haiku-4-5-20251001",
                 "Classify this email as exactly one of: "
@@ -463,6 +566,15 @@ async def _run_process_inbox(recruiter_email: str | None) -> dict:
                                 }).execute()
                             except Exception:
                                 log.exception("halt sequence run %s on reply failed", seq_run_id)
+                            # Classify reply intent (interested / out_of_office / etc)
+                            try:
+                                intent = _classify_reply_intent(msg.get("body_text", ""))
+                                db.update_run_intent(seq_run_id, intent)
+                                if intent == "interested":
+                                    db.insert_run_event(seq_run_id, "interested",
+                                                        metadata={"sender": msg.get("sender_email")})
+                            except Exception:
+                                log.exception("intent classification failed for run %s", seq_run_id)
                         result = _call_claude(
                             "claude-haiku-4-5-20251001",
                             AGENTS.get("followup", ""),
@@ -2390,13 +2502,23 @@ def tl_reject(payload: Any, user_role: str) -> dict:
 
 # ── Submissions (new dual-role endpoints) ──────────────────────
 
+def _get_tl_emails() -> list[str]:
+    """Return all TL email addresses from RECRUITER_LOGINS.
+    Future-proof for multiple TLs — adding more to the map "just works"."""
+    from app import RECRUITER_LOGINS
+    return [u["email"] for u in RECRUITER_LOGINS.values()
+            if u.get("role") == "tl" and u.get("email")]
+
+
 def get_my_submissions(recruiter_email: str) -> dict:
     """Return this recruiter's submissions grouped by requirement."""
     client = db.get_client()
     # All submissions by this recruiter (any status)
     rows = (client.table("submissions")
             .select("id, candidate_id, requirement_id, submitted_at, "
-                    "tl_approved, final_status, submitted_by_recruiter")
+                    "tl_approved, tl_approved_at, final_status, "
+                    "submitted_by_recruiter, placement_type, doj, package, "
+                    "sap_id, remarks")
             .eq("submitted_by_recruiter", recruiter_email)
             .order("submitted_at", desc=True)
             .execute().data)
@@ -2407,6 +2529,7 @@ def get_my_submissions(recruiter_email: str) -> dict:
 
     reqs_map: dict = {}
     cands_map: dict = {}
+    details_map: dict = {}
     if req_ids:
         for r in (client.table("requirements")
                   .select("id, role_title, client_name, market, assigned_recruiters")
@@ -2414,9 +2537,17 @@ def get_my_submissions(recruiter_email: str) -> dict:
             reqs_map[r["id"]] = r
     if cand_ids:
         for c in (client.table("candidates")
-                  .select("id, name, current_ctc, expected_ctc, notice_period")
+                  .select("id, name, current_ctc, expected_ctc, notice_period, "
+                          "email, phone, current_location, date_of_birth, "
+                          "address_full, current_company, total_experience, "
+                          "relevant_experience, preferred_location")
                   .in_("id", cand_ids).execute().data):
             cands_map[c["id"]] = c
+        # Pull tl_feedback per (candidate_id, requirement_id) pair
+        for d in (client.table("candidate_details")
+                  .select("candidate_id, requirement_id, tl_feedback, status")
+                  .in_("candidate_id", cand_ids).execute().data):
+            details_map[(d["candidate_id"], d.get("requirement_id"))] = d
 
     # Also pull requirements assigned to this recruiter but not yet submitted
     try:
@@ -2441,6 +2572,7 @@ def get_my_submissions(recruiter_email: str) -> dict:
             req = reqs_map.get(rid, {})
             groups[rid] = {"requirement": req, "submissions": []}
         cand = cands_map.get(sub.get("candidate_id"), {})
+        det = details_map.get((sub.get("candidate_id"), rid), {})
         # Derive simple status for recruiter view
         if sub.get("final_status") == "rejected_by_tl":
             status = "rejected"
@@ -2454,6 +2586,16 @@ def get_my_submissions(recruiter_email: str) -> dict:
             "current_ctc": cand.get("current_ctc", ""),
             "expected_ctc": cand.get("expected_ctc", ""),
             "notice_period": cand.get("notice_period", ""),
+            "email": cand.get("email", ""),
+            "phone": cand.get("phone", ""),
+            "current_location": cand.get("current_location", ""),
+            "preferred_location": cand.get("preferred_location", ""),
+            "date_of_birth": cand.get("date_of_birth", ""),
+            "address_full": cand.get("address_full", ""),
+            "current_company": cand.get("current_company", ""),
+            "total_experience": cand.get("total_experience", ""),
+            "relevant_experience": cand.get("relevant_experience", ""),
+            "tl_feedback": det.get("tl_feedback", ""),
             "status": status,
         })
 
@@ -2513,6 +2655,59 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
     }).execute().data)
 
     db.upsert_candidate_details(cid, rid, {"status": "submitted_to_tl"})
+
+    # Notify TL(s) — best-effort, must NOT block the submission insert.
+    try:
+        tl_emails = _get_tl_emails()
+        if tl_emails:
+            cand_row = db.get_candidate_by_id(cid) or {}
+            cand_name = cand_row.get("name") or body.get("name") or "Candidate"
+            role_title = req.get("role_title") if req else ""
+            # role_title isn't in the select above — fetch it cheaply
+            if not role_title:
+                rt_rows = (db.get_client().table("requirements")
+                           .select("role_title").eq("id", rid).execute().data)
+                role_title = (rt_rows[0].get("role_title", "") if rt_rows else "")
+            from app import RECRUITER_LOGINS
+            email_to_name = {u["email"]: u["name"]
+                             for u in RECRUITER_LOGINS.values()}
+            recruiter_name = email_to_name.get(recruiter_email, recruiter_email)
+            client_name = req.get("client_name", "") if req else ""
+            market = req.get("market", "") if req else ""
+            client_market = " · ".join(filter(None, [client_name, market]))
+            current_ctc = cand_row.get("current_ctc") or body.get("current_ctc") or "—"
+            expected_ctc = cand_row.get("expected_ctc") or body.get("expected_ctc") or "—"
+            notice = cand_row.get("notice_period") or body.get("notice_period") or "—"
+            subject = (f"New submission pending review: {cand_name} → "
+                       f"{role_title or 'requirement'}")
+            body_html = (
+                f"<p>Hi,</p>"
+                f"<p><b>{recruiter_name}</b> has submitted a new candidate "
+                f"for your review.</p>"
+                f"<ul>"
+                f"<li><b>Candidate:</b> {cand_name}</li>"
+                f"<li><b>Role:</b> {role_title or '—'}</li>"
+                f"<li><b>Client / Market:</b> {client_market or '—'}</li>"
+                f"<li><b>Current CTC:</b> {current_ctc}</li>"
+                f"<li><b>Expected CTC:</b> {expected_ctc}</li>"
+                f"<li><b>Notice:</b> {notice}</li>"
+                f"</ul>"
+                f"<p>Open the Submissions page to review and approve or reject.</p>"
+            )
+            for tl_email in tl_emails:
+                try:
+                    outlook.send_email(
+                        from_email=recruiter_email,
+                        to_email=tl_email,
+                        subject=subject,
+                        body=body_html,
+                    )
+                except Exception as e:
+                    log.warning("TL submission notification failed for %s: %s",
+                                tl_email, e)
+    except Exception as e:
+        log.warning("TL notification block failed: %s", e)
+
     return {"submission": sub_row[0] if sub_row else {}, "status": "pending"}
 
 
@@ -2522,7 +2717,9 @@ def get_tl_submissions(requirement_id: str | None = None) -> dict:
 
     query = (client.table("submissions")
              .select("id, candidate_id, requirement_id, submitted_by_recruiter, "
-                     "submitted_at, tl_approved, tl_approved_at, final_status"))
+                     "submitted_at, tl_approved, tl_approved_at, final_status, "
+                     "placement_type, doj, package, sap_id, remarks, "
+                     "sent_to_client_at, tender_number, market"))
     if requirement_id:
         query = query.eq("requirement_id", requirement_id)
     rows = query.order("submitted_at", desc=True).execute().data
@@ -2593,6 +2790,88 @@ def get_tl_submissions(requirement_id: str | None = None) -> dict:
         })
 
     return {"groups": list(groups.values())}
+
+
+# Allowed values for client-feedback final_status (post-Submitted lifecycle).
+CLIENT_FEEDBACK_STATUSES = (
+    "Shortlisted", "KIV", "Not Shortlisted", "Selected", "Selected-Joined",
+    "Selected-Backed out", "Backed out", "Rejected",
+)
+
+
+def tl_set_client_feedback(payload: Any, user_role: str) -> dict:
+    """TL records client-side lifecycle status on an already-sent submission."""
+    _require_role(user_role, ["tl"])
+    body = _require_fields(payload, ["submission_id", "final_status"])
+    sub_id = body["submission_id"]
+    final_status = body["final_status"]
+    if final_status not in CLIENT_FEEDBACK_STATUSES:
+        raise CoreError(422, f"Invalid final_status. Must be one of: "
+                             f"{', '.join(CLIENT_FEEDBACK_STATUSES)}")
+    rows = (db.get_client().table("submissions")
+            .select("id, candidate_id, requirement_id, tl_approved, "
+                    "tender_number, market")
+            .eq("id", sub_id).execute().data)
+    if not rows:
+        raise CoreError(404, "Submission not found")
+    sub = rows[0]
+    if not sub.get("tl_approved"):
+        raise CoreError(409, "Cannot record client feedback for a submission "
+                             "that has not been approved/sent")
+
+    placement_type = body.get("placement_type")
+    doj = body.get("doj")
+    package = body.get("package")
+    sap_id = body.get("sap_id")
+    remarks = body.get("remarks")
+
+    if final_status == "Selected-Joined" and not doj:
+        raise CoreError(422, "doj is required when final_status is "
+                             "Selected-Joined")
+
+    update_payload: dict = {"final_status": final_status}
+    if placement_type is not None:
+        update_payload["placement_type"] = placement_type
+    if doj is not None:
+        update_payload["doj"] = doj
+    if package is not None:
+        update_payload["package"] = package
+    if sap_id is not None:
+        update_payload["sap_id"] = sap_id
+    if remarks is not None:
+        update_payload["remarks"] = remarks
+    db.get_client().table("submissions").update(update_payload).eq(
+        "id", sub_id).execute()
+
+    # SG + tender side-effect: upsert interview_tracker (a row may already
+    # exist from tl_approve_and_send).
+    requirement = db.get_requirement_by_id(sub["requirement_id"]) or {}
+    if requirement.get("market") == "SG" and requirement.get("tender_number"):
+        client = db.get_client()
+        existing_tracker = (client.table("interview_tracker")
+                            .select("id")
+                            .eq("candidate_id", sub["candidate_id"])
+                            .eq("requirement_id", sub["requirement_id"])
+                            .limit(1).execute().data)
+        tracker_payload: dict = {"status": final_status}
+        for k in ("placement_type", "doj", "package", "sap_id", "remarks"):
+            v = update_payload.get(k)
+            if v is not None:
+                tracker_payload[k] = v
+        if existing_tracker:
+            client.table("interview_tracker").update(tracker_payload).eq(
+                "id", existing_tracker[0]["id"]).execute()
+        else:
+            tracker_payload.update({
+                "candidate_id": sub["candidate_id"],
+                "requirement_id": sub["requirement_id"],
+                "tender_number": requirement.get("tender_number"),
+                "school_name": requirement.get("location"),
+            })
+            db.insert_interview_tracker(tracker_payload)
+
+    return {"status": "ok", "submission_id": sub_id,
+            "final_status": final_status}
 
 
 def get_performance(user_role: str, user_email: str) -> dict:
@@ -3151,21 +3430,20 @@ def create_sequence(payload: dict, user_role: str, user_email: str) -> dict:
 
 
 def list_sequences_v2(user_role: str, user_email: str,
-                      scope: str = "mine") -> dict:
+                      scope: str = "mine", days: int = 7) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
     seqs = db.list_sequences_for_user(user_email, user_role if scope == "all" else "recruiter")
-    # Enrich each sequence with run metrics
+    days = _clamp_chart_days(days)
     result = []
-    total_sent = total_replied = 0
+    agg = {"total": 0, "active": 0, "opened": 0, "clicked": 0,
+           "replied": 0, "interested": 0, "bounced": 0, "sent": 0}
     for seq in seqs:
-        metrics = {}
         try:
             metrics = db.count_sequence_metrics(seq["id"])
         except Exception:
-            pass
-        total_sent += metrics.get("sent", 0)
-        total_replied += metrics.get("replied", 0)
-        # Step count
+            metrics = {}
+        for k in agg:
+            agg[k] += metrics.get(k, 0)
         try:
             step_count = len((db.get_client().table("sequence_steps")
                               .select("id").eq("sequence_id", seq["id"])
@@ -3179,28 +3457,60 @@ def list_sequences_v2(user_role: str, user_email: str,
         })
     stats = {
         "total": len(result),
-        "sent": total_sent,
-        "replied": total_replied,
-        "reply_rate": round((total_replied / total_sent * 100) if total_sent else 0),
         "active": sum(1 for s in result if s.get("status") == "active"),
+        "opened": agg["opened"],
+        "clicked": agg["clicked"],
+        "replied": agg["replied"],
+        "interested": agg["interested"],
+        "bounced": agg["bounced"],
+        "sent": agg["sent"],
         "draft": sum(1 for s in result if s.get("status") == "draft"),
     }
-    # Build 7-day chart data from sequence_step_sends
-    chart = _build_chart_data()
-    return {"stats": stats, "chart": chart, "sequences": result}
+    chart = _build_chart_data(days=days)
+    return {"stats": stats, "chart": chart, "sequences": result, "days": days}
 
 
-def _build_chart_data() -> dict:
-    """Aggregate sent/scheduled counts over the last 7 days."""
-    today = datetime.now(timezone.utc).date()
-    days = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
-    sent_map: dict[str, int] = {d: 0 for d in days}
-    sched_map: dict[str, int] = {d: 0 for d in days}
+def _clamp_chart_days(days: int) -> int:
     try:
-        since = days[0] + "T00:00:00Z"
-        sends = (db.get_client().table("sequence_step_sends")
-                 .select("status, sent_at, scheduled_for")
-                 .gte("created_at", since).execute().data) or []
+        d = int(days)
+    except (TypeError, ValueError):
+        d = 7
+    if d not in (7, 14, 30):
+        d = 7
+    return d
+
+
+def _build_chart_data(days: int = 7,
+                      sequence_id: str | None = None) -> dict:
+    """Aggregate sent/scheduled counts over the last N days.
+
+    If sequence_id is given, scope to that sequence by joining through
+    sequence_runs.
+    """
+    days = _clamp_chart_days(days)
+    today = datetime.now(timezone.utc).date()
+    day_list = [(today - timedelta(days=i)).isoformat()
+                for i in range(days - 1, -1, -1)]
+    sent_map: dict[str, int] = {d: 0 for d in day_list}
+    sched_map: dict[str, int] = {d: 0 for d in day_list}
+    try:
+        since = day_list[0] + "T00:00:00Z"
+        if sequence_id:
+            run_ids = [r["id"] for r in
+                       (db.get_client().table("sequence_runs").select("id")
+                        .eq("sequence_id", sequence_id).execute().data) or []]
+            if not run_ids:
+                return {"days": day_list,
+                        "sent": [0] * days,
+                        "scheduled": [0] * days}
+            sends = (db.get_client().table("sequence_step_sends")
+                     .select("status, sent_at, scheduled_for")
+                     .in_("run_id", run_ids)
+                     .gte("created_at", since).execute().data) or []
+        else:
+            sends = (db.get_client().table("sequence_step_sends")
+                     .select("status, sent_at, scheduled_for")
+                     .gte("created_at", since).execute().data) or []
         for row in sends:
             if row["status"] == "sent" and row.get("sent_at"):
                 d = row["sent_at"][:10]
@@ -3213,22 +3523,24 @@ def _build_chart_data() -> dict:
     except Exception:
         pass
     return {
-        "days": days,
-        "sent": [sent_map[d] for d in days],
-        "scheduled": [sched_map[d] for d in days],
+        "days": day_list,
+        "sent": [sent_map[d] for d in day_list],
+        "scheduled": [sched_map[d] for d in day_list],
     }
 
 
-def get_sequence_detail(seq_id: str, user_role: str, user_email: str) -> dict:
+def get_sequence_detail(seq_id: str, user_role: str, user_email: str,
+                        days: int = 7) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
     seq = db.get_sequence_full(seq_id)
     if not seq:
         raise CoreError(404, "Sequence not found")
+    days = _clamp_chart_days(days)
     try:
         runs = (db.get_client().table("sequence_runs")
                 .select(
                     "id, candidate_id, status, current_step_position, "
-                    "started_at, next_send_at, enrolled_by, "
+                    "started_at, next_send_at, enrolled_by, intent, "
                     "candidates(id, name, email, current_job_title)"
                 )
                 .eq("sequence_id", seq_id)
@@ -3236,12 +3548,21 @@ def get_sequence_detail(seq_id: str, user_role: str, user_email: str) -> dict:
                 .execute().data) or []
     except Exception:
         runs = []
+    # Per-run engagement counts (Opened ×N · Clicked ×M).
+    try:
+        engagement = db.count_run_engagement([r["id"] for r in runs])
+    except Exception:
+        engagement = {}
+    for r in runs:
+        r["engagement"] = engagement.get(r["id"], {"opened": 0, "clicked": 0})
     metrics = {}
     try:
         metrics = db.count_sequence_metrics(seq_id)
     except Exception:
         pass
-    return {"sequence": seq, "runs": runs, "metrics": metrics}
+    chart = _build_chart_data(days=days, sequence_id=seq_id)
+    return {"sequence": seq, "runs": runs, "metrics": metrics,
+            "chart": chart, "days": days}
 
 
 def update_sequence(seq_id: str, patch: dict,
@@ -3251,22 +3572,43 @@ def update_sequence(seq_id: str, patch: dict,
     if not seq:
         raise CoreError(404, "Sequence not found")
     allowed = {k: v for k, v in patch.items()
-               if k in ("name", "status", "config")}
+               if k in ("name", "status", "config",
+                        "is_pinned", "is_starred")}
     if not allowed:
         raise CoreError(422, "Nothing to update")
     if "status" in allowed and allowed["status"] not in (
             "draft", "active", "paused", "archived"):
         raise CoreError(422, "Invalid status")
+    if "is_pinned" in allowed:
+        allowed["is_pinned"] = bool(allowed["is_pinned"])
+        allowed["pinned_at"] = (datetime.now(timezone.utc).isoformat()
+                                if allowed["is_pinned"] else None)
+    if "is_starred" in allowed:
+        allowed["is_starred"] = bool(allowed["is_starred"])
     updated = db.update_sequence_row(seq_id, allowed)
     return {"sequence": updated}
+
+
+def clone_sequence(seq_id: str, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    src = db.get_sequence_full(seq_id)
+    if not src:
+        raise CoreError(404, "Sequence not found")
+    new_seq = db.clone_sequence_row(seq_id, user_email)
+    return {"sequence": new_seq}
 
 
 def update_step(seq_id: str, step_id: str, patch: dict,
                 user_role: str, user_email: str) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
     allowed_keys = {"subject_template", "body_template",
-                    "wait_days", "send_time_local", "step_type"}
+                    "wait_days", "send_time_local", "step_type",
+                    "signature_id", "include_unsubscribe"}
     allowed = {k: v for k, v in patch.items() if k in allowed_keys}
+    if "signature_id" in allowed and allowed["signature_id"]:
+        sig = db.get_signature(allowed["signature_id"])
+        if not sig or sig.get("user_email") != user_email:
+            raise CoreError(403, "Signature does not belong to you")
     if not allowed:
         raise CoreError(422, "Nothing to update")
     updated = db.update_step_row(step_id, allowed)
@@ -3479,7 +3821,9 @@ def sequence_tick(user_role: str | None = None) -> dict:
 
     sent_count = 0
     fail_count = 0
+    skip_count = 0
     errors = []
+    base_url = _public_base_url()
 
     for send_row in due_rows:
         send_id = send_row["id"]
@@ -3495,6 +3839,17 @@ def sequence_tick(user_role: str | None = None) -> dict:
             to_email = cand.get("email")
             if not to_email:
                 raise ValueError(f"Candidate {cid} has no email")
+
+            # a1. Skip if recipient is in the global unsubscribe list.
+            if db.is_email_unsubscribed(to_email):
+                client.table("sequence_step_sends").update({
+                    "status": "skipped",
+                    "error_message": "unsubscribed",
+                }).eq("id", send_id).execute()
+                db.update_run_status(run_id, "paused", finished=False)
+                db.skip_scheduled_sends(run_id, reason="unsubscribed")
+                skip_count += 1
+                continue
 
             # b. Fetch sequence + steps
             seq = db.get_sequence_full(seq_id)
@@ -3514,6 +3869,23 @@ def sequence_tick(user_role: str | None = None) -> dict:
                 sender["scheduling_link"] = sched_link
             subject = _render_template(step.get("subject_template", ""), cand, sender)
             body = _render_template(step.get("body_template", ""), cand, sender)
+
+            # c1. Append signature (if step has one assigned).
+            sig_id = step.get("signature_id")
+            if sig_id:
+                sig = db.get_signature(sig_id)
+                if sig:
+                    body = f"{body}<br><br>{sig.get('html_body', '')}"
+
+            # c2. Append unsubscribe footer (before tracking so the link
+            # doesn't get rewritten through /track/click).
+            if step.get("include_unsubscribe"):
+                body = body + _build_unsubscribe_footer(run_id, to_email, base_url)
+
+            # c3. Wrap remaining links + inject tracking pixel.
+            tracking_token = uuid.uuid4().hex
+            body = _rewrite_links_for_tracking(body, tracking_token, base_url)
+            body = _inject_tracking_pixel(body, tracking_token, base_url)
 
             # d. Send email
             sent = outlook.send_email(
@@ -3535,6 +3907,7 @@ def sequence_tick(user_role: str | None = None) -> dict:
                 "sent_at": sent.get("sent_at"),
                 "sequence_run_id": run_id,
                 "sequence_step_id": step_id,
+                "tracking_token": tracking_token,
             })
 
             # f. Update sequence_step_sends → sent
@@ -3596,9 +3969,305 @@ def sequence_tick(user_role: str | None = None) -> dict:
         "ok": True,
         "processed": len(due_rows),
         "sent": sent_count,
+        "skipped": skip_count,
         "failed": fail_count,
         "errors": errors,
     }
+
+
+# ── Sequence tracking + unsubscribe + signatures ──────────────
+#
+# Tracking pixel and click-redirect URLs are anchored at PUBLIC_BASE_URL
+# (e.g. https://app.example.com). Token = outreach_log.tracking_token (uuid).
+# Unsubscribe uses an HMAC-signed token so a random visitor can't opt out
+# arbitrary emails.
+
+import base64 as _b64
+import hashlib as _hashlib
+import hmac as _hmac
+
+# 1×1 transparent GIF (43 bytes).
+_PIXEL_GIF = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+    b"!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01"
+    b"\x00\x00\x02\x02D\x01\x00;"
+)
+
+
+def _public_base_url() -> str:
+    return (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
+
+
+def _unsub_secret() -> bytes:
+    return (os.environ.get("UNSUBSCRIBE_SECRET")
+            or os.environ.get("SECRET_KEY")
+            or "dev-unsub-secret").encode("utf-8")
+
+
+def _build_unsub_token(run_id: str, email: str) -> str:
+    """Compact urlsafe-b64 token: <run_id>.<email>.<sig>."""
+    payload = f"{run_id}|{email.lower()}"
+    sig = _hmac.new(_unsub_secret(), payload.encode("utf-8"),
+                    _hashlib.sha256).digest()
+    raw = payload.encode("utf-8") + b"." + sig[:16]
+    return _b64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _verify_unsub_token(token: str) -> dict | None:
+    try:
+        pad = "=" * (-len(token) % 4)
+        raw = _b64.urlsafe_b64decode(token + pad)
+        body, sig_part = raw.rsplit(b".", 1)
+        run_id, email = body.decode("utf-8").split("|", 1)
+        expected = _hmac.new(_unsub_secret(), body, _hashlib.sha256).digest()[:16]
+        if not _hmac.compare_digest(expected, sig_part):
+            return None
+        return {"run_id": run_id, "email": email}
+    except Exception:
+        return None
+
+
+def _inject_tracking_pixel(html: str, token: str, base_url: str) -> str:
+    if not base_url or not token:
+        return html
+    pixel = (f'<img src="{base_url}/track/open/{token}.gif" '
+             f'width="1" height="1" alt="" '
+             f'style="display:none;border:0" />')
+    if "</body>" in html:
+        return html.replace("</body>", pixel + "</body>", 1)
+    return html + pixel
+
+
+def _rewrite_links_for_tracking(html: str, token: str, base_url: str) -> str:
+    """Rewrite each <a href="X"> to /track/click/<token>?u=<b64 X>.
+    Skips mailto:, tel:, and the unsubscribe link (already on PUBLIC_BASE_URL).
+    """
+    if not base_url or not token or not html:
+        return html
+
+    skip_prefixes = ("mailto:", "tel:", f"{base_url}/track/",
+                     f"{base_url}/unsubscribe")
+
+    def _rewrite(match: re.Match) -> str:
+        prefix, quote, url, suffix = match.group(1), match.group(2), match.group(3), match.group(4)
+        if any(url.startswith(p) for p in skip_prefixes):
+            return match.group(0)
+        b64 = _b64.urlsafe_b64encode(url.encode("utf-8")).decode("ascii").rstrip("=")
+        new_url = f"{base_url}/track/click/{token}?u={b64}"
+        return f'{prefix}{quote}{new_url}{quote}{suffix}'
+
+    pattern = re.compile(r'(<a[^>]*\shref=)(["\'])(.*?)(\2[^>]*>)', re.IGNORECASE)
+    return pattern.sub(_rewrite, html)
+
+
+def _build_unsubscribe_footer(run_id: str, email: str, base_url: str) -> str:
+    if not base_url:
+        return ""
+    token = _build_unsub_token(run_id, email)
+    return (
+        '<p style="font-size:11px;color:#888;margin-top:24px;'
+        'font-family:Arial,Helvetica,sans-serif">'
+        "If you'd rather not hear from us, "
+        f'<a href="{base_url}/unsubscribe?t={token}" '
+        'style="color:#888;text-decoration:underline">unsubscribe here</a>.'
+        "</p>"
+    )
+
+
+def track_open(token: str) -> tuple[bytes, str]:
+    """Public — record an open event and return the 1×1 GIF.
+
+    Returns (gif_bytes, content_type). Always returns a pixel even on lookup
+    miss so the recipient client never shows a broken image.
+    """
+    try:
+        log_row = db.get_outreach_log_by_token(token)
+        if log_row and log_row.get("sequence_run_id"):
+            run_id = log_row["sequence_run_id"]
+            # Only the first open per run counts toward the "Opened" metric.
+            if not db.has_run_event(run_id, "opened"):
+                db.insert_run_event(
+                    run_id, "opened",
+                    step_id=log_row.get("sequence_step_id"),
+                    metadata={"outreach_log_id": log_row.get("id")},
+                )
+    except Exception:
+        log.exception("track_open failed for token=%s", token)
+    return _PIXEL_GIF, "image/gif"
+
+
+def track_click(token: str, url_b64: str) -> str:
+    """Public — record a click and return the original URL to 302 to."""
+    try:
+        pad = "=" * (-len(url_b64) % 4)
+        original = _b64.urlsafe_b64decode(url_b64 + pad).decode("utf-8")
+    except Exception:
+        original = "/"
+    try:
+        log_row = db.get_outreach_log_by_token(token)
+        if log_row and log_row.get("sequence_run_id"):
+            db.insert_run_event(
+                log_row["sequence_run_id"], "clicked",
+                step_id=log_row.get("sequence_step_id"),
+                metadata={"url": original[:500],
+                          "outreach_log_id": log_row.get("id")},
+            )
+    except Exception:
+        log.exception("track_click failed for token=%s", token)
+    if not original.startswith(("http://", "https://", "/")):
+        original = "https://" + original
+    return original
+
+
+def unsubscribe_view(token: str) -> dict:
+    """Public — return data for the unsubscribe confirmation page."""
+    decoded = _verify_unsub_token(token)
+    if not decoded:
+        raise CoreError(400, "Invalid or expired unsubscribe link")
+    return {
+        "email": decoded["email"],
+        "run_id": decoded["run_id"],
+        "already_unsubscribed": db.is_email_unsubscribed(decoded["email"]),
+    }
+
+
+def unsubscribe_commit(token: str) -> dict:
+    """Public — record the opt-out and pause any open runs for this email."""
+    decoded = _verify_unsub_token(token)
+    if not decoded:
+        raise CoreError(400, "Invalid or expired unsubscribe link")
+    email = decoded["email"]
+    run_id = decoded["run_id"]
+    db.insert_unsubscribe(email, source="link_click", sequence_run_id=run_id,
+                          metadata={"token": token[:32]})
+    # Halt the originating run + any other open runs for this email.
+    try:
+        client = db.get_client()
+        cand = (client.table("candidates").select("id")
+                .eq("email", email).limit(1).execute().data) or []
+        cand_id = cand[0]["id"] if cand else None
+        runs_q = client.table("sequence_runs").select("id, status")
+        if cand_id:
+            runs_q = runs_q.eq("candidate_id", cand_id)
+        else:
+            runs_q = runs_q.eq("id", run_id)
+        runs = runs_q.execute().data or []
+        for r in runs:
+            if r["status"] in ("active", "paused"):
+                db.update_run_status(r["id"], "paused", finished=False)
+                db.skip_scheduled_sends(r["id"], reason="unsubscribed")
+                db.insert_run_event(r["id"], "unsubscribed",
+                                    metadata={"email": email})
+    except Exception:
+        log.exception("unsubscribe halt-runs failed for %s", email)
+    return {"ok": True, "email": email}
+
+
+# ── Signatures CRUD ────────────────────────────────────────────
+
+def list_signatures_for_user(user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    return {"signatures": db.list_signatures(user_email)}
+
+
+def create_signature(payload: dict, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    name = (payload or {}).get("name", "").strip()
+    html_body = (payload or {}).get("html_body", "").strip()
+    is_default = bool((payload or {}).get("is_default"))
+    if not name:
+        raise CoreError(422, "Signature name is required")
+    if not html_body:
+        raise CoreError(422, "Signature body is required")
+    sig = db.insert_signature(user_email, name, html_body, is_default)
+    return {"signature": sig}
+
+
+def update_signature_handler(sig_id: str, payload: dict,
+                             user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    allowed = {k: v for k, v in (payload or {}).items()
+               if k in ("name", "html_body", "is_default")}
+    if not allowed:
+        raise CoreError(422, "Nothing to update")
+    existing = db.get_signature(sig_id)
+    if not existing or existing.get("user_email") != user_email:
+        raise CoreError(404, "Signature not found")
+    sig = db.update_signature(sig_id, user_email, allowed)
+    return {"signature": sig}
+
+
+def delete_signature_handler(sig_id: str, user_role: str,
+                             user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    existing = db.get_signature(sig_id)
+    if not existing or existing.get("user_email") != user_email:
+        raise CoreError(404, "Signature not found")
+    db.delete_signature(sig_id, user_email)
+    return {"deleted": sig_id}
+
+
+# ── Test send (Preview & test button in the editor) ───────────
+
+def test_send_step(seq_id: str, payload: dict,
+                   user_role: str, user_email: str) -> dict:
+    """Send a real test email to the current user using a step's draft body.
+
+    Body and subject can be either a saved step (`step_id`) or live edits
+    from the editor (`subject`, `body`). No outreach_log row, no run, no
+    tracking pixel — just an email to confirm formatting.
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    payload = payload or {}
+    subject = payload.get("subject")
+    body = payload.get("body")
+    signature_id = payload.get("signature_id")
+    step_id = payload.get("step_id")
+    if (not subject or not body) and step_id:
+        step = next((s for s in (seq.get("steps") or []) if s["id"] == step_id), None)
+        if step:
+            subject = subject or step.get("subject_template") or ""
+            body = body or step.get("body_template") or ""
+            signature_id = signature_id or step.get("signature_id")
+    if not body:
+        raise CoreError(422, "Body is required for test send")
+
+    sender = {"email": user_email,
+              "name": user_email.split("@")[0].title()}
+    sched = (seq.get("config") or {}).get("scheduling_link", "")
+    if sched:
+        sender["scheduling_link"] = sched
+    sample_candidate = {
+        "name": sender["name"],
+        "first_name": sender["name"].split(" ")[0],
+        "current_employer": "Acme Inc.",
+        "current_job_title": "Senior Engineer",
+        "education": "B.Tech",
+        "email": user_email,
+    }
+    rendered_subject = _render_template(subject or "(no subject)",
+                                        sample_candidate, sender)
+    rendered_body = _render_template(body, sample_candidate, sender)
+
+    if signature_id:
+        sig = db.get_signature(signature_id)
+        if sig and sig.get("user_email") == user_email:
+            rendered_body = f"{rendered_body}<br><br>{sig['html_body']}"
+
+    test_subject = f"[TEST] {rendered_subject}"
+    try:
+        outlook.send_email(
+            from_email=user_email,
+            to_email=user_email,
+            subject=test_subject,
+            body=rendered_body,
+        )
+    except Exception as exc:
+        raise CoreError(502, f"Send failed: {exc}")
+    return {"ok": True, "to": user_email, "subject": test_subject}
 
 
 # ── Agentic Boost ──────────────────────────────────────────────

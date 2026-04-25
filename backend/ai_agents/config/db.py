@@ -598,7 +598,16 @@ def list_sequences_for_user(created_by: str, role: str) -> list[dict]:
     if role != "tl":
         q = q.eq("created_by", created_by)
     q = q.neq("status", "archived")
-    return q.order("created_at", desc=True).execute().data or []
+    rows = q.order("created_at", desc=True).execute().data or []
+    # Pinned sequences float to the top (most-recent pin first); rest stays in
+    # created_at-desc order from the query.
+    pinned = sorted(
+        (r for r in rows if r.get("is_pinned")),
+        key=lambda r: r.get("pinned_at") or "",
+        reverse=True,
+    )
+    rest = [r for r in rows if not r.get("is_pinned")]
+    return list(pinned) + rest
 
 
 def update_sequence_row(seq_id: str, patch: dict) -> dict:
@@ -616,21 +625,101 @@ def archive_sequence(seq_id: str) -> dict:
     return update_sequence_row(seq_id, {"status": "archived"})
 
 
+def clone_sequence_row(seq_id: str, created_by: str) -> dict:
+    """Deep-copy a sequence (header + steps) for the given owner."""
+    client = get_client()
+    src = (client.table("sequences").select("*")
+           .eq("id", seq_id).limit(1).execute().data) or []
+    if not src:
+        raise ValueError("source sequence not found")
+    src = src[0]
+    new_row = {
+        "name": f"{src.get('name') or 'Sequence'} (copy)",
+        "project_id": src.get("project_id"),
+        "requirement_id": src.get("requirement_id"),
+        "created_by": created_by,
+        "status": "draft",
+        "source": "clone",
+        "config": src.get("config") or {},
+    }
+    new_seq = (client.table("sequences").insert(new_row).execute().data or [None])[0]
+    if not new_seq:
+        raise RuntimeError("clone insert failed")
+    steps = (client.table("sequence_steps").select("*")
+             .eq("sequence_id", seq_id).order("position").execute().data) or []
+    for s in steps:
+        client.table("sequence_steps").insert({
+            "sequence_id": new_seq["id"],
+            "position": s.get("position"),
+            "step_type": s.get("step_type") or "email",
+            "wait_days": s.get("wait_days") or 0,
+            "send_time_local": s.get("send_time_local") or "09:00",
+            "timezone": s.get("timezone") or "Asia/Kolkata",
+            "subject_template": s.get("subject_template"),
+            "body_template": s.get("body_template"),
+            "reply_in_same_thread": s.get("reply_in_same_thread"),
+            "signature_id": s.get("signature_id"),
+            "include_unsubscribe": s.get("include_unsubscribe"),
+        }).execute()
+    return new_seq
+
+
 def count_sequence_metrics(seq_id: str) -> dict:
-    """Return {active, replied, total, sent} run counts for one sequence."""
-    runs = (get_client().table("sequence_runs").select("id, status")
+    """Return run + engagement counts for one sequence.
+
+    Returns: {total, active, sent, replied, opened, clicked, bounced, interested}.
+    Opened/clicked/interested are counted per-run (distinct run_ids that
+    received the event at least once) so the UI shows "people who opened",
+    not raw event counts.
+    """
+    client = get_client()
+    runs = (client.table("sequence_runs").select("id, status, intent")
             .eq("sequence_id", seq_id).execute().data) or []
     total = len(runs)
     active = sum(1 for r in runs if r["status"] == "active")
     replied = sum(1 for r in runs if r["status"] == "replied")
-    # Count total sent step_sends
+    bounced = sum(1 for r in runs if r["status"] == "bounced")
+    interested = sum(1 for r in runs if (r.get("intent") or "") == "interested")
     run_ids = [r["id"] for r in runs]
-    sent = 0
+    sent = opened = clicked = 0
     if run_ids:
-        sends = (get_client().table("sequence_step_sends").select("id")
+        sends = (client.table("sequence_step_sends").select("id")
                  .in_("run_id", run_ids).eq("status", "sent").execute().data) or []
         sent = len(sends)
-    return {"total": total, "active": active, "replied": replied, "sent": sent}
+        events = (client.table("sequence_run_events")
+                  .select("run_id, event_type")
+                  .in_("run_id", run_ids).execute().data) or []
+        opened_runs = {e["run_id"] for e in events if e.get("event_type") == "opened"}
+        clicked_runs = {e["run_id"] for e in events if e.get("event_type") == "clicked"}
+        opened = len(opened_runs)
+        clicked = len(clicked_runs)
+    return {
+        "total": total,
+        "active": active,
+        "sent": sent,
+        "replied": replied,
+        "opened": opened,
+        "clicked": clicked,
+        "bounced": bounced,
+        "interested": interested,
+        "contacts": total,
+    }
+
+
+def count_run_engagement(run_ids: list[str]) -> dict[str, dict]:
+    """Per-run engagement counts. Returns {run_id: {opened, clicked}}."""
+    if not run_ids:
+        return {}
+    events = (get_client().table("sequence_run_events")
+              .select("run_id, event_type")
+              .in_("run_id", run_ids).execute().data) or []
+    out: dict[str, dict] = {rid: {"opened": 0, "clicked": 0} for rid in run_ids}
+    for ev in events:
+        rid = ev.get("run_id")
+        et = ev.get("event_type")
+        if rid in out and et in ("opened", "clicked"):
+            out[rid][et] += 1
+    return out
 
 
 def get_pending_replies(recruiter_email: str):
@@ -677,3 +766,138 @@ def list_boost_runs(created_by: str | None = None,
     if created_by:
         q = q.eq("created_by", created_by)
     return q.order("created_at", desc=True).limit(limit).execute().data
+
+
+# ── Sequence tracking + signatures + unsubscribes ──────────
+
+def get_outreach_log_by_token(token: str) -> dict | None:
+    rows = (get_client().table("outreach_log")
+            .select("id, candidate_id, sequence_run_id, sequence_step_id, "
+                    "recruiter_email, outlook_message_id, outlook_thread_id")
+            .eq("tracking_token", token).limit(1).execute().data)
+    return rows[0] if rows else None
+
+
+def insert_run_event(run_id: str, event_type: str,
+                     step_id: str | None = None,
+                     metadata: dict | None = None) -> None:
+    payload = {
+        "run_id": run_id,
+        "event_type": event_type,
+        "metadata": metadata or {},
+    }
+    if step_id:
+        payload["step_id"] = step_id
+    try:
+        get_client().table("sequence_run_events").insert(payload).execute()
+    except Exception:
+        pass
+
+
+def has_run_event(run_id: str, event_type: str) -> bool:
+    rows = (get_client().table("sequence_run_events").select("id")
+            .eq("run_id", run_id).eq("event_type", event_type)
+            .limit(1).execute().data)
+    return bool(rows)
+
+
+def is_email_unsubscribed(email: str) -> bool:
+    if not email:
+        return False
+    rows = (get_client().table("email_unsubscribes").select("email")
+            .eq("email", email.lower()).limit(1).execute().data)
+    return bool(rows)
+
+
+def insert_unsubscribe(email: str, source: str = "link_click",
+                       sequence_run_id: str | None = None,
+                       metadata: dict | None = None) -> dict:
+    payload = {
+        "email": email.lower(),
+        "source": source,
+        "metadata": metadata or {},
+    }
+    if sequence_run_id:
+        payload["sequence_run_id"] = sequence_run_id
+    return (get_client().table("email_unsubscribes")
+            .upsert(payload, on_conflict="email").execute().data[0])
+
+
+def update_run_intent(run_id: str, intent: str,
+                      confidence: float | None = None) -> None:
+    patch: dict = {"intent": intent}
+    if confidence is not None:
+        patch["intent_confidence"] = confidence
+    try:
+        get_client().table("sequence_runs").update(patch).eq("id", run_id).execute()
+    except Exception:
+        pass
+
+
+def update_run_status(run_id: str, status: str,
+                      finished: bool = False) -> None:
+    patch: dict = {"status": status}
+    if finished:
+        patch["finished_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        get_client().table("sequence_runs").update(patch).eq("id", run_id).execute()
+    except Exception:
+        pass
+
+
+def skip_scheduled_sends(run_id: str, reason: str | None = None) -> None:
+    patch = {"status": "skipped"}
+    if reason:
+        patch["error_message"] = reason[:500]
+    try:
+        (get_client().table("sequence_step_sends").update(patch)
+         .eq("run_id", run_id).eq("status", "scheduled").execute())
+    except Exception:
+        pass
+
+
+# Signatures CRUD
+
+def list_signatures(user_email: str) -> list[dict]:
+    return (get_client().table("user_signatures").select("*")
+            .eq("user_email", user_email)
+            .order("is_default", desc=True)
+            .order("created_at", desc=True)
+            .execute().data) or []
+
+
+def get_signature(sig_id: str) -> dict | None:
+    rows = (get_client().table("user_signatures").select("*")
+            .eq("id", sig_id).limit(1).execute().data)
+    return rows[0] if rows else None
+
+
+def insert_signature(user_email: str, name: str, html_body: str,
+                     is_default: bool = False) -> dict:
+    if is_default:
+        # Clear any existing default first to keep the unique partial index happy.
+        (get_client().table("user_signatures")
+         .update({"is_default": False})
+         .eq("user_email", user_email).eq("is_default", True).execute())
+    return (get_client().table("user_signatures").insert({
+        "user_email": user_email,
+        "name": name,
+        "html_body": html_body,
+        "is_default": is_default,
+    }).execute().data[0])
+
+
+def update_signature(sig_id: str, user_email: str, patch: dict) -> dict:
+    if patch.get("is_default"):
+        (get_client().table("user_signatures")
+         .update({"is_default": False})
+         .eq("user_email", user_email).eq("is_default", True).execute())
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return (get_client().table("user_signatures").update(patch)
+            .eq("id", sig_id).eq("user_email", user_email)
+            .execute().data[0])
+
+
+def delete_signature(sig_id: str, user_email: str) -> None:
+    (get_client().table("user_signatures").delete()
+     .eq("id", sig_id).eq("user_email", user_email).execute())
