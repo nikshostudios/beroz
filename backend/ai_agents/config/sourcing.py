@@ -279,6 +279,130 @@ async def apollo_account_credits() -> dict:
     return resp.json() or {}
 
 
+# ── GitHub Users API (free, global, engineers) ─────────────────
+
+GITHUB_API_BASE = "https://api.github.com"
+
+
+def _normalize_github_users(users: list[dict],
+                            match_skills: list[str],
+                            market: str) -> list[dict]:
+    """Map GitHub `/users/{login}` payloads to candidate dict shape.
+
+    GitHub returns `bio`, `location`, `company`, `email` (often null), `blog`,
+    plus `login` and `html_url`. We synthesize a job title from `bio` when
+    present, fall back to "@{login}" so the row has a name even when the user
+    hasn't set their public display name.
+    """
+    results = []
+    for u in users:
+        login = u.get("login") or ""
+        name = u.get("name") or (f"@{login}" if login else "")
+        if not name:
+            continue
+        company = (u.get("company") or "").lstrip("@") or None
+        bio = u.get("bio") or ""
+        # Tag with any match_skill mentioned in bio so the screener has signal.
+        bio_lower = bio.lower()
+        skills = [s for s in match_skills if s and s.lower() in bio_lower]
+        if not skills:
+            skills = list(match_skills)
+        html_url = u.get("html_url") or (
+            f"https://github.com/{login}" if login else None)
+        results.append({
+            "name": name,
+            "email": u.get("email"),
+            "current_employer": company,
+            "current_job_title": bio[:200] if bio else None,
+            "current_location": u.get("location"),
+            "skills": skills,
+            "source": "github",
+            "market": market,
+            # Real DB columns — survive the run_all_sources strip and the
+            # agentic-boost upsert without any per-source rewiring.
+            "github_url": html_url,
+            "source_profile_url": html_url,
+            "source_metadata": {
+                "github_login": login,
+                "followers": u.get("followers"),
+                "public_repos": u.get("public_repos"),
+                "hireable": u.get("hireable"),
+                "blog": u.get("blog") or None,
+            },
+        })
+    return results
+
+
+async def source_github(skills: list[str], location: str | None,
+                        market: str) -> list[dict]:
+    """Search GitHub for engineers via the public Users Search API.
+
+    Free with `GITHUB_TOKEN`: 30 search req/min, 5,000 REST req/hr. Builds a
+    query like `language:Python location:Berlin followers:>10` from the
+    requirement skills + location, then enriches the top 30 hits with one
+    /users/{login} call each.
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN not set")
+
+    # GitHub user search supports `language:`, `location:`, `followers:>N`.
+    # Pick the first skill that looks like a programming language; treat the
+    # rest as keywords. Cheap heuristic — anything <= 12 chars + no space.
+    lang = next((s for s in skills if s and len(s) <= 12 and " " not in s),
+                None)
+    qualifiers = ["type:user"]
+    if lang:
+        qualifiers.append(f"language:{lang}")
+    if location:
+        loc = f'"{location}"' if " " in location else location
+        qualifiers.append(f"location:{loc}")
+    qualifiers.append("followers:>10")
+    q = " ".join(qualifiers)
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{GITHUB_API_BASE}/search/users",
+            headers=headers,
+            params={"q": q, "per_page": 30, "sort": "followers"},
+        )
+        if resp.status_code == 422:
+            raise RuntimeError(
+                f"github search 422: {resp.text[:200]} (q={q})")
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"github HTTP {resp.status_code}: {resp.text[:300]}")
+        items = (resp.json() or {}).get("items", [])
+
+        # Enrich with full profile (bio/location/email/company aren't in
+        # search results). Bounded concurrency to stay under secondary
+        # rate limits.
+        sem = asyncio.Semaphore(5)
+
+        async def _fetch_user(login: str) -> dict | None:
+            async with sem:
+                try:
+                    r = await client.get(
+                        f"{GITHUB_API_BASE}/users/{login}", headers=headers)
+                    if r.status_code == 200:
+                        return r.json()
+                except Exception:
+                    log.warning("github /users/%s failed", login,
+                                exc_info=True)
+                return None
+
+        full = await asyncio.gather(
+            *[_fetch_user(it.get("login")) for it in items if it.get("login")])
+        users = [u for u in full if u]
+
+    return _normalize_github_users(users, skills, market)
+
+
 # ── Naukri Recruiter API (cookie auth, India's #1 resume DB) ──
 
 NAUKRI_RESDEX_DOMAIN = os.environ.get(
@@ -472,6 +596,10 @@ async def run_all_sources(requirement: dict) -> dict:
     # Apollo — both markets (skipped if no API key under either alias)
     if os.environ.get("APOLLO_API_KEY") or os.environ.get("APOLLO_API"):
         tasks.append(("apollo", source_apollo(skills, location, market)))
+
+    # GitHub — global engineering, free with PAT
+    if os.environ.get("GITHUB_TOKEN"):
+        tasks.append(("github", source_github(skills, location, market)))
 
     # Run in parallel
     results_by_source: dict[str, int] = {}

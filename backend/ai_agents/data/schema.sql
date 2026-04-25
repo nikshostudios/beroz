@@ -329,6 +329,17 @@ alter table candidates
 create index if not exists idx_candidates_apollo_person
   on candidates(apollo_person_id);
 
+-- Multi-source sourcing expansion: github_url is a real column, the
+-- catch-all source_profile_url covers SO/HF/conference/etc, and
+-- source_metadata holds per-source extras (stars, reputation, model count).
+alter table candidates
+  add column if not exists github_url           text,
+  add column if not exists source_profile_url   text,
+  add column if not exists source_metadata      jsonb;
+
+create index if not exists idx_candidates_github_url
+  on candidates(github_url) where github_url is not null;
+
 create table if not exists company_enrichment (
   apollo_organization_id text primary key,
   name                   text,

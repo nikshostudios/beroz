@@ -7099,8 +7099,20 @@
         if (evt.agent === 'sourcing' && evt.payload) {
           const c = evt.payload.counts || {};
           const desc = document.getElementById('agent-desc-sourcing');
-          if (desc) desc.textContent =
-            `Apollo: ${c.apollo || 0} · Internal DB: ${c.internal_db || 0} · Unique: ${evt.payload.total_unique || 0}`;
+          // Data-driven label so new sources (GitHub, etc.) auto-appear
+          // without a JS edit. Order matches the sourcing pipeline priority.
+          const sourceOrder = ['internal_db', 'apollo', 'github'];
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub' };
+          const seen = new Set();
+          const parts = [];
+          sourceOrder.forEach(k => {
+            if (k in c) { parts.push(`${labelMap[k] || k}: ${c[k] || 0}`); seen.add(k); }
+          });
+          Object.keys(c).forEach(k => {
+            if (!seen.has(k)) parts.push(`${labelMap[k] || k}: ${c[k] || 0}`);
+          });
+          parts.push(`Unique: ${evt.payload.total_unique || 0}`);
+          if (desc) desc.textContent = parts.join(' · ');
           boostState.channelErrors = evt.payload.channel_errors || {};
           boostState.sourcingCounts = c;
           boostState.sourcingTotalUnique = evt.payload.total_unique || 0;
@@ -7137,7 +7149,10 @@
         let msg = 'Pipeline error: ' + evt.message;
         const c = boostState.sourcingCounts;
         if (c) {
-          msg += `\n\nSourcing results:\n  • Apollo: ${c.apollo || 0}\n  • Internal DB: ${c.internal_db || 0}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
+          const labelMap = { internal_db: 'Internal DB', apollo: 'Apollo', github: 'GitHub' };
+          const lines = Object.entries(c).map(([k, v]) =>
+            `  • ${labelMap[k] || k}: ${v || 0}`);
+          msg += `\n\nSourcing results:\n${lines.join('\n')}\n  • Unique total: ${boostState.sourcingTotalUnique || 0}`;
         }
         if (boostState.apolloParams) {
           msg += '\n\nApollo query sent:\n' + JSON.stringify(boostState.apolloParams, null, 2);
@@ -7774,6 +7789,19 @@
       if (withCheckboxes) wireSelectionCheckboxes(wrapper);
     }
 
+    function _sourceBadge(source) {
+      if (!source) return '';
+      const palette = {
+        apollo:      { bg: 'rgba(124,58,237,0.12)', fg: '#7c3aed', label: 'Apollo' },
+        github:      { bg: '#1115',                  fg: '#0d1117', label: 'GitHub' },
+        internal_db: { bg: 'rgba(16,185,129,0.12)', fg: '#047857', label: 'Internal' },
+        foundit:     { bg: 'rgba(244,114,182,0.12)', fg: '#be185d', label: 'Foundit' },
+        naukri:      { bg: 'rgba(59,130,246,0.12)', fg: '#1d4ed8', label: 'Naukri' },
+      };
+      const p = palette[source] || { bg: '#e5e7eb', fg: '#374151', label: source };
+      return `<span class="source-badge" style="display:inline-block;font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;background:${p.bg};color:${p.fg};margin-left:6px;vertical-align:middle">${p.label}</span>`;
+    }
+
     function renderSynopsisGrid(candidates, withCheckboxes) {
       let html = '<div class="synopsis-grid">';
       candidates.forEach(c => {
@@ -7781,18 +7809,22 @@
         const primary = c.current_job_title || (c.skills || []).slice(0, 2).join(', ') || '—';
         const scoreClass = typeof c.score === 'number' ? (c.score >= 75 ? 'score-high' : c.score >= 50 ? 'score-mid' : 'score-low') : '';
         const cb = withCheckboxes ? `<input type="checkbox" class="seq-cand-check" data-cand-id="${esc(c.id || '')}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:10px">` : '';
+        const profileLink = (!c.email && c.source_profile_url)
+          ? `<div class="person-card-detail"><span class="material-icons-outlined">open_in_new</span> <a href="${esc(c.source_profile_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">View profile</a></div>`
+          : '';
         html += `<div class="person-card person-card-synopsis" data-candidate-id="${esc(c.id || '')}" style="cursor:pointer;position:relative">
           ${cb}
           <div class="person-card-header"${withCheckboxes ? ' style="padding-left:24px"' : ''}>
             <div class="person-avatar">${initials}</div>
             <div style="flex:1;min-width:0">
-              <div class="person-name">${esc(c.name || 'Unknown')}</div>
+              <div class="person-name">${esc(c.name || 'Unknown')}${_sourceBadge(c.source)}</div>
               <div class="person-role">${esc(primary)}</div>
             </div>
             ${typeof c.score === 'number' ? `<span class="score-badge ${scoreClass}">${c.score}%</span>` : ''}
           </div>
           ${c.current_location ? `<div class="person-card-detail"><span class="material-icons-outlined">location_on</span> ${esc(c.current_location)}</div>` : ''}
           ${c.total_experience ? `<div class="person-card-detail"><span class="material-icons-outlined">schedule</span> ${esc(c.total_experience)}</div>` : ''}
+          ${profileLink}
           ${c.reasoning ? `<div class="person-reasoning">${esc(c.reasoning)}</div>` : ''}
         </div>`;
       });

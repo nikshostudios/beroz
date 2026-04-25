@@ -3626,15 +3626,23 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     yield _sse({"event": "agent_done", "agent": "boolean_builder",
                 "payload": boolean_output})
 
-    # ── Agent 3: Sourcing (Apollo + Internal DB in parallel) ──
-    yield _sse({"event": "agent_start", "agent": "sourcing",
-                "idx": 3, "label": "Sourcing Apollo + Internal DB"})
+    # ── Agent 3: Sourcing (Apollo + GitHub + Internal DB in parallel) ──
     apollo_enabled = bool(os.environ.get("APOLLO_API_KEY")
                           or os.environ.get("APOLLO_API"))
+    github_enabled = bool(os.environ.get("GITHUB_TOKEN"))
     channel_errors: dict[str, str] = {}
-    source_counts: dict[str, int] = {"apollo": 0, "internal_db": 0}
+    source_counts: dict[str, int] = {"apollo": 0, "internal_db": 0,
+                                     "github": 0}
     pool_by_id: dict[str, dict] = {}
     apollo_params = boolean_output.get("apollo_params") or {}
+
+    enabled_labels = ["Internal DB"]
+    if apollo_enabled:
+        enabled_labels.append("Apollo")
+    if github_enabled:
+        enabled_labels.append("GitHub")
+    yield _sse({"event": "agent_start", "agent": "sourcing", "idx": 3,
+                "label": "Sourcing " + " + ".join(enabled_labels)})
 
     if not apollo_enabled:
         channel_errors["apollo"] = "skipped — APOLLO_API_KEY not set on server"
@@ -3644,6 +3652,15 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                                     "person_titles or q_keywords to search with")
         apollo_enabled = False
 
+    if not github_enabled:
+        channel_errors["github"] = "skipped — GITHUB_TOKEN not set on server"
+
+    # GitHub takes free-text skills + a location string. Pull both from the
+    # JD-parsed requirement so we don't depend on the Apollo-shaped params.
+    gh_skills = (requirement.get("skills_required") or [])[:6]
+    gh_location = requirement.get("location") or (
+        "Singapore" if market == "SG" else "India")
+
     async def _run_sourcing():
         task_names: list[str] = []
         coros = []
@@ -3651,6 +3668,10 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
             task_names.append("apollo")
             coros.append(sourcing.source_apollo_structured(
                 apollo_params, market))
+        if github_enabled:
+            task_names.append("github")
+            coros.append(sourcing.source_github(
+                gh_skills, gh_location, market))
         task_names.append("internal_db")
         coros.append(_internal_db_search(requirement, limit=200))
         gathered = await asyncio.gather(*coros, return_exceptions=True)
@@ -3714,6 +3735,23 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 if row and row.get("id") and row["id"] not in pool_by_id:
                     pool_by_id[row["id"]] = row
                     source_counts["apollo"] += 1
+            elif name == "github":
+                # GitHub gives real names + locations, no redaction quirks.
+                # source_metadata is a dict; jsonb column accepts it directly.
+                try:
+                    if cand.get("email"):
+                        row = db.upsert_candidate_by_email(cand)
+                    elif cand.get("name"):
+                        row = db.upsert_candidate_by_name(cand)
+                    else:
+                        continue
+                except Exception:
+                    log.exception("github upsert failed for %s",
+                                  cand.get("name"))
+                    continue
+                if row and row.get("id") and row["id"] not in pool_by_id:
+                    pool_by_id[row["id"]] = row
+                    source_counts["github"] += 1
             else:  # internal_db
                 cid = cand.get("id")
                 if cid and cid not in pool_by_id:
