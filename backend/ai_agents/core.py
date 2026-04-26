@@ -948,6 +948,120 @@ def run_search(payload: dict, market: str | None) -> dict:
     }
 
 
+# ── Saved Searches ─────────────────────────────────────────────
+# Per-recruiter persisted view of the natural/JD/manual searches a
+# recruiter has run. Visibility is per-creator (recruiter A cannot see
+# recruiter B's searches). Enforced in the handlers below, not via RLS,
+# so service-role connections continue to work without policy edits.
+
+_SAVED_SEARCH_NAME_MAX = 120
+
+
+def _normalize_saved_search_payload(payload: Any) -> tuple[str, str, str | None]:
+    """Validate the create/save inputs and return (name, mode, market)."""
+    if not isinstance(payload, dict):
+        raise CoreError(422, "payload must be a JSON object")
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise CoreError(422, "name is required")
+    if len(name) > _SAVED_SEARCH_NAME_MAX:
+        raise CoreError(422, f"name must be <= {_SAVED_SEARCH_NAME_MAX} chars")
+    mode = (payload.get("mode") or "natural").lower()
+    if mode not in ("natural", "jd", "manual"):
+        raise CoreError(422, f"invalid mode: {mode}")
+    market = _normalize_market(payload.get("market"))
+    return name, mode, market
+
+
+def create_search(payload: Any, user_role: str, user_email: str) -> dict:
+    """Run a search (reusing run_search) and persist it as a saved row.
+
+    Payload mirrors run_search plus a required `name`.
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    if not user_email:
+        raise CoreError(401, "user email missing from session")
+    name, mode, market = _normalize_saved_search_payload(payload)
+
+    # Delegate to the existing run_search pipeline so we don't re-implement
+    # parsing, sourcing, or scoring. It returns parsed filters + diagnostics.
+    run_payload = dict(payload)
+    run_payload.pop("name", None)
+    run_payload.pop("save", None)
+    result = run_search(run_payload, market)
+
+    source_text = ""
+    if mode in ("natural", "jd"):
+        source_text = (payload.get("text")
+                       or payload.get("requirement_text") or "").strip()
+
+    row = db.insert_search({
+        "created_by": user_email,
+        "name": name,
+        "market": market,
+        "mode": mode,
+        "source_text": source_text or None,
+        "filters": result.get("filters") or {},
+        "soft_criteria": result.get("soft_criteria") or [],
+        "jd_diagnostics": result.get("jd_diagnostics") or None,
+        "last_run_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"status": "ok", "search": row, **result}
+
+
+def list_searches_for_recruiter(user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    if not user_email:
+        raise CoreError(401, "user email missing from session")
+    rows = db.list_searches(user_email)
+    return {"searches": rows, "count": len(rows)}
+
+
+def _own_search_or_404(search_id: str, user_email: str) -> dict:
+    row = db.get_search_by_id(search_id)
+    if not row or row.get("created_by") != user_email:
+        raise CoreError(404, "Saved search not found")
+    return row
+
+
+def get_saved_search(search_id: str, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    if not user_email:
+        raise CoreError(401, "user email missing from session")
+    row = _own_search_or_404(search_id, user_email)
+    return {"search": row}
+
+
+def rerun_saved_search(search_id: str, user_role: str, user_email: str) -> dict:
+    """Replay a saved search using its persisted filters + soft_criteria.
+
+    Bypasses parsing (we already have the parsed shape) and goes straight
+    through run_search in manual mode against the current candidate pool.
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    if not user_email:
+        raise CoreError(401, "user email missing from session")
+    row = _own_search_or_404(search_id, user_email)
+    result = run_search({
+        "mode": "manual",
+        "filters": row.get("filters") or {},
+        "soft_criteria": row.get("soft_criteria") or [],
+    }, row.get("market"))
+    db.update_search(search_id, {
+        "last_run_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"status": "ok", "search_id": search_id, **result}
+
+
+def delete_saved_search(search_id: str, user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    if not user_email:
+        raise CoreError(401, "user email missing from session")
+    _own_search_or_404(search_id, user_email)
+    db.delete_search(search_id)
+    return {"status": "ok", "deleted": search_id}
+
+
 # ── Apollo reveal + credits + candidate detail ─────────────────
 
 _apollo_credits_cache: dict = {}  # {"data": {...}, "expires": datetime}
@@ -2225,6 +2339,15 @@ def create_requirement(payload: Any, user_role: str, user_email: str) -> dict:
                     if isinstance(excl, list):
                         data["excluded_companies"] = [
                             str(s).strip() for s in excl if str(s).strip()]
+                # Surface JD diagnostics on dedicated columns so the UI can
+                # render them without parsing the jd_parsed jsonb blob, and
+                # so we can filter/sort by quality_score later.
+                rf = jd_parsed.get("red_flags")
+                if isinstance(rf, list):
+                    data["red_flags"] = [str(x).strip() for x in rf if str(x).strip()]
+                qs = jd_parsed.get("jd_quality_score")
+                if isinstance(qs, (int, float)):
+                    data["jd_quality_score"] = int(qs)
                 data["jd_parsed"] = jd_parsed
         else:
             # Fallback: simple skills extraction
@@ -4813,6 +4936,16 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 "payload": jd_parsed})
 
     # ── Auto-create requirement ────────────────────────────────
+    boost_red_flags = jd_parsed.get("red_flags")
+    if not isinstance(boost_red_flags, list):
+        boost_red_flags = None
+    else:
+        boost_red_flags = [str(x).strip() for x in boost_red_flags if str(x).strip()]
+    boost_quality_score = jd_parsed.get("jd_quality_score")
+    if not isinstance(boost_quality_score, (int, float)):
+        boost_quality_score = None
+    else:
+        boost_quality_score = int(boost_quality_score)
     req_payload = {
         "client_name": jd_parsed.get("client_name") or "Agentic Boost (auto)",
         "market": market,
@@ -4828,6 +4961,8 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         "boost_run": True,
         "jd_text": jd_text,
         "jd_parsed": jd_parsed,
+        "red_flags": boost_red_flags,
+        "jd_quality_score": boost_quality_score,
     }
     try:
         req_row = db.insert_requirement(req_payload)

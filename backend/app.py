@@ -457,6 +457,59 @@ def api_search_run():
     return _ai_core_call(ai_core.run_search, request.get_json(silent=True), market)
 
 
+# ── Saved Searches (per-recruiter) ─────────────────────────────
+
+@app.route("/api/searches", methods=["GET"])
+def api_searches_list():
+    """List the current recruiter's own saved searches (most recent first)."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.list_searches_for_recruiter, role, email)
+
+
+@app.route("/api/searches", methods=["POST"])
+def api_searches_create():
+    """Run a search and persist it as a named saved row for the recruiter."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_search,
+                         request.get_json(silent=True), role, email)
+
+
+@app.route("/api/searches/<sid>", methods=["GET"])
+def api_searches_get(sid):
+    """Fetch one saved search (404 if it isn't the recruiter's)."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.get_saved_search, sid, role, email)
+
+
+@app.route("/api/searches/<sid>/rerun", methods=["POST"])
+def api_searches_rerun(sid):
+    """Replay a saved search against the current candidate pool."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.rerun_saved_search, sid, role, email)
+
+
+@app.route("/api/searches/<sid>", methods=["DELETE"])
+def api_searches_delete(sid):
+    """Delete one of the recruiter's saved searches."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.delete_saved_search, sid, role, email)
+
+
 @app.route("/api/apollo/credits", methods=["GET"])
 def api_apollo_credits():
     """Return remaining Apollo credit counters (cached 5 min)."""

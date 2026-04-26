@@ -67,7 +67,7 @@ JD_PARSER_PROMPT = """\
 You are a recruitment job-description parser. The user will paste the full \
 text of a job description — it may be noisy (copied from email, PDF, or \
 WhatsApp) and contain company boilerplate, benefits, and equal-opportunity \
-statements. Extract the same two sections as a normal search parser:
+statements. Extract three sections:
 
 1. **hard_filters** — concrete, filterable constraints used as database \
 WHERE clauses:
@@ -79,10 +79,24 @@ WHERE clauses:
    - must_have_skills: individual technical skills explicitly required \
 (split compound phrases into separate skills).
    - salary_min / salary_max / salary_currency: if mentioned.
+   - certifications, remote_policy, industry_experience, excluded_companies \
+(see Extra-field rules below).
+   - contract_type: "FTE" | "Contract" | "C2H" | "TP" | null.
+   - notice_period_max_days: integer days, or null. Convert "immediate" → 0, \
+"30 days" → 30, "1 month" → 30, "2 months" → 60.
+   - nationality_requirement: free-text constraint if explicit (e.g., \
+"SC/PR only", "US citizens only"). Null otherwise.
+   - client_name: company doing the hiring, if named in the JD. Null otherwise.
 
 2. **soft_criteria** — qualitative preferences for LLM scoring. Each has:
    - criterion: short description (e.g., "experience shipping B2B SaaS").
    - weight: "required" | "preferred" | "bonus".
+
+3. **jd_diagnostics** — quality assessment of the JD itself:
+   - red_flags: list of short strings flagging unrealistic combos, \
+contradictions, or missing critical info. See Red-flag rules below.
+   - quality_score: integer 1–10 indicating how clear and complete the JD \
+is. See Scoring rubric.
 
 Rules:
 - Ignore boilerplate like "equal opportunity employer", "competitive \
@@ -92,7 +106,7 @@ benefits", company-culture paragraphs.
 weight "preferred", NOT in must_have_skills.
 - Return ONLY valid JSON, no explanation.
 
-Output schema (identical to the search-query parser):
+Output schema:
 {
   "hard_filters": {
     "title_keywords": ["..."],
@@ -106,11 +120,19 @@ Output schema (identical to the search-query parser):
     "certifications": ["..."],
     "remote_policy": "..." | null,
     "industry_experience": ["..."],
-    "excluded_companies": ["..."]
+    "excluded_companies": ["..."],
+    "contract_type": "FTE|Contract|C2H|TP" | null,
+    "notice_period_max_days": int | null,
+    "nationality_requirement": "..." | null,
+    "client_name": "..." | null
   },
   "soft_criteria": [
     {"criterion": "...", "weight": "required|preferred|bonus"}
-  ]
+  ],
+  "jd_diagnostics": {
+    "red_flags": ["..."],
+    "quality_score": int
+  }
 }
 
 Extra-field rules:
@@ -118,6 +140,29 @@ Extra-field rules:
 - remote_policy: explicit work-mode phrase from the JD ("remote", "hybrid", "onsite", "Hybrid 2 days/week"). Null if unspecified.
 - industry_experience: domain/vertical experience required ("FinTech", "HealthTech", "B2B SaaS", "E-commerce"). Empty list if not specified.
 - excluded_companies: companies the JD or client notes explicitly say NOT to source from (no-poach, competitor blocks). Be conservative — empty list is the default.
+- nationality_requirement: only emit if the JD is explicit. For SG government keywords ("government", "ministry", "MOE", "GeBIZ", "tender"), infer "SC/PR only" and add a red_flag noting the inference.
+
+Red-flag rules — emit a short string in red_flags for any of these:
+- Unrealistic salary-to-experience ratio (e.g., "10 years ServiceNow at 3 LPA"). Format: "Salary too low for experience".
+- Contradictory requirements (e.g., "junior role with 10+ years required"). Format: "Contradictory: <short reason>".
+- More than 8 must-have skills. Format: "X must-haves — likely unrealistic".
+- Missing salary entirely. Format: "Salary missing".
+- Missing experience range. Format: "Experience range missing".
+- Missing location. Format: "Location missing".
+- Vague skills (e.g., "good with technology", "team player" only). Format: "Skills are vague — no concrete tech named".
+- Inferred fields where the JD was ambiguous. Format: "Inferred: <field> = <value>".
+
+Quality scoring rubric (start at 10, subtract penalties, floor at 1):
+- Missing salary: −2
+- Missing experience range: −1
+- Vague or generic skills only: −2
+- Missing location: −1
+- Contradictory or unrealistic combo: −3
+- More than 8 must-haves: −1
+
+Market-specific rules:
+- India: salary in LPA. No nationality constraints unless specified.
+- Singapore: salary in SGD/month. SC/PR commonly required for government/GeBIZ roles.
 """
 
 
@@ -152,9 +197,12 @@ def parse_search_query(requirement_text: str, call_claude_fn, parse_json_fn) -> 
 
 
 def parse_jd_to_filters(jd_text: str, call_claude_fn, parse_json_fn) -> dict:
-    """Parse a full job description into {hard_filters, soft_criteria}.
+    """Parse a full job description into {hard_filters, soft_criteria, jd_diagnostics}.
 
-    Same output shape as parse_search_query — downstream code is uniform.
+    The hard_filters + soft_criteria keys are guaranteed for downstream
+    compatibility with parse_search_query. jd_diagnostics (red_flags,
+    quality_score) is emitted by the JD prompt but absent from the short
+    natural-language search prompt.
     """
     return _parse_with_prompt(
         text=jd_text,
@@ -162,5 +210,5 @@ def parse_jd_to_filters(jd_text: str, call_claude_fn, parse_json_fn) -> dict:
         endpoint="jd_parser",
         call_claude_fn=call_claude_fn,
         parse_json_fn=parse_json_fn,
-        max_tokens=2048,
+        max_tokens=3072,
     )

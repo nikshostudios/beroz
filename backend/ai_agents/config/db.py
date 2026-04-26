@@ -275,6 +275,35 @@ def assign_recruiter_to_requirement(req_id: str, email: str) -> dict:
             .eq("id", req_id).execute().data[0])
 
 
+# ── Saved Searches ──────────────────────────────────────────
+
+def insert_search(data: dict) -> dict:
+    return get_client().table("searches").insert(data).execute().data[0]
+
+
+def list_searches(created_by: str) -> list[dict]:
+    return (get_client().table("searches")
+            .select("*")
+            .eq("created_by", created_by)
+            .order("created_at", desc=True)
+            .execute().data) or []
+
+
+def get_search_by_id(search_id: str) -> dict | None:
+    rows = (get_client().table("searches")
+            .select("*").eq("id", search_id).execute().data)
+    return rows[0] if rows else None
+
+
+def update_search(search_id: str, patch: dict) -> dict:
+    return (get_client().table("searches")
+            .update(patch).eq("id", search_id).execute().data[0])
+
+
+def delete_search(search_id: str) -> None:
+    get_client().table("searches").delete().eq("id", search_id).execute()
+
+
 # ── Screenings ──────────────────────────────────────────────
 
 def insert_screening(data: dict) -> dict:

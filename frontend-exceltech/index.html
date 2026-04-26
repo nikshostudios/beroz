@@ -3408,6 +3408,15 @@
             <div class="loading-spinner"></div> Parsing search query with AI...
           </div>
           <div id="search-results"></div>
+
+          <!-- My Searches: per-recruiter saved searches. Hidden until at least one row exists. -->
+          <div id="my-searches-panel" class="hidden" style="margin-top:32px;padding:16px;background:var(--bg-card,#fff);border:1px solid var(--border-color,#e5e7eb);border-radius:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <h3 style="margin:0;font-size:15px;font-weight:600">My Saved Searches</h3>
+              <span id="my-searches-count" style="color:var(--text-muted);font-size:12px"></span>
+            </div>
+            <div id="my-searches-list"></div>
+          </div>
         </div>
 
         <!-- SETTINGS -->
@@ -3538,6 +3547,7 @@
         <div class="settings-field" style="margin-bottom:0">
           <label>Job Description (paste JD text)</label>
           <textarea id="req-jd" rows="5" placeholder="Paste the full job description here. Skills, certifications, work mode, and industry are auto-extracted if not filled above."></textarea>
+          <div id="req-jd-diagnostics-slot"></div>
         </div>
         <div class="settings-field" style="margin-bottom:0">
           <label>Assign to Recruiters <span style="color:var(--text-muted);font-weight:400;font-size:11px">(leave empty to keep for yourself)</span></label>
@@ -4118,6 +4128,7 @@
       if (pageId === 'submissions') loadSubmissions();
       if (pageId === 'sequences') loadSequencesPageV2();
       if (pageId === 'settings') loadSettingsSignatures();
+      if (pageId === 'search') loadMySearches();
       renderRequirementContext();
       updateBackButton();
     }
@@ -4346,11 +4357,12 @@
             card.dataset.reqId = req.id;
             card.style.cursor = 'pointer';
             card.addEventListener('click', () => viewRequirement(req.id));
+            const jdScoreBadge = renderJdDiagnostics(req, { compact: true });
             card.innerHTML = `
               <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()">
               <div class="req-card-header">
                 <div>
-                  <div class="req-card-title">${esc(req.role_title || 'Untitled')}</div>
+                  <div class="req-card-title">${esc(req.role_title || 'Untitled')} ${jdScoreBadge}</div>
                   <div class="req-card-client">${esc(req.client_name || '')} ${marketTag}</div>
                 </div>
                 ${statusTag}
@@ -5603,6 +5615,20 @@
       const card = btn.closest('.req-card');
       const roleTitle = card.querySelector('.req-card-title')?.textContent || 'this role';
 
+      // Soft warning when the JD parser flagged the requirement as low-quality.
+      // Recruiters can still proceed — we just want them to know upfront that
+      // sourcing against a vague/contradictory JD is likely to waste cycles.
+      const reqRow = state.requirements.find(r => r.id === reqId);
+      if (reqRow && jdQualityIsLow(reqRow)) {
+        const flags = (reqRow.red_flags || []).slice(0, 4).join('\n  • ');
+        const ok = confirm(
+          `This JD scored low on quality (${reqRow.jd_quality_score}/10).\n\n` +
+          (flags ? `Issues:\n  • ${flags}\n\n` : '') +
+          `Sourcing now may produce poor matches. Continue anyway?`
+        );
+        if (!ok) return;
+      }
+
       // Build or reuse the inline panel
       let panel = card.querySelector('.req-agent-panel');
       if (!panel) {
@@ -6081,9 +6107,30 @@
       };
 
       try {
-        await api('/api/requirements/create', { method: 'POST', body });
+        const resp = await api('/api/requirements/create', { method: 'POST', body });
         btn.disabled = false;
         btn.innerHTML = '<span class="material-icons-outlined" style="font-size:16px">add</span> Create';
+
+        // Surface JD diagnostics inline if the parser flagged anything.
+        // Otherwise just close the modal as before — no extra friction.
+        const dxHtml = renderJdDiagnostics(resp?.jd_parsed);
+        if (dxHtml) {
+          const slot = document.getElementById('req-jd-diagnostics-slot');
+          if (slot) {
+            slot.innerHTML = dxHtml + `
+              <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                <button type="button" class="btn-primary" id="btn-req-dx-continue">Continue</button>
+              </div>`;
+            document.getElementById('btn-req-dx-continue')?.addEventListener('click', () => {
+              slot.innerHTML = '';
+              document.getElementById('modal-create-req').classList.add('hidden');
+              document.getElementById('form-create-req').reset();
+              resetReqAssigned();
+              loadRequirements();
+            }, { once: true });
+            return;
+          }
+        }
         document.getElementById('modal-create-req').classList.add('hidden');
         document.getElementById('form-create-req').reset();
         resetReqAssigned();
@@ -8430,7 +8477,24 @@
         if (desc && evt.message) desc.textContent = evt.message;
       } else if (evt.event === 'agent_done') {
         statuses[evt.agent] = 'done';
-        if (evt.agent === 'jd_parser') boostState.jdParsed = evt.payload || null;
+        if (evt.agent === 'jd_parser') {
+          boostState.jdParsed = evt.payload || null;
+          // Render JD diagnostics under the JD-parser agent card so recruiters
+          // see red flags / quality score the moment parsing finishes.
+          const dxHtml = renderJdDiagnostics(evt.payload);
+          if (dxHtml) {
+            const desc = document.getElementById('agent-desc-jd_parser');
+            if (desc) {
+              let dxSlot = desc.parentElement?.querySelector('.boost-jd-dx');
+              if (!dxSlot) {
+                dxSlot = document.createElement('div');
+                dxSlot.className = 'boost-jd-dx';
+                desc.parentElement?.appendChild(dxSlot);
+              }
+              dxSlot.innerHTML = dxHtml;
+            }
+          }
+        }
         if (evt.agent === 'boolean_builder' && evt.payload) {
           boostState.booleanString = evt.payload.boolean_string || '';
           boostState.apolloParams = evt.payload.apollo_params || null;
@@ -9350,6 +9414,119 @@
       return html + '</div>';
     }
 
+    // ── Saved Searches (per-recruiter) ──
+    async function loadMySearches() {
+      const panel = document.getElementById('my-searches-panel');
+      const list = document.getElementById('my-searches-list');
+      const counter = document.getElementById('my-searches-count');
+      if (!panel || !list) return;
+      try {
+        const data = await api('/api/searches');
+        const rows = data?.searches || [];
+        if (!rows.length) {
+          panel.classList.add('hidden');
+          return;
+        }
+        panel.classList.remove('hidden');
+        if (counter) counter.textContent = `${rows.length} saved`;
+        list.innerHTML = rows.map(s => {
+          const when = s.last_run_at || s.created_at;
+          const ts = when ? new Date(when).toLocaleString() : '';
+          const modeLabel = s.mode === 'jd' ? 'JD'
+                          : s.mode === 'manual' ? 'Manual' : 'Natural';
+          const dxBadge = renderJdDiagnostics(s.jd_diagnostics, { compact: true });
+          return `
+            <div class="saved-search-row" data-search-id="${s.id}"
+              style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:500;font-size:13px;display:flex;align-items:center;gap:6px">
+                  ${esc(s.name)} ${dxBadge}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted)">
+                  ${modeLabel}${s.market ? ' · ' + esc(s.market) : ''}${ts ? ' · last run ' + esc(ts) : ''}
+                </div>
+              </div>
+              <button class="btn-secondary" style="padding:4px 10px;font-size:12px"
+                onclick="rerunSavedSearch('${s.id}')">
+                <span class="material-icons-outlined" style="font-size:13px;vertical-align:middle">refresh</span> Re-run
+              </button>
+              <button class="btn-secondary" style="padding:4px 8px;font-size:12px"
+                onclick="deleteSavedSearch('${s.id}')" title="Delete">
+                <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle;color:#dc2626">delete_outline</span>
+              </button>
+            </div>`;
+        }).join('');
+      } catch (err) {
+        // Silent: panel just stays hidden if the endpoint is unreachable.
+        panel.classList.add('hidden');
+      }
+    }
+
+    async function saveCurrentSearch() {
+      const last = state._lastSearchData;
+      const lastPayload = state._lastSearchPayload;
+      if (!last || !lastPayload) {
+        alert('Run a search first, then save it.');
+        return;
+      }
+      const name = (prompt('Name this search:', '') || '').trim();
+      if (!name) return;
+      try {
+        await api('/api/searches', {
+          method: 'POST',
+          body: { name, ...lastPayload, market: state.currentMarket || null },
+        });
+        await loadMySearches();
+      } catch (err) {
+        alert('Could not save search: ' + (err?.message || 'unknown error'));
+      }
+    }
+
+    async function rerunSavedSearch(searchId) {
+      if (!searchId) return;
+      const results = document.getElementById('search-results');
+      const loading = document.getElementById('search-loading');
+      const hero = document.getElementById('search-hero');
+      hero?.classList.add('compact');
+      if (loading) {
+        loading.style.display = '';
+        loading.firstElementChild.nextSibling.textContent = ' Re-running saved search…';
+      }
+      if (results) results.innerHTML = '';
+      try {
+        const data = await api(`/api/searches/${searchId}/rerun`, { method: 'POST' });
+        if (loading) loading.style.display = 'none';
+        if (!data || data.status !== 'ok') {
+          if (results) results.innerHTML = `<div class="empty-state"><p>No results.</p></div>`;
+          return;
+        }
+        state._lastSearchData = data;
+        state.selectedSequenceCandidates = new Set();
+        updateSeqActionBar();
+        let html = renderFiltersCard(data.filters || {});
+        html += renderSearchResults(data.candidates || [], data.soft_criteria || [], { withCheckboxes: true });
+        if (results) {
+          results.innerHTML = html;
+          wireSelectionCheckboxes(results);
+        }
+        loadMySearches();
+      } catch (err) {
+        if (loading) loading.style.display = 'none';
+        if (results) results.innerHTML = `<div class="empty-state"><p>Re-run failed: ${esc(err.message)}</p></div>`;
+      }
+    }
+
+    async function deleteSavedSearch(searchId) {
+      if (!searchId) return;
+      if (!confirm('Delete this saved search?')) return;
+      try {
+        await api(`/api/searches/${searchId}`, { method: 'DELETE' });
+        await loadMySearches();
+      } catch (err) {
+        alert('Could not delete: ' + (err?.message || 'unknown error'));
+      }
+    }
+
     async function runHeroSearch() {
       const mode = state.searchMode || 'natural';
       const hero = document.getElementById('search-hero');
@@ -9394,6 +9571,7 @@
           return;
         }
         state._lastSearchData = data;
+        state._lastSearchPayload = payload;
         state.selectedSequenceCandidates = new Set();
         updateSeqActionBar();
         // Fetch Apollo credits in background so credits bar renders
@@ -9408,12 +9586,25 @@
           }
         }).catch(() => {});
         let html = renderFiltersCard(data.filters || {});
+        // JD diagnostics + save affordance — only meaningful for jd/natural runs.
+        const dxHtml = renderJdDiagnostics(data.jd_diagnostics);
+        const saveBtnHtml = `
+          <div style="display:flex;align-items:center;gap:8px;margin:10px 0">
+            ${dxHtml}
+            <button type="button" class="btn-secondary" style="padding:6px 12px;font-size:12px;margin-left:auto"
+              onclick="saveCurrentSearch()">
+              <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">bookmark_add</span> Save this search
+            </button>
+          </div>`;
+        html += saveBtnHtml;
         html += renderSearchResults(data.candidates || [], data.soft_criteria || [], { withCheckboxes: true });
         if (typeof data.candidate_pool === 'number' && data.candidate_pool > 0 && !(data.candidates || []).length) {
           html += `<div class="empty-state"><p>Scanned ${data.candidate_pool} candidates but none scored above the match threshold. Try loosening the filters.</p></div>`;
         }
         results.innerHTML = html;
         wireSelectionCheckboxes(results);
+        // Refresh the My Searches panel in case this user already had saves.
+        loadMySearches();
       } catch (err) {
         loading.style.display = 'none';
         results.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
@@ -9934,6 +10125,51 @@
 
     function getInitials(name) {
       return (name || '??').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    }
+
+    // Normalize JD diagnostics across the two parser shapes:
+    // - search_parser.JD_PARSER_PROMPT emits {jd_diagnostics:{red_flags,quality_score}}
+    // - agents/jd_parser.md emits flat {red_flags, jd_quality_score}
+    // - persisted requirement rows have flat {red_flags, jd_quality_score}
+    function _jdDx(src) {
+      if (!src || typeof src !== 'object') return { flags: [], score: null };
+      const dx = src.jd_diagnostics && typeof src.jd_diagnostics === 'object'
+        ? src.jd_diagnostics : src;
+      const flags = Array.isArray(dx.red_flags) ? dx.red_flags.filter(Boolean) : [];
+      const rawScore = dx.jd_quality_score ?? dx.quality_score;
+      const score = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : null;
+      return { flags, score };
+    }
+
+    function renderJdDiagnostics(src, opts) {
+      const { flags, score } = _jdDx(src);
+      if (!flags.length && score === null) return '';
+      opts = opts || {};
+      const compact = !!opts.compact;
+      const scoreColor = score === null ? '#6b7280'
+        : score >= 8 ? '#16a34a'
+        : score >= 5 ? '#ca8a04'
+        : '#dc2626';
+      const scoreBadge = score === null ? '' : `
+        <span class="jd-dx-score" style="background:${scoreColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">
+          JD ${score}/10
+        </span>`;
+      if (compact) return scoreBadge;
+      const chips = flags.map(f => `
+        <span class="jd-dx-chip" style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;display:inline-flex;align-items:center;gap:4px">
+          <span class="material-icons-outlined" style="font-size:12px">warning_amber</span>
+          ${esc(String(f))}
+        </span>`).join('');
+      return `
+        <div class="jd-diagnostics" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">
+          ${scoreBadge}
+          ${chips || (score !== null ? '<span style="color:#6b7280;font-size:11px">No red flags detected</span>' : '')}
+        </div>`;
+    }
+
+    function jdQualityIsLow(src) {
+      const { score } = _jdDx(src);
+      return score !== null && score < 5;
     }
 
     // ── Sidebar collapse ──
