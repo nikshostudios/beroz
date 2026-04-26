@@ -4,7 +4,7 @@
 - Score a candidate resume against a job requirement
 
 ## Model
-- claude-sonnet-4
+- claude-haiku-4-5 (structured-JSON scoring task — Haiku is fast/cheap and accurate enough; Sonnet's reasoning isn't earned here)
 
 ## Input
 - `candidate` dict from Supabase `candidates` table

@@ -8,10 +8,14 @@
 | JD skill extraction         | claude-haiku-4-5-20251001      | screener    | 512        |
 | Inbox scan / reply parsing  | claude-haiku-4-5-20251001      | followup    | 2048       |
 | Outreach email drafting     | claude-haiku-4-5-20251001      | outreach    | 2048       |
-| Candidate screening         | claude-sonnet-4-20250514       | screener    | 1024       |
+| Candidate screening         | claude-haiku-4-5-20251001      | screener    | 1024–4096  |
 | Submission formatting       | claude-sonnet-4-20250514       | formatter   | 4096       |
 
-**Rule**: Never use Sonnet for classification/parsing. Never use Haiku for screening/formatting.
+**Rule**: Sonnet for reasoning/extraction (JD parsing, web extraction, formatter).
+Haiku for structured-JSON tasks (classification, parsing, screening, drafting).
+Screening was on Sonnet historically but the per-batch latency + tier-1 RPM caps
+made it the bottleneck of the boost pipeline — Haiku 4.5 hits the same JSON
+shape ~12× cheaper and 2–3× faster.
 
 ## File loading strategy
 

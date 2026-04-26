@@ -255,7 +255,7 @@ def _score_candidate_batch(candidates: list[dict], requirement: dict) -> list[di
         f"Return ONLY the JSON array, no other text."
     )
     result_text = _call_claude(
-        "claude-sonnet-4-20250514",
+        "claude-haiku-4-5-20251001",
         "You are an expert IT recruitment matcher. Score candidates accurately. "
         "Understand skill synonyms, related technologies, and experience levels.",
         prompt, max_tokens=4096, endpoint="/match-scoring",
@@ -333,7 +333,7 @@ def _screen_candidates(requirement_id: str, requirement: dict,
             continue
         try:
             result_text = _call_claude(
-                "claude-sonnet-4-20250514",
+                "claude-haiku-4-5-20251001",
                 AGENTS.get("screener", ""),
                 f"Score this candidate.\nCANDIDATE: {cand}\n"
                 f"REQUIREMENT: {requirement}\nReturn JSON only.",
@@ -371,7 +371,7 @@ async def _run_source_and_screen(requirement_id: str) -> dict:
         if existing:
             continue
         result_text = _call_claude(
-            "claude-sonnet-4-20250514",
+            "claude-haiku-4-5-20251001",
             AGENTS.get("screener", ""),
             f"Score this candidate.\nCANDIDATE: {cand}\n"
             f"REQUIREMENT: {requirement}\nReturn JSON only.",
@@ -716,7 +716,7 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
             "Return ONLY the JSON array, no other text."
         )
         result_text = _call_claude(
-            "claude-sonnet-4-20250514",
+            "claude-haiku-4-5-20251001",
             "You are an expert IT recruitment matcher. Score candidates accurately.",
             prompt, max_tokens=4096, endpoint="/search-run-scoring",
         )
@@ -4477,7 +4477,7 @@ def test_send_step(seq_id: str, payload: dict,
 #   1. JD Parser         — claude-sonnet-4   → structured JD JSON
 #   2. Boolean Builder   — claude-haiku-4-5  → boolean_string + apollo_params
 #   3. Sourcing          — asyncio.gather(Apollo, Internal DB)
-#   4. Screener          — _score_candidate_batch (claude-sonnet-4) → top 50
+#   4. Screener          — _score_candidate_batch (claude-haiku-4-5) → top 50
 #   5. Outreach Drafter  — draft_sequence (claude-haiku-4-5) → outreach_log
 #                          rows with status='draft'
 
