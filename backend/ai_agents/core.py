@@ -908,6 +908,18 @@ def run_search(payload: dict, market: str | None) -> dict:
 
     candidates = _apply_python_filters(candidates, filters)
 
+    # Cap the pool that goes into Claude scoring. Each batch of 20 = 1 LLM
+    # round-trip (~4-5s); 250 candidates = 13 sequential calls ≈ 60s, which
+    # blows past Railway's edge timeout when stacked with parser + Apollo
+    # latency. Apollo already returns its highest-relevance hits first, and
+    # internal candidates are pre-filtered, so trimming the tail loses
+    # very little.
+    SEARCH_SCORE_CAP = 100
+    if len(candidates) > SEARCH_SCORE_CAP:
+        log.info("run_search: trimming candidate pool from %d to %d before scoring",
+                 len(candidates), SEARCH_SCORE_CAP)
+        candidates = candidates[:SEARCH_SCORE_CAP]
+
     scored = _score_candidates_for_search(candidates, filters, soft_criteria)
     scored.sort(key=lambda x: x["score"], reverse=True)
 
