@@ -8803,7 +8803,7 @@
       const card = document.getElementById('search-results-card');
       if (!card) return;
       const wrapper = card.parentElement;
-      const withCheckboxes = !!state.searchRequirementContext;
+      const withCheckboxes = true;
       const pool = state.sourcedCandidates || state._lastSearchData?.candidates || [];
       const softCriteria = state._lastSearchData?.soft_criteria || [];
       if (!pool.length) return;
@@ -9016,22 +9016,26 @@
           return;
         }
         state._lastSearchData = data;
+        state.selectedSequenceCandidates = new Set();
+        updateSeqActionBar();
         // Fetch Apollo credits in background so credits bar renders
         fetchApolloCredits().then(() => {
           const card = document.getElementById('search-results-card');
           if (card) {
-            const newHtml = renderSearchResults(data.candidates || [], data.soft_criteria || []);
+            const newHtml = renderSearchResults(data.candidates || [], data.soft_criteria || [], { withCheckboxes: true });
             const tmp = document.createElement('div');
             tmp.innerHTML = newHtml;
             card.replaceWith(tmp.firstElementChild);
+            wireSelectionCheckboxes(results);
           }
         }).catch(() => {});
         let html = renderFiltersCard(data.filters || {});
-        html += renderSearchResults(data.candidates || [], data.soft_criteria || []);
+        html += renderSearchResults(data.candidates || [], data.soft_criteria || [], { withCheckboxes: true });
         if (typeof data.candidate_pool === 'number' && data.candidate_pool > 0 && !(data.candidates || []).length) {
           html += `<div class="empty-state"><p>Scanned ${data.candidate_pool} candidates but none scored above the match threshold. Try loosening the filters.</p></div>`;
         }
         results.innerHTML = html;
+        wireSelectionCheckboxes(results);
       } catch (err) {
         loading.style.display = 'none';
         results.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;

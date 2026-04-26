@@ -807,11 +807,29 @@ def run_search(payload: dict, market: str | None) -> dict:
         log.info("run_search: Apollo skipped — APOLLO_API_KEY not set")
     else:
         try:
-            log.info("run_search: calling Apollo skills=%s location=%s market=%s",
-                     apollo_skills, location, market)
-            apollo_raw = asyncio.run(
-                sourcing.source_apollo(apollo_skills, location or "", market or "IN")
-            )
+            # When the query is title-only (no explicit skills), route through
+            # Apollo's `person_titles` field instead of stuffing titles into
+            # q_keywords — Apollo treats q_keywords as a strict AND full-text
+            # match, so multi-word job titles return 0. person_titles is the
+            # correct field for role/title matching.
+            if not must_skills and title_keywords:
+                params = {
+                    "person_titles": title_keywords[:4],
+                    "person_locations": [location] if location else None,
+                }
+                params = {k: v for k, v in params.items() if v}
+                log.info("run_search: calling Apollo titles=%s location=%s market=%s",
+                         title_keywords[:4], location, market)
+                apollo_raw, _adaptive_log = asyncio.run(
+                    sourcing.source_apollo_structured_adaptive(
+                        params, market or "IN", min_total=20)
+                )
+            else:
+                log.info("run_search: calling Apollo skills=%s location=%s market=%s",
+                         apollo_skills, location, market)
+                apollo_raw = asyncio.run(
+                    sourcing.source_apollo(apollo_skills, location or "", market or "IN")
+                )
             named_count = 0
             emailed_count = 0
             apollo_skipped_unreachable = 0
