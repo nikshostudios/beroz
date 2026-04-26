@@ -3515,9 +3515,29 @@
             <input type="text" id="req-salary" placeholder="e.g. 15-20 LPA">
           </div>
         </div>
+        <div style="display:flex;gap:8px">
+          <div class="settings-field" style="margin-bottom:0;flex:1">
+            <label>Work Mode <span style="color:var(--text-muted);font-weight:400;font-size:11px">(remote / hybrid / onsite)</span></label>
+            <input type="text" id="req-remote-policy" placeholder="e.g. Hybrid 2 days/week, or Remote">
+          </div>
+          <div class="settings-field" style="margin-bottom:0;flex:1">
+            <label>Certifications <span style="color:var(--text-muted);font-weight:400;font-size:11px">(comma separated)</span></label>
+            <input type="text" id="req-certifications" placeholder="e.g. AWS Solutions Architect, AZ-104">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="settings-field" style="margin-bottom:0;flex:1">
+            <label>Industry / Domain Experience <span style="color:var(--text-muted);font-weight:400;font-size:11px">(comma separated)</span></label>
+            <input type="text" id="req-industry" placeholder="e.g. FinTech, HealthTech">
+          </div>
+          <div class="settings-field" style="margin-bottom:0;flex:1">
+            <label>Excluded Companies <span style="color:var(--text-muted);font-weight:400;font-size:11px">(no-poach, comma separated)</span></label>
+            <input type="text" id="req-excluded" placeholder="e.g. Stripe, Block">
+          </div>
+        </div>
         <div class="settings-field" style="margin-bottom:0">
           <label>Job Description (paste JD text)</label>
-          <textarea id="req-jd" rows="5" placeholder="Paste the full job description here..."></textarea>
+          <textarea id="req-jd" rows="5" placeholder="Paste the full job description here. Skills, certifications, work mode, and industry are auto-extracted if not filled above."></textarea>
         </div>
         <div class="settings-field" style="margin-bottom:0">
           <label>Assign to Recruiters <span style="color:var(--text-muted);font-weight:400;font-size:11px">(leave empty to keep for yourself)</span></label>
@@ -5670,6 +5690,26 @@
                   <input type="text" id="edit-req-salary" value="${esc(req.salary_budget || '')}">
                 </div>
               </div>
+              <div style="display:flex;gap:8px">
+                <div class="settings-field" style="margin-bottom:0;flex:1">
+                  <label>Work Mode</label>
+                  <input type="text" id="edit-req-remote-policy" value="${esc(req.remote_policy || '')}" placeholder="Hybrid 2 days/week, Remote, Onsite">
+                </div>
+                <div class="settings-field" style="margin-bottom:0;flex:1">
+                  <label>Certifications <span style="color:var(--text-muted);font-weight:400;font-size:11px">(comma sep)</span></label>
+                  <input type="text" id="edit-req-certifications" value="${esc((req.certifications || []).join(', '))}" placeholder="AWS Solutions Architect, AZ-104">
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <div class="settings-field" style="margin-bottom:0;flex:1">
+                  <label>Industry / Domain <span style="color:var(--text-muted);font-weight:400;font-size:11px">(comma sep)</span></label>
+                  <input type="text" id="edit-req-industry" value="${esc((req.industry_experience || []).join(', '))}" placeholder="FinTech, HealthTech">
+                </div>
+                <div class="settings-field" style="margin-bottom:0;flex:1">
+                  <label>Excluded Companies <span style="color:var(--text-muted);font-weight:400;font-size:11px">(no-poach)</span></label>
+                  <input type="text" id="edit-req-excluded" value="${esc((req.excluded_companies || []).join(', '))}" placeholder="Stripe, Block">
+                </div>
+              </div>
               <div class="settings-field" style="margin-bottom:0">
                 <label>Job Description</label>
                 <textarea id="edit-req-jd" rows="5">${esc(req.jd_text || '')}</textarea>
@@ -5755,8 +5795,9 @@
           const orig = btn.innerHTML;
           btn.disabled = true;
           btn.innerHTML = '<div class="loading-spinner"></div> Saving…';
-          const skillsArr = document.getElementById('edit-req-skills').value
+          const splitCsv = (id) => (document.getElementById(id)?.value || '')
             .split(',').map(s => s.trim()).filter(Boolean);
+          const skillsArr = splitCsv('edit-req-skills');
           const assigned = Array.from(document.querySelectorAll('#edit-req-recruiters input[type="checkbox"]:checked'))
             .map(cb => cb.value);
           const body = {
@@ -5768,6 +5809,10 @@
             skills_required: skillsArr,
             experience_min: document.getElementById('edit-req-exp').value.trim(),
             salary_budget: document.getElementById('edit-req-salary').value.trim(),
+            remote_policy: document.getElementById('edit-req-remote-policy')?.value.trim() || '',
+            certifications: splitCsv('edit-req-certifications'),
+            industry_experience: splitCsv('edit-req-industry'),
+            excluded_companies: splitCsv('edit-req-excluded'),
             jd_text: document.getElementById('edit-req-jd').value,
             assigned_recruiters: assigned,
           };
@@ -5930,14 +5975,20 @@
 
       const assigned = Array.from(reqAssignedSelected);
 
+      const splitCsv = (id) => (document.getElementById(id)?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
       const body = {
         client_name: document.getElementById('req-client').value,
         market: document.getElementById('req-market').value,
         role_title: document.getElementById('req-role').value,
-        skills_required: document.getElementById('req-skills').value.split(',').map(s => s.trim()).filter(Boolean),
+        skills_required: splitCsv('req-skills'),
         experience_min: parseInt(document.getElementById('req-experience').value) || 0,
         salary_budget: document.getElementById('req-salary').value,
         location: document.getElementById('req-location').value,
+        remote_policy: document.getElementById('req-remote-policy')?.value || '',
+        certifications: splitCsv('req-certifications'),
+        industry_experience: splitCsv('req-industry'),
+        excluded_companies: splitCsv('req-excluded'),
         jd_text: document.getElementById('req-jd').value,
         assigned_recruiters: assigned,
       };
@@ -8982,6 +9033,10 @@
         const cur = filters.salary_currency || '';
         rows.push(['Salary', `${filters.salary_min || '?'} – ${filters.salary_max || '?'} ${cur}`]);
       }
+      if (filters.certifications?.length) rows.push(['Certifications', filters.certifications.join(', ')]);
+      if (filters.remote_policy) rows.push(['Work mode', filters.remote_policy]);
+      if (filters.industry_experience?.length) rows.push(['Industry', filters.industry_experience.join(', ')]);
+      if (filters.excluded_companies?.length) rows.push(['Excluded (no-poach)', filters.excluded_companies.join(', ')]);
       if (!rows.length) return '';
       let html = '<div class="card"><div class="card-title">Interpreted filters</div><table><tbody>';
       rows.forEach(([k, v]) => { html += `<tr><td style="font-weight:500;width:180px">${esc(k)}</td><td>${esc(String(v))}</td></tr>`; });

@@ -647,6 +647,10 @@ def _apply_python_filters(candidates: list[dict], filters: dict) -> list[dict]:
     max_exp = filters.get("max_years_experience")
     title_kws = [t.lower() for t in (filters.get("title_keywords") or []) if t]
     employer = (filters.get("current_employer") or "").strip().lower()
+    excluded = [
+        (e or "").strip().lower()
+        for e in (filters.get("excluded_companies") or []) if e
+    ]
     out = []
     for c in candidates:
         exp = _exp_years(c)
@@ -661,6 +665,10 @@ def _apply_python_filters(candidates: list[dict], filters: dict) -> list[dict]:
         if employer:
             emp = (c.get("current_employer") or "").lower()
             if employer not in emp:
+                continue
+        if excluded:
+            emp = (c.get("current_employer") or "").lower()
+            if emp and any(x in emp or emp in x for x in excluded):
                 continue
         out.append(c)
     return out
@@ -682,6 +690,17 @@ def _score_candidates_for_search(candidates: list[dict], filters: dict,
         req_lines.append(f"Min experience: {filters['min_years_experience']} years")
     if filters.get("max_years_experience") is not None:
         req_lines.append(f"Max experience: {filters['max_years_experience']} years")
+    if filters.get("certifications"):
+        req_lines.append(f"Required certifications: {', '.join(filters['certifications'])}")
+    if filters.get("remote_policy"):
+        req_lines.append(f"Work mode: {filters['remote_policy']}")
+    if filters.get("industry_experience"):
+        req_lines.append(f"Industry/domain: {', '.join(filters['industry_experience'])}")
+    if filters.get("excluded_companies"):
+        req_lines.append(
+            "Exclude (no-poach): "
+            + ", ".join(filters["excluded_companies"])
+            + " — score these candidates 0.")
     if soft_criteria:
         crit_block = "; ".join(
             f"[{c.get('weight', 'preferred')}] {c.get('criterion', '')}"
@@ -1485,7 +1504,9 @@ def update_requirement(req_id, payload, user_role, user_email):
     allowed = {"role_title", "client_name", "market", "status", "skillset",
                "skills_required", "location", "contract_type", "notice_period",
                "salary_budget", "experience_min", "jd_text",
-               "assigned_recruiters"}
+               "assigned_recruiters",
+               "certifications", "remote_policy",
+               "industry_experience", "excluded_companies"}
     updates = {k: v for k, v in payload.items() if k in allowed and v is not None}
     if not updates:
         raise ValueError("No valid fields to update")
@@ -1528,6 +1549,8 @@ def clone_requirement(req_id: str, user_role: str, user_email: str) -> dict:
         "market", "client_name", "role_title", "skillset", "skills_required",
         "experience_min", "salary_budget", "location", "contract_type",
         "notice_period", "tender_number", "assigned_recruiters", "project_id",
+        "certifications", "remote_policy", "industry_experience",
+        "excluded_companies",
     ]
     payload = {k: original[k] for k in copy_fields if k in original}
     payload["role_title"] = (payload.get("role_title") or "Untitled") + " (Copy)"
@@ -2109,7 +2132,7 @@ def _validate_requirement_create(payload: Any) -> dict:
 
     # Optional strings
     for key in ("skillset", "salary_budget", "location", "contract_type",
-                "notice_period", "tender_number", "jd_text"):
+                "notice_period", "tender_number", "jd_text", "remote_policy"):
         val = _opt_str(key)
         if val is not None:
             data[key] = val
@@ -2123,6 +2146,17 @@ def _validate_requirement_create(payload: Any) -> dict:
         errors.append("assigned_recruiters must be a list of strings")
         assigned = []
     data["assigned_recruiters"] = [s.strip() for s in assigned if s.strip()]
+
+    # New intake list-fields: certifications, industry_experience,
+    # excluded_companies. All optional. Stored as text[] in Supabase.
+    for list_key in ("certifications", "industry_experience", "excluded_companies"):
+        raw = payload.get(list_key, [])
+        if raw is None:
+            raw = []
+        if not isinstance(raw, list) or not all(isinstance(s, str) for s in raw):
+            errors.append(f"{list_key} must be a list of strings")
+            raw = []
+        data[list_key] = [s.strip() for s in raw if s.strip()]
 
     if errors:
         raise CoreError(422, "; ".join(errors))
@@ -2167,6 +2201,28 @@ def create_requirement(payload: Any, user_role: str, user_email: str) -> dict:
                     data["contract_type"] = jd_parsed["contract_type"]
                 if not data.get("notice_period") and jd_parsed.get("notice_period_max_days"):
                     data["notice_period"] = str(jd_parsed["notice_period_max_days"])
+                # Newer intake fields (added 2026-04-26): only auto-fill when
+                # the recruiter didn't supply a value. Treat missing/empty
+                # lists as "not supplied" so a fresh JD parse can populate.
+                if not data.get("certifications") and jd_parsed.get("certifications"):
+                    certs = jd_parsed["certifications"]
+                    if isinstance(certs, list):
+                        data["certifications"] = [
+                            str(c).strip() for c in certs if str(c).strip()]
+                if not data.get("remote_policy"):
+                    work_mode = jd_parsed.get("work_mode")
+                    if isinstance(work_mode, str) and work_mode.strip():
+                        data["remote_policy"] = work_mode.strip()
+                if not data.get("industry_experience") and jd_parsed.get("industry_experience"):
+                    inds = jd_parsed["industry_experience"]
+                    if isinstance(inds, list):
+                        data["industry_experience"] = [
+                            str(s).strip() for s in inds if str(s).strip()]
+                if not data.get("excluded_companies") and jd_parsed.get("excluded_companies"):
+                    excl = jd_parsed["excluded_companies"]
+                    if isinstance(excl, list):
+                        data["excluded_companies"] = [
+                            str(s).strip() for s in excl if str(s).strip()]
                 data["jd_parsed"] = jd_parsed
         else:
             # Fallback: simple skills extraction

@@ -28,6 +28,9 @@ Return a single JSON object with these fields:
   "client_name": "string or null — if mentioned in JD",
   "nationality_requirement": "string or null — e.g., 'SC/PR only' for SG government roles",
   "work_mode": "'Onsite' | 'Remote' | 'Hybrid' | null",
+  "certifications": ["string array — explicit certifications named in the JD (AWS Solutions Architect, AZ-104, PMP, CISSP, etc.). Empty array if none mentioned."],
+  "industry_experience": ["string array — domain/industry experience required (FinTech, HealthTech, E-commerce, B2B SaaS, etc.). Empty array if not specified."],
+  "excluded_companies": ["string array — companies the client explicitly says NOT to source from (no-poach lists, competitor blocks). Empty array if none mentioned."],
   "red_flags": ["string array — unrealistic combinations or contradictions found"],
   "jd_quality_score": "number 1-10 — how clear/complete the JD is"
 }
@@ -64,9 +67,14 @@ Flag these as red_flags:
 - **Singapore:** Salary in SGD/month. Check for SC/PR requirements (common for GeBIZ/government roles). If JD mentions "government", "ministry", "MOE", "GeBIZ", or "tender", flag nationality_requirement as likely "SC/PR only".
 
 ### Quality
-- Never invent information. If a field is not in the JD, return null.
+- Never invent information. If a field is not in the JD, return null (or an empty array for list-fields).
 - If the JD is ambiguous, pick the most reasonable interpretation and note uncertainty in red_flags.
 - The jd_quality_score should penalize: missing salary (–2), missing experience (–1), vague skills (–2), no location (–1), contradictions (–3).
+
+### Certifications, Industry, Excluded Companies
+- **certifications**: only emit explicitly named certifications. Don't infer from job title (e.g., "Cloud Engineer" alone does NOT imply AWS certs). Examples: "AWS Solutions Architect", "AZ-104", "PMP", "CISSP", "Scrum Master".
+- **industry_experience**: extract domain/vertical phrases that the JD says are required or strongly preferred. Examples: "FinTech", "Banking", "HealthTech", "EdTech", "B2B SaaS", "E-commerce", "Telecom". Skip generic terms ("technology", "software").
+- **excluded_companies**: only emit if the JD or client notes explicitly say NOT to approach certain companies (no-poach, competitor block lists). Be conservative — empty array is the default.
 
 ## Autonomy
 Full — runs automatically on every new requirement. No human approval needed for parsing.

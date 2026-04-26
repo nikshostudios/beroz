@@ -44,12 +44,22 @@ Output schema:
     "must_have_skills": ["..."],
     "salary_min": int | null,
     "salary_max": int | null,
-    "salary_currency": "..." | null
+    "salary_currency": "..." | null,
+    "certifications": ["..."],
+    "remote_policy": "..." | null,
+    "industry_experience": ["..."],
+    "excluded_companies": ["..."]
   },
   "soft_criteria": [
     {"criterion": "...", "weight": "required|preferred|bonus"}
   ]
 }
+
+Extra-field rules:
+- certifications: only emit explicit certifications (e.g., "AWS Solutions Architect", "PMP", "AZ-104"). Empty list if none.
+- remote_policy: free text matching the query — "remote", "hybrid", "onsite", "Hybrid 2 days/week". Null if unspecified.
+- industry_experience: vertical/domain phrases ("FinTech", "HealthTech", "B2B SaaS"). Empty list if generic.
+- excluded_companies: companies the user explicitly says to skip (e.g., "exclude Stripe and Block"). Empty list if none.
 """
 
 
@@ -92,12 +102,22 @@ Output schema (identical to the search-query parser):
     "must_have_skills": ["..."],
     "salary_min": int | null,
     "salary_max": int | null,
-    "salary_currency": "..." | null
+    "salary_currency": "..." | null,
+    "certifications": ["..."],
+    "remote_policy": "..." | null,
+    "industry_experience": ["..."],
+    "excluded_companies": ["..."]
   },
   "soft_criteria": [
     {"criterion": "...", "weight": "required|preferred|bonus"}
   ]
 }
+
+Extra-field rules:
+- certifications: explicit certifications named in the JD (AWS Solutions Architect, AZ-104, PMP, CISSP). Empty list if none.
+- remote_policy: explicit work-mode phrase from the JD ("remote", "hybrid", "onsite", "Hybrid 2 days/week"). Null if unspecified.
+- industry_experience: domain/vertical experience required ("FinTech", "HealthTech", "B2B SaaS", "E-commerce"). Empty list if not specified.
+- excluded_companies: companies the JD or client notes explicitly say NOT to source from (no-poach, competitor blocks). Be conservative — empty list is the default.
 """
 
 
