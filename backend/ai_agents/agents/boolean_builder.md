@@ -27,7 +27,9 @@ Return a single JSON object — no markdown, no commentary, no backticks:
     "person_locations": ["Bangalore, India"],
     "person_seniorities": ["senior"]
   },
-  "linkedin_url": "https://www.linkedin.com/search/results/people/?keywords=%22ServiceNow%22%20OR%20%22SNOW%22"
+  "linkedin_url": "https://www.linkedin.com/search/results/people/?keywords=%22ServiceNow%22%20OR%20%22SNOW%22",
+  "google_xray_string": "site:linkedin.com/in/ (\"ServiceNow\" OR \"SNOW\") (\"JavaScript\") \"Bangalore\"",
+  "github_search_string": "language:JavaScript location:Bangalore servicenow"
 }
 ```
 
@@ -57,6 +59,17 @@ Return a single JSON object — no markdown, no commentary, no backticks:
 
 ### linkedin_url
 - Build a `https://www.linkedin.com/search/results/people/?keywords=` URL with the boolean string URL-encoded as the value of `keywords`. This lets the recruiter open the search in one click.
+
+### google_xray_string
+- Google X-ray search that surfaces LinkedIn profiles indirectly through Google. Format: `site:linkedin.com/in/` followed by the must-have skill groups (in `(... OR ...)` form when synonyms apply) and the location string in quotes. Skip the `AND` operators — Google treats spaces as AND.
+- Example: `site:linkedin.com/in/ ("React" OR "ReactJS") ("Node.js") "Bangalore"`
+- Useful for senior recruiters digging past LinkedIn's own search filter limits.
+
+### github_search_string
+- Only emit when the role is technical (programming languages or developer-tool skills present in `skills_required`). Otherwise return an empty string `""`.
+- Format: `language:<primary_language> location:<city_or_country> <skill_keywords>` where `<primary_language>` is the most prominent programming language from `skills_required` (e.g. JavaScript, Python, Go, Java, Rust, TypeScript, C++).
+- Example: `language:Python location:India machine-learning pytorch`
+- Pasteable directly into github.com/search.
 
 ## Quality
 - Never invent skills not in the parsed JD.

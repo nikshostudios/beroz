@@ -4535,6 +4535,8 @@ def _boolean_builder_fallback(jd_parsed: dict) -> dict:
                                  ("Singapore" if market == "SG" else "India")],
         },
         "linkedin_url": "",
+        "google_xray_string": "",
+        "github_search_string": "",
     }
 
 

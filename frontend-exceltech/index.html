@@ -2155,8 +2155,14 @@
                 <button id="btn-boost-shortlist" class="btn-secondary" disabled title="Shortlist the selected candidates">
                   <span class="material-icons-outlined">star_outline</span> Shortlist Selected (<span id="boost-shortlist-count">0</span>)
                 </button>
-                <button id="btn-copy-boolean" class="btn-secondary" title="Copy boolean search string">
+                <button id="btn-copy-boolean" class="btn-secondary" title="Copy LinkedIn / Naukri / Foundit boolean search string">
                   <span class="material-icons-outlined">content_copy</span> Copy Boolean
+                </button>
+                <button id="btn-copy-xray" class="btn-secondary" title="Copy Google X-ray (paste into google.com)">
+                  <span class="material-icons-outlined">travel_explore</span> Copy X-ray
+                </button>
+                <button id="btn-copy-github" class="btn-secondary" title="Copy GitHub search query (paste into github.com/search)">
+                  <span class="material-icons-outlined">code</span> Copy GitHub
                 </button>
                 <button id="btn-new-boost" class="btn-primary">New Boost</button>
               </div>
@@ -8290,6 +8296,8 @@
         if (evt.agent === 'boolean_builder' && evt.payload) {
           boostState.booleanString = evt.payload.boolean_string || '';
           boostState.apolloParams = evt.payload.apollo_params || null;
+          boostState.googleXrayString = evt.payload.google_xray_string || '';
+          boostState.githubSearchString = evt.payload.github_search_string || '';
         }
         if (evt.agent === 'sourcing' && evt.payload) {
           const c = evt.payload.counts || {};
@@ -8514,6 +8522,28 @@
             setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
           })
           .catch(() => alert('Could not copy to clipboard.'));
+      });
+
+      const xrayBtn = document.getElementById('btn-copy-xray');
+      if (xrayBtn) xrayBtn.addEventListener('click', () => {
+        const s = boostState.googleXrayString || '';
+        if (!s) { alert('No Google X-ray string available for this run.'); return; }
+        navigator.clipboard.writeText(s).then(() => {
+          const original = xrayBtn.innerHTML;
+          xrayBtn.innerHTML = '<span class="material-icons-outlined">check</span> Copied!';
+          setTimeout(() => { xrayBtn.innerHTML = original; }, 1500);
+        }).catch(() => alert('Could not copy to clipboard.'));
+      });
+
+      const ghBtn = document.getElementById('btn-copy-github');
+      if (ghBtn) ghBtn.addEventListener('click', () => {
+        const s = boostState.githubSearchString || '';
+        if (!s) { alert('No GitHub query for this run (likely a non-technical role).'); return; }
+        navigator.clipboard.writeText(s).then(() => {
+          const original = ghBtn.innerHTML;
+          ghBtn.innerHTML = '<span class="material-icons-outlined">check</span> Copied!';
+          setTimeout(() => { ghBtn.innerHTML = original; }, 1500);
+        }).catch(() => alert('Could not copy to clipboard.'));
       });
 
       const ta = document.getElementById('boost-jd-text');
