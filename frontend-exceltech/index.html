@@ -2423,9 +2423,19 @@
               <button class="btn-secondary" id="seq-editor-back" style="padding:6px 10px">
                 <span class="material-icons-outlined" style="font-size:18px">arrow_back</span>
               </button>
-              <input type="text" id="seq-editor-name" value="Untitled Sequence"
-                style="font-size:15px;font-weight:600;border:none;outline:none;padding:4px 6px;border-radius:4px;min-width:240px"
-                onfocus="this.style.background='#f5f5f5'" onblur="this.style.background='transparent'">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input type="text" id="seq-editor-name" value="New Sequence"
+                    style="font-size:15px;font-weight:600;border:none;outline:none;padding:4px 6px;border-radius:4px;min-width:240px"
+                    onfocus="this.style.background='#f5f5f5'" onblur="this.style.background='transparent'">
+                  <button type="button" id="seq-editor-name-edit" title="Edit name"
+                    style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px;display:flex;align-items:center"
+                    onclick="document.getElementById('seq-editor-name').focus();document.getElementById('seq-editor-name').select();">
+                    <span class="material-icons-outlined" style="font-size:14px">edit</span>
+                  </button>
+                </div>
+                <div id="seq-editor-name-meta" style="font-size:11px;color:var(--text-muted);padding-left:6px"></div>
+              </div>
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn-secondary" id="seq-editor-add-contacts" style="display:none">
@@ -7272,11 +7282,18 @@
     document.getElementById('seq-chooser-clone')?.addEventListener('click', () => {
       alert('Clone coming soon!');
     });
+    function defaultSequenceName() {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `New Sequence - ${mm}/${dd}/${d.getFullYear()}`;
+    }
+
     document.getElementById('seq-chooser-scratch')?.addEventListener('click', async () => {
       document.getElementById('modal-new-sequence-chooser').classList.add('hidden');
       try {
         const data = await api('/api/sequences/new', { method: 'POST',
-          body: { name: 'New Sequence', source: 'scratch' } });
+          body: { name: defaultSequenceName(), source: 'scratch' } });
         const seq = data?.sequence;
         if (seq?.id) openSequenceEditor(seq.id);
       } catch (err) { alert('Error: ' + err.message); }
@@ -7312,11 +7329,25 @@
 
     // ── Sequence Editor ───────────────────────────────────────
 
+    function setEditorNameMeta(seq) {
+      const meta = document.getElementById('seq-editor-name-meta');
+      if (!meta) return;
+      const owner = (seq?.created_by || state.user?.email || '').split('@')[0];
+      const ownerLabel = owner ? owner.charAt(0).toUpperCase() + owner.slice(1) : 'You';
+      const created = seq?.created_at
+        ? new Date(seq.created_at)
+        : new Date();
+      const dateLabel = created.toLocaleDateString(undefined,
+        { month: 'short', day: 'numeric', year: 'numeric' });
+      meta.textContent = `Created by ${ownerLabel} ${dateLabel}`;
+    }
+
     function openSequenceEditorShell(seqId, name) {
       seqState.editingSeqId = seqId;
-      seqState.editingSeq = { id: seqId, name: name || 'Untitled', steps: [] };
+      seqState.editingSeq = { id: seqId, name: name || defaultSequenceName(), steps: [] };
       seqState.activeStepIdx = 0;
       document.getElementById('seq-editor-name').value = seqState.editingSeq.name;
+      setEditorNameMeta(null);
       document.getElementById('seq-step-list').innerHTML = '';
       document.getElementById('seq-editor-empty').style.display = '';
       document.getElementById('seq-step-form').style.display = 'none';
@@ -7335,6 +7366,7 @@
         seqState.editingSeqId = seqId;
         seqState.editingSeq = { id: seqId, name: seq.name, steps: seq.steps || [] };
         document.getElementById('seq-editor-name').value = seq.name;
+        setEditorNameMeta(seq);
         document.getElementById('seq-editor-add-contacts').style.display =
           seqState.editingSeq.steps.length ? '' : 'none';
         await loadSignatures();
@@ -7618,12 +7650,30 @@
 
     // Save sequence name
     document.getElementById('seq-editor-save')?.addEventListener('click', async () => {
-      const name = document.getElementById('seq-editor-name').value.trim() || 'Untitled';
+      const name = document.getElementById('seq-editor-name').value.trim() || defaultSequenceName();
       try {
         await api(`/api/sequences/${seqState.editingSeqId}`,
           { method: 'PUT', body: { name } });
         showToast('Sequence saved.');
       } catch (err) { alert('Error: ' + err.message); }
+    });
+
+    // Auto-save name on blur / Enter when the user uses the pencil
+    async function persistEditorName() {
+      if (!seqState.editingSeqId) return;
+      const input = document.getElementById('seq-editor-name');
+      const name = (input.value || '').trim() || defaultSequenceName();
+      if (name === (seqState.editingSeq?.name || '')) return;
+      input.value = name;
+      try {
+        await api(`/api/sequences/${seqState.editingSeqId}`,
+          { method: 'PUT', body: { name } });
+        if (seqState.editingSeq) seqState.editingSeq.name = name;
+      } catch (err) { /* keep editing on failure */ }
+    }
+    document.getElementById('seq-editor-name')?.addEventListener('blur', persistEditorName);
+    document.getElementById('seq-editor-name')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
     });
 
     document.getElementById('seq-editor-back')?.addEventListener('click', () => {
