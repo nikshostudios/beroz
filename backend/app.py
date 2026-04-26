@@ -3310,6 +3310,16 @@ def api_clone_requirement(req_id):
     return _ai_core_call(ai_core.clone_requirement, req_id, role, email)
 
 
+@app.route("/api/requirements/<req_id>/job-posts/generate", methods=["POST"])
+def api_generate_job_posts(req_id):
+    """Return 3 LinkedIn-ready post variants for a requirement."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.generate_job_posts, req_id, role, email)
+
+
 @app.route("/api/requirements/<req_id>", methods=["DELETE"])
 def api_delete_requirement(req_id):
     if not is_logged_in():

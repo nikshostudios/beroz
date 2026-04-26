@@ -5517,6 +5517,87 @@
       });
     });
 
+    async function openJobPostsModal(reqId) {
+      // Close the View / Edit Requirement modal so the post-generator can take over.
+      document.getElementById('modal-view-req')?.remove();
+      const old = document.getElementById('modal-job-posts');
+      if (old) old.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'modal-job-posts';
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <h3 style="margin:0 0 4px">LinkedIn Job Posts</h3>
+              <div style="font-size:12px;color:var(--text-secondary)">3 variants — pick the one that resonates and copy-paste to LinkedIn.</div>
+            </div>
+            <button type="button" onclick="document.getElementById('modal-job-posts').remove()"
+              style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px">
+              <span class="material-icons-outlined" style="font-size:20px">close</span>
+            </button>
+          </div>
+          <div id="job-posts-body">
+            <div style="text-align:center;padding:24px;color:var(--text-secondary)">
+              <div class="loading-spinner" style="margin:0 auto 8px"></div>
+              Generating 3 variants — usually 5-10 seconds…
+            </div>
+          </div>
+        </div>`;
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+
+      try {
+        const data = await api(`/api/requirements/${reqId}/job-posts/generate`, { method: 'POST', body: {} });
+        const variants = data?.variants || [];
+        const body = document.getElementById('job-posts-body');
+        if (!body) return;
+        if (!variants.length) {
+          body.innerHTML = '<div class="empty-state"><p>No variants returned. Try again.</p></div>';
+          return;
+        }
+        const angleLabels = {
+          technical_challenge: 'Technical / Problem-first',
+          growth_and_impact: 'Growth & Impact',
+          team_and_culture: 'Team & Culture',
+        };
+        body.innerHTML = variants.map((v, i) => {
+          const label = angleLabels[v.angle] || v.angle || `Variant ${i+1}`;
+          const fullText = (v.headline || '') + '\n\n' + (v.body || '');
+          const safe = fullText.replace(/`/g, '\\`');
+          return `
+            <div style="border:1px solid var(--border-color);border-radius:10px;padding:12px;margin-bottom:12px;background:#fff">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary)">${esc(label)}</span>
+                <button class="btn-secondary" data-jp-copy="${i}" style="padding:4px 10px;font-size:12px">
+                  <span class="material-icons-outlined" style="font-size:14px">content_copy</span> Copy
+                </button>
+              </div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:8px">${esc(v.headline || '')}</div>
+              <div style="font-size:13px;white-space:pre-wrap;color:var(--text-primary);line-height:1.5">${esc(v.body || '')}</div>
+              <textarea data-jp-text="${i}" style="display:none">${esc(fullText)}</textarea>
+            </div>`;
+        }).join('');
+        body.querySelectorAll('[data-jp-copy]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const idx = btn.dataset.jpCopy;
+            const ta = body.querySelector(`[data-jp-text="${idx}"]`);
+            const text = ta?.value || '';
+            navigator.clipboard.writeText(text).then(() => {
+              const orig = btn.innerHTML;
+              btn.innerHTML = '<span class="material-icons-outlined" style="font-size:14px">check</span> Copied';
+              setTimeout(() => { btn.innerHTML = orig; }, 1500);
+            }).catch(() => alert('Could not copy to clipboard.'));
+          });
+        });
+      } catch (err) {
+        const body = document.getElementById('job-posts-body');
+        if (body) {
+          body.innerHTML = `<div class="empty-state"><p>Generation failed: ${esc(err.message || 'unknown error')}</p></div>`;
+        }
+      }
+    }
+
     async function sourceRequirement(reqId) {
       const btn = event.target.closest('button');
       const card = btn.closest('.req-card');
@@ -5730,6 +5811,9 @@
               </div>
               <div class="modal-actions">
                 <button type="button" class="btn-secondary" onclick="document.getElementById('modal-view-req').remove()">Cancel</button>
+                <button type="button" class="btn-secondary" onclick="openJobPostsModal('${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:16px">campaign</span> Generate LinkedIn Posts
+                </button>
                 <button type="submit" class="btn-primary" id="edit-req-submit">
                   <span class="material-icons-outlined" style="font-size:16px">save</span> Save Changes
                 </button>
@@ -5777,6 +5861,9 @@
             </div>` : ''}
             <div class="modal-actions">
               <button class="btn-secondary" onclick="document.getElementById('modal-view-req').remove()">Close</button>
+              <button class="btn-secondary" onclick="openJobPostsModal('${req.id}')">
+                <span class="material-icons-outlined" style="font-size:16px">campaign</span> Generate LinkedIn Posts
+              </button>
               <button class="btn-primary" onclick="document.getElementById('modal-view-req').remove();sourceRequirement('${req.id}')">
                 <span class="material-icons-outlined" style="font-size:16px">person_search</span> Source Now
               </button>

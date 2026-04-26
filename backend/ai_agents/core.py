@@ -2319,6 +2319,49 @@ def prepare_outreach(payload: Any, user_role: str, user_email: str) -> dict:
             "draft_body": draft.get("body", "")}
 
 
+# ── Job posts (LinkedIn variant generator) ────────────────────
+
+def generate_job_posts(req_id: str, user_role: str, user_email: str) -> dict:
+    """Generate 3 LinkedIn-ready job-post variants from a requirement.
+
+    Each call costs one Claude Sonnet round-trip (~2-4s). The recruiter
+    picks one variant manually and copy-pastes it to LinkedIn. We do not
+    auto-post — LinkedIn's organic-post API is partner-only.
+    """
+    _require_role(user_role, ["tl", "recruiter"])
+    requirement = db.get_requirement_by_id(req_id)
+    if not requirement:
+        raise CoreError(404, "Requirement not found")
+    prompt = AGENTS.get("job_seller", "")
+    if not prompt:
+        raise CoreError(500, "job_seller agent prompt not loaded")
+
+    # Slim the requirement so the model doesn't get distracted by ids/timestamps.
+    fields_for_prompt = {
+        k: requirement.get(k) for k in (
+            "role_title", "client_name", "market", "location",
+            "remote_policy", "skills_required", "experience_min",
+            "salary_budget", "contract_type", "industry_experience",
+            "certifications", "jd_text",
+        ) if requirement.get(k)
+    }
+    raw = _call_claude(
+        "claude-sonnet-4-20250514", prompt,
+        f"Requirement:\n{json.dumps(fields_for_prompt, indent=2, default=str)}",
+        max_tokens=2048, endpoint="/requirements/job-posts",
+    )
+    parsed = _parse_llm_json(raw)
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("variants"), list):
+        raise CoreError(502, "job_seller returned an unparseable response")
+    variants = [
+        v for v in parsed["variants"]
+        if isinstance(v, dict) and v.get("body") and v.get("headline")
+    ][:3]
+    if not variants:
+        raise CoreError(502, "job_seller returned no usable variants")
+    return {"requirement_id": req_id, "variants": variants}
+
+
 # ── Sequences (Phase 4) — batch AI template + preview + send ───
 
 SEQUENCE_DRAFT_SYSTEM = """\
