@@ -58,6 +58,7 @@ GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
 SCREENED_SHEET_ID = os.environ.get("SCREENED_SHEET_ID", "")
 
 SCREEN_PROFILE_DIR = SCRIPT_DIR / "screen_profile_tmp"
+SUBMISSION_RESUMES_DIR = SCRIPT_DIR / "submission_resumes"
 
 ALLOWED_RESUME_EXT = {".pdf", ".docx", ".doc"}
 ALLOWED_JD_EXT = {".txt", ".pdf"}
@@ -3289,6 +3290,35 @@ def api_close_requirement(req_id):
     return _ai_core_call(ai_core.close_requirement, req_id, role, email)
 
 
+@app.route("/api/requirements/<req_id>/pin", methods=["POST"])
+def api_pin_requirement(req_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    body = request.get_json(silent=True) or {}
+    should_pin = bool(body.get("pin", True))
+    return _ai_core_call(ai_core.pin_requirement, req_id, should_pin, role, email)
+
+
+@app.route("/api/requirements/<req_id>/clone", methods=["POST"])
+def api_clone_requirement(req_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.clone_requirement, req_id, role, email)
+
+
+@app.route("/api/requirements/<req_id>", methods=["DELETE"])
+def api_delete_requirement(req_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.delete_requirement, req_id, role, email)
+
+
 @app.route("/api/requirements/wipe-all", methods=["POST"])
 def api_wipe_all_requirements():
     """Destructively delete every requirement + dependent rows. TL only."""
@@ -3996,8 +4026,33 @@ def api_submissions_create():
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     email = session.get("recruiter_email", "")
-    return _ai_core_call(ai_core.create_submission,
-                         request.get_json(silent=True), email)
+
+    # Accept multipart/form-data (resume + form fields) OR legacy JSON.
+    if request.content_type and request.content_type.startswith("multipart/"):
+        payload = {k: (v if v != "" else None) for k, v in request.form.items()}
+        resume = request.files.get("resume")
+        if resume and resume.filename:
+            ext = Path(resume.filename).suffix.lower()
+            if ext in ALLOWED_RESUME_EXT:
+                SUBMISSION_RESUMES_DIR.mkdir(exist_ok=True)
+                cid = payload.get("candidate_id") or "unknown"
+                fname = f"{cid}_{int(time.time())}{ext}"
+                dest = SUBMISSION_RESUMES_DIR / fname
+                resume.save(dest)
+                payload["resume_path"] = str(dest)
+            # Reject silently for unsupported extensions — submission still goes through.
+    else:
+        payload = request.get_json(silent=True)
+    return _ai_core_call(ai_core.create_submission, payload, email)
+
+
+@app.route("/api/submissions/<submission_id>/comms")
+def api_submissions_comms(submission_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    if session.get("recruiter_role") != "tl":
+        return jsonify({"error": "TL only"}), 403
+    return _ai_core_call(ai_core.get_submission_comms, submission_id)
 
 
 @app.route("/api/submissions/tl")

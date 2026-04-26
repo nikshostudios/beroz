@@ -1444,7 +1444,7 @@ def list_requirements(market: str | None, status: str = "open",
     else:
         q = (db.get_client().table("requirements")
              .select("id, market, client_name, role_title, skills_required, "
-                     "status, assigned_recruiters, created_at, project_id")
+                     "status, assigned_recruiters, created_at, project_id, is_pinned")
              .eq("status", status))
         if market:
             q = q.eq("market", market)
@@ -1503,6 +1503,52 @@ def close_requirement(req_id: str, user_role: str, user_email: str) -> dict:
         raise CoreError(404, "Requirement not found")
     db.get_client().table("requirements").update(
         {"status": "closed"}).eq("id", req_id).execute()
+    return {"status": "ok", "requirement_id": req_id}
+
+
+def pin_requirement(req_id: str, should_pin: bool,
+                    user_role: str, user_email: str) -> dict:
+    """Toggle the is_pinned flag. Available to both TL and recruiter."""
+    _require_role(user_role, ["tl", "recruiter"])
+    existing = db.get_requirement_by_id(req_id)
+    if not existing:
+        raise CoreError(404, "Requirement not found")
+    db.get_client().table("requirements").update(
+        {"is_pinned": should_pin}).eq("id", req_id).execute()
+    return {"status": "ok", "requirement_id": req_id, "is_pinned": should_pin}
+
+
+def clone_requirement(req_id: str, user_role: str, user_email: str) -> dict:
+    """Duplicate a requirement. Copy fields; new id, status=open, no candidates."""
+    _require_role(user_role, ["tl", "recruiter"])
+    original = db.get_requirement_by_id(req_id)
+    if not original:
+        raise CoreError(404, "Requirement not found")
+    copy_fields = [
+        "market", "client_name", "role_title", "skillset", "skills_required",
+        "experience_min", "salary_budget", "location", "contract_type",
+        "notice_period", "tender_number", "assigned_recruiters", "project_id",
+    ]
+    payload = {k: original[k] for k in copy_fields if k in original}
+    payload["role_title"] = (payload.get("role_title") or "Untitled") + " (Copy)"
+    payload["status"] = "open"
+    payload["is_pinned"] = False
+    new_req = db.insert_requirement(payload)
+    return {"status": "ok", "requirement_id": new_req["id"]}
+
+
+def delete_requirement(req_id: str, user_role: str, user_email: str) -> dict:
+    """Hard-delete a single requirement and its FK-linked rows. TL only."""
+    _require_role(user_role, ["tl"])
+    existing = db.get_requirement_by_id(req_id)
+    if not existing:
+        raise CoreError(404, "Requirement not found")
+    client = db.get_client()
+    # Delete children in dependency order
+    client.table("match_scores").delete().eq("requirement_id", req_id).execute()
+    client.table("screenings").delete().eq("requirement_id", req_id).execute()
+    client.table("requirements").delete().eq("id", req_id).execute()
+    log.info("[delete_req] %s deleted requirement %s", user_email, req_id)
     return {"status": "ok", "requirement_id": req_id}
 
 
@@ -2536,7 +2582,8 @@ def get_my_submissions(recruiter_email: str) -> dict:
             .select("id, candidate_id, requirement_id, submitted_at, "
                     "tl_approved, tl_approved_at, final_status, "
                     "submitted_by_recruiter, placement_type, doj, package, "
-                    "sap_id, remarks")
+                    "sap_id, remarks, recruiter_notes, whatsapp_transcript, "
+                    "formatted_doc_path")
             .eq("submitted_by_recruiter", recruiter_email)
             .order("submitted_at", desc=True)
             .execute().data)
@@ -2661,7 +2708,10 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
     req = req_rows[0] if req_rows else {}
 
     now_ts = datetime.now(timezone.utc).isoformat()
-    sub_row = (db.get_client().table("submissions").insert({
+    resume_path = body.get("resume_path")
+    recruiter_notes = body.get("recruiter_notes")
+    whatsapp_transcript = body.get("whatsapp_transcript")
+    insert_row = {
         "candidate_id": cid,
         "requirement_id": rid,
         "client_name": req.get("client_name"),
@@ -2670,7 +2720,15 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
         "submitted_by_recruiter": recruiter_email,
         "submitted_at": now_ts,
         "tl_approved": False,
-    }).execute().data)
+    }
+    if resume_path:
+        insert_row["formatted_doc_path"] = resume_path
+    if recruiter_notes:
+        insert_row["recruiter_notes"] = recruiter_notes
+    if whatsapp_transcript:
+        insert_row["whatsapp_transcript"] = whatsapp_transcript
+    sub_row = (db.get_client().table("submissions").insert(insert_row)
+               .execute().data)
 
     db.upsert_candidate_details(cid, rid, {"status": "submitted_to_tl"})
 
@@ -2700,6 +2758,10 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
             notice = cand_row.get("notice_period") or body.get("notice_period") or "—"
             subject = (f"New submission pending review: {cand_name} → "
                        f"{role_title or 'requirement'}")
+            attach_line = ("<li><b>Resume:</b> attached (open the Submissions "
+                           "page to review)</li>" if resume_path else "")
+            notes_line = (f"<li><b>Recruiter notes:</b> {recruiter_notes}</li>"
+                          if recruiter_notes else "")
             body_html = (
                 f"<p>Hi,</p>"
                 f"<p><b>{recruiter_name}</b> has submitted a new candidate "
@@ -2711,6 +2773,8 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
                 f"<li><b>Current CTC:</b> {current_ctc}</li>"
                 f"<li><b>Expected CTC:</b> {expected_ctc}</li>"
                 f"<li><b>Notice:</b> {notice}</li>"
+                f"{attach_line}"
+                f"{notes_line}"
                 f"</ul>"
                 f"<p>Open the Submissions page to review and approve or reject.</p>"
             )
@@ -2739,7 +2803,8 @@ def get_tl_submissions(requirement_id: str | None = None) -> dict:
              .select("id, candidate_id, requirement_id, submitted_by_recruiter, "
                      "submitted_at, tl_approved, tl_approved_at, final_status, "
                      "placement_type, doj, package, sap_id, remarks, "
-                     "sent_to_client_at, tender_number, market"))
+                     "sent_to_client_at, tender_number, market, "
+                     "recruiter_notes, whatsapp_transcript, formatted_doc_path"))
     if requirement_id:
         query = query.eq("requirement_id", requirement_id)
     rows = query.order("submitted_at", desc=True).execute().data
@@ -2810,6 +2875,97 @@ def get_tl_submissions(requirement_id: str | None = None) -> dict:
         })
 
     return {"groups": list(groups.values())}
+
+
+def get_submission_comms(submission_id: str) -> dict:
+    """Return the recruiter packet + email history + sequence runs for a
+    submission. Used by the TL right pane to surface everything the candidate
+    has been touched with so far."""
+    client = db.get_client()
+    rows = (client.table("submissions")
+            .select("id, candidate_id, requirement_id, recruiter_notes, "
+                    "whatsapp_transcript, formatted_doc_path")
+            .eq("id", submission_id).execute().data)
+    if not rows:
+        raise CoreError(404, "Submission not found")
+    sub = rows[0]
+    cid = sub.get("candidate_id")
+
+    emails: list = []
+    sequence_runs: list = []
+
+    if cid:
+        try:
+            log_rows = (client.table("outreach_log")
+                        .select("id, requirement_id, recruiter_email, "
+                                "email_subject, email_body, status, sent_at, "
+                                "replied_at, reply_received, outlook_thread_id")
+                        .eq("candidate_id", cid)
+                        .order("sent_at", desc=True)
+                        .execute().data) or []
+        except Exception as e:
+            log.warning("outreach_log fetch failed for candidate %s: %s", cid, e)
+            log_rows = []
+        for r in log_rows:
+            body = r.get("email_body") or ""
+            if len(body) > 500:
+                body = body[:500] + "…"
+            emails.append({
+                "id": r.get("id"),
+                "subject": r.get("email_subject", ""),
+                "body": body,
+                "status": r.get("status", ""),
+                "sent_at": r.get("sent_at"),
+                "replied_at": r.get("replied_at"),
+                "reply_received": bool(r.get("reply_received")),
+                "recruiter_email": r.get("recruiter_email", ""),
+                "thread_id": r.get("outlook_thread_id"),
+            })
+
+        try:
+            run_rows = (client.table("sequence_runs")
+                        .select("id, sequence_id, status, intent, started_at")
+                        .eq("candidate_id", cid)
+                        .order("started_at", desc=True)
+                        .execute().data) or []
+        except Exception as e:
+            log.warning("sequence_runs fetch failed for candidate %s: %s", cid, e)
+            run_rows = []
+
+        seq_ids = list({r.get("sequence_id") for r in run_rows if r.get("sequence_id")})
+        seq_name_map: dict = {}
+        if seq_ids:
+            try:
+                for s in (client.table("sequences")
+                          .select("id, name")
+                          .in_("id", seq_ids).execute().data):
+                    seq_name_map[s["id"]] = s.get("name", "")
+            except Exception:
+                pass
+        for r in run_rows:
+            sequence_runs.append({
+                "id": r.get("id"),
+                "template_name": seq_name_map.get(r.get("sequence_id"), ""),
+                "status": r.get("status", ""),
+                "intent": r.get("intent"),
+                "started_at": r.get("started_at"),
+            })
+
+    resume_url = None
+    if sub.get("formatted_doc_path"):
+        from urllib.parse import quote
+        resume_url = f"/api/download-doc?path={quote(sub['formatted_doc_path'])}"
+
+    return {
+        "packet": {
+            "recruiter_notes": sub.get("recruiter_notes") or "",
+            "whatsapp_transcript": sub.get("whatsapp_transcript") or "",
+            "resume_url": resume_url,
+            "resume_path": sub.get("formatted_doc_path"),
+        },
+        "emails": emails,
+        "sequence_runs": sequence_runs,
+    }
 
 
 # Allowed values for client-feedback final_status (post-Submitted lifecycle).

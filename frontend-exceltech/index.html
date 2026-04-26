@@ -2224,14 +2224,13 @@
             <table id="requirements-table">
               <thead>
                 <tr>
-                  <th style="width:32px"></th>
                   <th>Role Title</th>
                   <th>Client</th>
                   <th>Market</th>
                   <th>Status</th>
                   <th>Assigned To</th>
                   <th>Candidates</th>
-                  <th style="width:80px"></th>
+                  <th style="width:110px"></th>
                 </tr>
               </thead>
               <tbody id="requirements-tbody"></tbody>
@@ -2245,6 +2244,10 @@
             <button type="button" class="batch-go" id="batch-source-btn">
               <span class="material-icons-outlined" style="font-size:14px">person_search</span>
               Source Now
+            </button>
+            <button type="button" class="batch-go" id="batch-delete-btn" style="background:#dc2626" onclick="deleteRequirementsBatch()">
+              <span class="material-icons-outlined" style="font-size:14px">delete</span>
+              Delete
             </button>
             <button type="button" class="batch-clear" id="batch-clear-btn">Clear</button>
           </div>
@@ -2907,6 +2910,23 @@
                   <div style="grid-column:span 2">
                     <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Current Company</label>
                     <input type="text" id="sub-f-company" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px">
+                  </div>
+                </div>
+                <div style="border-top:1px solid var(--border-color);margin-top:16px;padding-top:14px">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:10px">Submission packet</div>
+                  <div style="margin-bottom:12px">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Resume (PDF / DOC / DOCX)</label>
+                    <input type="file" id="sub-f-resume" accept=".pdf,.doc,.docx" style="font-size:12px">
+                    <span id="sub-f-resume-name" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
+                    <div id="sub-f-resume-hint" style="display:none;margin-top:4px;font-size:11px;color:#92400e">Re-attach the resume — files don't carry over from the prior submission.</div>
+                  </div>
+                  <div style="margin-bottom:12px">
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">Notes for TL</label>
+                    <textarea id="sub-f-notes" rows="3" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="Anything the TL should know — context, salary nuance, why this candidate fits."></textarea>
+                  </div>
+                  <div>
+                    <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">WhatsApp transcript (optional)</label>
+                    <textarea id="sub-f-wa" rows="4" class="form-input" style="width:100%;padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="Paste relevant WhatsApp messages here."></textarea>
                   </div>
                 </div>
                 <div style="display:flex;gap:8px;margin-top:20px">
@@ -4218,23 +4238,25 @@
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
             tr.innerHTML = `
-              <td onclick="event.stopPropagation()">
-                <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''}>
-              </td>
               <td class="${isTL ? 'inline-editable' : ''}" data-req-id="${req.id}" style="font-weight:500">
-                <span class="editable-text">${esc(req.role_title || 'Untitled')}</span>
-                ${isTL ? '<span class="material-icons-outlined edit-icon" style="font-size:14px;margin-left:4px;cursor:pointer">edit</span>' : ''}
+                <span style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()">
+                  <span class="editable-text">${esc(req.role_title || 'Untitled')}</span>
+                  ${isTL ? '<span class="material-icons-outlined edit-icon" style="font-size:14px;margin-left:2px;cursor:pointer">edit</span>' : ''}
+                </span>
               </td>
               <td>${esc(req.client_name || '')}</td>
               <td>${marketBadge}</td>
               <td>${statusBadge}</td>
               <td>${esc(assignedLabel)}</td>
               <td>${matchedCount > 0 ? `<a href="#" onclick="event.preventDefault();event.stopPropagation();viewSourcedCandidates('${req.id}')" style="color:var(--brand-blue);text-decoration:none">${matchedCount} found</a>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-              <td>
+              <td style="white-space:nowrap">
                 <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="event.stopPropagation();sourceNow('${req.id}')">
                   <span class="material-icons-outlined" style="font-size:13px;vertical-align:middle">person_search</span> Source Now
                 </button>
-                ${isTL ? `<button class="req-card-close" style="margin-left:4px;padding:4px 10px;font-size:12px" onclick="event.stopPropagation();closeRequirement('${req.id}', this)">Close</button>` : ''}
+                <button class="btn-secondary" style="padding:4px 6px;font-size:12px;margin-left:4px" onclick="event.stopPropagation();openReqRowMenu(event,'${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:16px;vertical-align:middle">more_horiz</span>
+                </button>
               </td>
             `;
             tr.addEventListener('click', () => viewRequirement(req.id));
@@ -4329,9 +4351,9 @@
                   <span class="material-icons-outlined" style="font-size:14px">group</span>
                   Assigned to: <strong>${esc(assignedLabel)}</strong>
                 </span>
-                ${isTL ? `<button class="req-card-close" onclick="event.stopPropagation();closeRequirement('${req.id}', this)">
-                  <span class="material-icons-outlined" style="font-size:12px">archive</span> Close
-                </button>` : ''}
+                <button class="btn-secondary" style="padding:4px 6px" onclick="event.stopPropagation();openReqRowMenu(event,'${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:16px;vertical-align:middle">more_horiz</span>
+                </button>
               </div>
             `;
             listEl.appendChild(card);
@@ -4375,6 +4397,73 @@
         alert('Failed to close: ' + err.message);
         if (btn) { btn.disabled = false; }
       }
+    }
+
+    function openReqRowMenu(ev, reqId) {
+      document.getElementById('req-row-menu-pop')?.remove();
+      const req = (state.requirements || []).find(r => r.id === reqId) || {};
+      const isPinned = !!req.is_pinned;
+      const pop = document.createElement('div');
+      pop.id = 'req-row-menu-pop';
+      pop.style.cssText = 'position:fixed;background:white;border:1px solid var(--border-color);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:180px;z-index:1000;overflow:hidden;font-size:13px;padding:6px 0';
+      const item = (label, icon, onClick, opts = {}) =>
+        `<div style="padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;${opts.danger ? 'color:#dc2626' : ''}"
+              onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''"
+              onclick="document.getElementById('req-row-menu-pop')?.remove();${onClick}">
+           <span class="material-icons-outlined" style="font-size:16px">${icon}</span>${label}
+         </div>`;
+      const sep = `<div style="height:1px;background:var(--border-color);margin:4px 0"></div>`;
+      pop.innerHTML =
+        item(isPinned ? 'Unpin' : 'Pin', 'push_pin', `pinRequirement('${reqId}', ${!isPinned})`) +
+        item('Edit',   'edit',          `viewRequirement('${reqId}')`) +
+        item('Clone',  'content_copy',  `cloneRequirement('${reqId}')`) +
+        sep +
+        item('Close',  'archive',       `closeRequirement('${reqId}')`) +
+        item('Delete', 'delete',        `deleteRequirement('${reqId}')`, { danger: true });
+      document.body.appendChild(pop);
+      const r = ev.currentTarget.getBoundingClientRect();
+      pop.style.top = `${r.bottom + 4}px`;
+      pop.style.left = `${Math.min(r.right - 180, window.innerWidth - 200)}px`;
+      const close = (e) => {
+        if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); }
+      };
+      setTimeout(() => document.addEventListener('click', close, true), 0);
+    }
+
+    async function pinRequirement(reqId, shouldPin) {
+      try {
+        await api(`/api/requirements/${reqId}/pin`, { method: 'POST', body: { pin: shouldPin } });
+        loadRequirements();
+      } catch (err) { alert('Pin failed: ' + err.message); }
+    }
+
+    async function cloneRequirement(reqId) {
+      try {
+        await api(`/api/requirements/${reqId}/clone`, { method: 'POST' });
+        loadRequirements();
+      } catch (err) { alert('Clone failed: ' + err.message); }
+    }
+
+    async function deleteRequirement(reqId) {
+      if (!confirm('Permanently delete this requirement and all its sourced candidates? This cannot be undone.')) return;
+      try {
+        await api(`/api/requirements/${reqId}`, { method: 'DELETE' });
+        state.selectedRequirements.delete(reqId);
+        updateBatchActionBar();
+        loadRequirements();
+      } catch (err) { alert('Delete failed: ' + err.message); }
+    }
+
+    async function deleteRequirementsBatch() {
+      const ids = Array.from(state.selectedRequirements);
+      if (!ids.length) return;
+      if (!confirm(`Permanently delete ${ids.length} requirement${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+      try {
+        await Promise.all(ids.map(id => api(`/api/requirements/${id}`, { method: 'DELETE' })));
+        state.selectedRequirements.clear();
+        updateBatchActionBar();
+        loadRequirements();
+      } catch (err) { alert('Delete failed: ' + err.message); }
     }
 
     // Clear All (TL only) — destructive wipe of every requirement + dependents
@@ -6548,6 +6637,18 @@
       document.getElementById('sub-f-company').value = sub.current_company || '';
       document.getElementById('sub-f-address').value = sub.address_full || '';
       document.getElementById('sub-f-dob').value = sub.date_of_birth || '';
+      // Pre-fill packet fields the user wrote last time. The file input
+      // can't be programmatically restored — show a hint instead.
+      const notesEl = document.getElementById('sub-f-notes');
+      const waEl = document.getElementById('sub-f-wa');
+      if (notesEl) notesEl.value = sub.recruiter_notes || '';
+      if (waEl) waEl.value = sub.whatsapp_transcript || '';
+      const fileEl = document.getElementById('sub-f-resume');
+      if (fileEl) fileEl.value = '';
+      const nameSpan = document.getElementById('sub-f-resume-name');
+      if (nameSpan) nameSpan.textContent = '';
+      const hint = document.getElementById('sub-f-resume-hint');
+      if (hint) hint.style.display = '';
     }
 
     document.getElementById('sub-rec-back-btn')?.addEventListener('click', () => {
@@ -6593,6 +6694,17 @@
       modal.classList.remove('hidden');
       document.getElementById('sub-step-1').style.display = '';
       document.getElementById('sub-step-2').style.display = 'none';
+      // Reset packet fields between opens.
+      const notesEl = document.getElementById('sub-f-notes');
+      const waEl = document.getElementById('sub-f-wa');
+      const fileEl = document.getElementById('sub-f-resume');
+      const nameSpan = document.getElementById('sub-f-resume-name');
+      const hint = document.getElementById('sub-f-resume-hint');
+      if (notesEl) notesEl.value = '';
+      if (waEl) waEl.value = '';
+      if (fileEl) fileEl.value = '';
+      if (nameSpan) nameSpan.textContent = '';
+      if (hint) hint.style.display = 'none';
       try {
         const data = await api('/api/shortlists');
         const candidates = data?.candidates || [];
@@ -6704,26 +6816,28 @@
       btn.disabled = true;
       btn.textContent = 'Submitting…';
       try {
-        await api('/api/submissions/create', {
-          method: 'POST',
-          body: {
-            candidate_id: candId,
-            requirement_id: reqId,
-            name: [firstName, lastName].filter(Boolean).join(' '),
-            phone: document.getElementById('sub-f-phone').value,
-            email: document.getElementById('sub-f-email').value,
-            date_of_birth: document.getElementById('sub-f-dob').value || null,
-            address_full: document.getElementById('sub-f-address').value,
-            current_company: document.getElementById('sub-f-company').value,
-            total_experience: document.getElementById('sub-f-total-exp').value,
-            relevant_experience: document.getElementById('sub-f-rel-exp').value,
-            current_ctc: document.getElementById('sub-f-current-ctc').value,
-            expected_ctc: document.getElementById('sub-f-expected-ctc').value,
-            current_location: document.getElementById('sub-f-current-loc').value,
-            preferred_location: document.getElementById('sub-f-pref-loc').value,
-            notice_period: document.getElementById('sub-f-notice').value,
-          }
-        });
+        const fd = new FormData();
+        fd.append('candidate_id', candId);
+        fd.append('requirement_id', reqId);
+        fd.append('name', [firstName, lastName].filter(Boolean).join(' '));
+        fd.append('phone', document.getElementById('sub-f-phone').value);
+        fd.append('email', document.getElementById('sub-f-email').value);
+        fd.append('date_of_birth', document.getElementById('sub-f-dob').value || '');
+        fd.append('address_full', document.getElementById('sub-f-address').value);
+        fd.append('current_company', document.getElementById('sub-f-company').value);
+        fd.append('total_experience', document.getElementById('sub-f-total-exp').value);
+        fd.append('relevant_experience', document.getElementById('sub-f-rel-exp').value);
+        fd.append('current_ctc', document.getElementById('sub-f-current-ctc').value);
+        fd.append('expected_ctc', document.getElementById('sub-f-expected-ctc').value);
+        fd.append('current_location', document.getElementById('sub-f-current-loc').value);
+        fd.append('preferred_location', document.getElementById('sub-f-pref-loc').value);
+        fd.append('notice_period', document.getElementById('sub-f-notice').value);
+        fd.append('recruiter_notes', document.getElementById('sub-f-notes')?.value || '');
+        fd.append('whatsapp_transcript', document.getElementById('sub-f-wa')?.value || '');
+        const fileEl = document.getElementById('sub-f-resume');
+        const file = fileEl?.files?.[0];
+        if (file) fd.append('resume', file);
+        await api('/api/submissions/create', { method: 'POST', body: fd });
         document.getElementById('modal-submit-candidate').classList.add('hidden');
         // Reload the detail view
         const data = await api('/api/submissions/my');
@@ -6736,6 +6850,12 @@
         btn.disabled = false;
         btn.textContent = 'Submit to TL';
       }
+    });
+
+    document.getElementById('sub-f-resume')?.addEventListener('change', (e) => {
+      const f = e.target.files?.[0];
+      const span = document.getElementById('sub-f-resume-name');
+      if (span) span.textContent = f ? f.name : '';
     });
 
     document.getElementById('sub-modal-close')?.addEventListener('click', () => {
@@ -6838,6 +6958,12 @@
       const panel = document.getElementById('sub-tl-panel');
       const content = document.getElementById('sub-tl-panel-content');
       panel.style.display = '';
+      const noResume = !sub.formatted_doc_path;
+      const warnBanner = (sub.status === 'pending' && noResume)
+        ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:var(--radius);padding:8px 10px;font-size:12px;color:#92400e;margin-bottom:12px">
+             <span class="material-icons-outlined" style="font-size:14px;vertical-align:-2px">warning</span>
+             No resume attached — approving will send the email without a CV.
+           </div>` : '';
       content.innerHTML = `
         <div style="font-size:15px;font-weight:600;margin-bottom:4px">${esc(sub.candidate_name || 'Candidate')}</div>
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">Submitted by ${esc(sub.recruiter_name || sub.submitted_by_recruiter || '—')} · ${sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : ''}</div>
@@ -6852,10 +6978,12 @@
           <div style="grid-column:span 2"><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Phone</div><strong>${esc(sub.phone || '—')}</strong></div>
         </div>
         ${sub.tl_feedback ? `<div style="background:#fef3c7;border-radius:var(--radius);padding:10px;font-size:12px;margin-bottom:12px"><strong>Previous feedback:</strong> ${esc(sub.tl_feedback)}</div>` : ''}
+        <div id="tl-comms-section" style="margin-bottom:12px"></div>
         <div style="margin-bottom:12px">
           <div style="font-size:12px;font-weight:500;margin-bottom:4px">Note</div>
           <textarea id="tl-panel-note" rows="3" style="width:100%;padding:7px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="Internal note…"></textarea>
         </div>
+        ${warnBanner}
         ${sub.status === 'pending' ? `
         <div style="display:flex;gap:8px">
           <button class="btn-primary" style="flex:1" onclick="tlApproveFromPanel('${sub.id}')">
@@ -6868,6 +6996,84 @@
           : `<div style="text-align:center;padding:8px;color:var(--text-secondary);font-size:13px">${statusBadge(sub.status)}</div>`}
       `;
       if (sub.status === 'approved') _wireTlClientFeedbackForm(sub);
+      _loadTlCommsSection(sub);
+    }
+
+    // Fetch + render the recruiter packet, email history, and sequence-run
+    // history into the #tl-comms-section placeholder created above.
+    async function _loadTlCommsSection(sub) {
+      const host = document.getElementById('tl-comms-section');
+      if (!host) return;
+      host.innerHTML = '<div style="font-size:12px;color:var(--text-secondary)">Loading comms…</div>';
+      let data;
+      try {
+        data = await api(`/api/submissions/${encodeURIComponent(sub.id)}/comms`);
+      } catch (err) {
+        host.innerHTML = `<div style="font-size:12px;color:#b91c1c">Comms load failed: ${esc(err.message)}</div>`;
+        return;
+      }
+      const packet = data?.packet || {};
+      const emails = data?.emails || [];
+      const runs = data?.sequence_runs || [];
+
+      const packetHtml = `
+        <details open style="border:1px solid var(--border-color);border-radius:var(--radius);padding:8px 10px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary)">Recruiter packet</summary>
+          <div style="margin-top:8px;font-size:13px">
+            ${packet.resume_url
+              ? `<div style="margin-bottom:6px"><a href="${esc(packet.resume_url)}" target="_blank" style="color:var(--primary);text-decoration:none">
+                   <span class="material-icons-outlined" style="font-size:14px;vertical-align:-2px">attachment</span> Download resume
+                 </a></div>`
+              : `<div style="margin-bottom:6px;color:#92400e;font-size:12px">No resume attached.</div>`}
+            ${packet.recruiter_notes
+              ? `<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">Notes</div><div style="white-space:pre-wrap">${esc(packet.recruiter_notes)}</div></div>`
+              : ''}
+            ${packet.whatsapp_transcript
+              ? `<div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px">WhatsApp transcript</div><div style="white-space:pre-wrap;background:var(--bg-surface);padding:6px;border-radius:var(--radius);font-size:12px;max-height:160px;overflow:auto">${esc(packet.whatsapp_transcript)}</div></div>`
+              : ''}
+            ${(!packet.recruiter_notes && !packet.whatsapp_transcript && !packet.resume_url)
+              ? '<div style="font-size:12px;color:var(--text-secondary)">Nothing in the packet for this submission.</div>' : ''}
+          </div>
+        </details>`;
+
+      const emailsHtml = `
+        <details style="border:1px solid var(--border-color);border-radius:var(--radius);padding:8px 10px;margin-bottom:8px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary)">Email history (${emails.length})</summary>
+          <div style="margin-top:8px">
+            ${emails.length === 0 ? '<div style="font-size:12px;color:var(--text-secondary)">No emails sent to this candidate.</div>' :
+              emails.map(em => `
+                <details style="border-top:1px solid var(--border-color);padding:6px 0">
+                  <summary style="cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px">
+                    <span>${esc(em.subject || '(no subject)')}</span>
+                    <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap">
+                      ${em.sent_at ? new Date(em.sent_at).toLocaleDateString() : '—'}
+                      ${em.reply_received ? ' · <span style="color:#16a34a">Replied</span>' : ''}
+                    </span>
+                  </summary>
+                  <div style="margin-top:6px;font-size:12px;white-space:pre-wrap;background:var(--bg-surface);padding:6px;border-radius:var(--radius);max-height:240px;overflow:auto">${esc(em.body || '(empty)')}</div>
+                </details>
+              `).join('')}
+          </div>
+        </details>`;
+
+      const runsHtml = `
+        <details style="border:1px solid var(--border-color);border-radius:var(--radius);padding:8px 10px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary)">Sequence runs (${runs.length})</summary>
+          <div style="margin-top:8px;font-size:12px">
+            ${runs.length === 0 ? '<div style="color:var(--text-secondary)">No sequence runs for this candidate.</div>' :
+              runs.map(r => `
+                <div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--border-color)">
+                  <div>${esc(r.template_name || '(unknown)')}</div>
+                  <div style="color:var(--text-secondary)">
+                    ${esc(r.status || '')}${r.intent ? ' · ' + esc(r.intent) : ''}
+                    ${r.started_at ? ' · ' + new Date(r.started_at).toLocaleDateString() : ''}
+                  </div>
+                </div>
+              `).join('')}
+          </div>
+        </details>`;
+
+      host.innerHTML = packetHtml + emailsHtml + runsHtml;
     }
 
     // Lifecycle / client-feedback form shown on approved submissions.

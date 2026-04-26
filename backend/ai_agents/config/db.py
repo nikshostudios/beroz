@@ -248,7 +248,7 @@ def get_open_requirements(market: str | None = None, created_after: str | None =
     q = get_client().table("requirements").select(
         "id, market, client_name, role_title, skillset, skills_required, "
         "experience_min, salary_budget, location, contract_type, status, "
-        "assigned_recruiters, created_at, project_id"
+        "assigned_recruiters, created_at, project_id, is_pinned"
     ).eq("status", "open")
     if market:
         q = q.eq("market", market)
@@ -256,7 +256,9 @@ def get_open_requirements(market: str | None = None, created_after: str | None =
         q = q.gte("created_at", created_after)
     if project_id:
         q = q.eq("project_id", project_id)
-    return q.order("created_at", desc=True).execute().data
+    rows = q.order("created_at", desc=True).execute().data
+    # Pinned requirements float to the top
+    return sorted(rows, key=lambda r: (0 if r.get("is_pinned") else 1))
 
 
 def get_requirement_by_id(requirement_id: str) -> dict | None:
