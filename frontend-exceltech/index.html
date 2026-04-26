@@ -2708,6 +2708,14 @@
         <!-- SUBMISSIONS (role-aware) -->
         <div class="page" id="page-submissions">
 
+          <!-- TL-only sub-tab toggle: Team Queue vs My Submissions
+               (lets the TL act as a recruiter on requirements they have
+               self-assigned). Hidden for non-TL users. -->
+          <div id="sub-tl-tabs" class="tabs" style="display:none;margin-bottom:16px">
+            <div class="tab active" data-sub-tab="team">Team Queue</div>
+            <div class="tab" data-sub-tab="mine">My Submissions</div>
+          </div>
+
           <!-- ── RECRUITER VIEW ── -->
           <div id="sub-recruiter-view">
             <!-- Landing: requirement cards -->
@@ -6307,22 +6315,44 @@
       return '<span class="tag tag-draft" style="background:#fef3c7;color:#92400e"><span class="status-dot" style="background:#d97706"></span>Pending</span>';
     }
 
+    // Which sub-tab a TL is on: 'team' = team queue, 'mine' = recruiter
+    // view of requirements they self-assigned to. Non-TL users only ever
+    // see 'mine'.
+    let _subTlActiveTab = 'team';
+
     async function loadSubmissions() {
       const isTL = state.user?.role === 'tl';
-      document.getElementById('sub-recruiter-view').style.display = isTL ? 'none' : '';
-      document.getElementById('sub-tl-view').style.display = isTL ? '' : 'none';
+      const tabs = document.getElementById('sub-tl-tabs');
+      if (tabs) tabs.style.display = isTL ? '' : 'none';
+      // For non-TLs we always render the recruiter view.
+      const showTeam = isTL && _subTlActiveTab === 'team';
+      document.getElementById('sub-recruiter-view').style.display = showTeam ? 'none' : '';
+      document.getElementById('sub-tl-view').style.display = showTeam ? '' : 'none';
       // Always show landing (reset any drilled view)
-      document.getElementById('sub-rec-landing').style.display = isTL ? 'none' : '';
+      document.getElementById('sub-rec-landing').style.display = showTeam ? 'none' : '';
       document.getElementById('sub-rec-detail').style.display = 'none';
-      document.getElementById('sub-tl-landing').style.display = isTL ? '' : 'none';
+      document.getElementById('sub-tl-landing').style.display = showTeam ? '' : 'none';
       document.getElementById('sub-tl-detail').style.display = 'none';
 
-      if (isTL) {
+      if (showTeam) {
         await loadTlSubmissionsLanding();
       } else {
         await loadRecruiterSubmissionsLanding();
       }
     }
+
+    // ── TL sub-tab switching ──
+    document.querySelectorAll('#sub-tl-tabs .tab').forEach(t => {
+      t.addEventListener('click', () => {
+        const next = t.getAttribute('data-sub-tab');
+        if (next === _subTlActiveTab) return;
+        _subTlActiveTab = next;
+        document.querySelectorAll('#sub-tl-tabs .tab').forEach(x => {
+          x.classList.toggle('active', x === t);
+        });
+        loadSubmissions();
+      });
+    });
 
     // ── Recruiter: landing ──
     async function loadRecruiterSubmissionsLanding() {

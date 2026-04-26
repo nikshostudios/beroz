@@ -2657,8 +2657,10 @@ def create_submission(payload: Any, recruiter_email: str) -> dict:
     db.upsert_candidate_details(cid, rid, {"status": "submitted_to_tl"})
 
     # Notify TL(s) — best-effort, must NOT block the submission insert.
+    # Skip self-emails: a TL who self-assigned to a requirement and
+    # submitted their own candidate shouldn't email themselves.
     try:
-        tl_emails = _get_tl_emails()
+        tl_emails = [e for e in _get_tl_emails() if e != recruiter_email]
         if tl_emails:
             cand_row = db.get_candidate_by_id(cid) or {}
             cand_name = cand_row.get("name") or body.get("name") or "Candidate"
