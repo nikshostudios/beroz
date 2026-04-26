@@ -1461,7 +1461,15 @@
     /* Contenteditable body */
     .seq-body-editor { min-height:200px; padding:12px; border:1px solid var(--border-color); border-radius:0 0 6px 6px; font-size:13px; line-height:1.7; font-family:inherit; outline:none; background:#fff; }
     .seq-body-editor:focus { border-color:var(--brand-blue); }
+    .seq-body-editor:empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; }
     span.seq-var[data-var] { background:#ede9fe; color:#5b21b6; border-radius:4px; padding:1px 5px; font-size:12px; font-weight:600; }
+
+    /* Email Preview modal */
+    .email-preview-row { display:flex; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color); font-size:13px; }
+    .email-preview-row:last-of-type { border-bottom:none; }
+    .email-preview-label { width:64px; color:var(--text-secondary); font-weight:500; flex-shrink:0; }
+    .email-preview-value { color:var(--text-primary); }
+    .email-preview-select { padding:5px 10px; border:1px solid var(--border-color); border-radius:6px; font-size:12px; background:#fff; min-width:180px; }
 
     /* Add-contacts page */
     .seq-add-contacts { display:flex; gap:0; height:calc(100vh - 130px); overflow:hidden; }
@@ -2518,15 +2526,21 @@
                 </div>
                 <!-- Variable chips -->
                 <div class="seq-var-row">
-                  <span class="seq-var-chip" data-insert-var="First Name">First Name</span>
-                  <span class="seq-var-chip" data-insert-var="Current Company">Current Company</span>
-                  <span class="seq-var-chip" data-insert-var="Job Title">Job Title</span>
-                  <span class="seq-var-chip" data-insert-var="Sender First Name">Sender First Name</span>
                   <span class="seq-var-chip placeholder" title="Coming soon">AI Command</span>
                   <span class="seq-var-chip placeholder" title="Coming soon">Snippets</span>
                 </div>
+                <div class="seq-var-row">
+                  <span class="seq-var-chip" data-insert-var="Spintax Greeting">Spintax Greeting</span>
+                  <span class="seq-var-chip" data-insert-var="First Name">First Name</span>
+                  <span class="seq-var-chip" data-insert-var="Current Company">Current Company</span>
+                  <span class="seq-var-chip" data-insert-var="Job Title">Job Title</span>
+                  <span class="seq-var-chip" data-insert-var="Education">Education</span>
+                  <span class="seq-var-chip" data-insert-var="Sender First Name">Sender First Name</span>
+                  <span class="seq-var-chip placeholder" title="More variables coming soon">More…</span>
+                </div>
                 <!-- Contenteditable body -->
-                <div class="seq-body-editor" id="seq-step-body" contenteditable="true" spellcheck="true"></div>
+                <div class="seq-body-editor" id="seq-step-body" contenteditable="true" spellcheck="true"
+                     data-placeholder="Start typing your email body here..."></div>
                 <!-- Signature + unsubscribe -->
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:14px;padding:10px 12px;background:#fafafa;border:1px solid var(--border-color);border-radius:var(--radius)">
                   <div style="display:flex;align-items:center;gap:8px;flex:1">
@@ -3693,6 +3707,50 @@
         <button type="button" class="btn-primary" id="ai-cfg-generate-btn">
           <span class="material-icons-outlined" style="font-size:16px">auto_awesome</span> Generate with AI
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Preview & Test (sequence editor) -->
+  <div class="modal-overlay hidden" id="modal-email-preview">
+    <div class="modal" style="max-width:760px;padding:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border-color)">
+        <h3 style="margin:0;font-size:16px">Email Preview</h3>
+        <button type="button" id="email-preview-close"
+          style="background:none;border:none;cursor:pointer;color:var(--text-secondary)">
+          <span class="material-icons-outlined" style="font-size:20px">close</span>
+        </button>
+      </div>
+      <div style="padding:0 20px">
+        <div class="email-preview-row">
+          <span class="email-preview-label">From:</span>
+          <span id="email-preview-from" class="email-preview-value">—</span>
+        </div>
+        <div class="email-preview-row">
+          <span class="email-preview-label">To:</span>
+          <select id="email-preview-to-cand" class="email-preview-select">
+            <option value="">Sample candidate</option>
+          </select>
+        </div>
+        <div class="email-preview-row">
+          <span class="email-preview-label">Subject:</span>
+          <span id="email-preview-subject" class="email-preview-value">—</span>
+        </div>
+        <div id="email-preview-body" style="border:1px solid var(--border-color);border-radius:var(--radius);padding:14px;min-height:240px;max-height:340px;overflow-y:auto;margin:12px 0;font-size:13px;line-height:1.55">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px;background:#fafafa;border-top:1px solid var(--border-color)">
+        <div>
+          <div style="font-size:13px;font-weight:600">Send yourself a test email</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Test emails have "Test" in the subject line</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="email" id="email-preview-to-input" placeholder="Enter email address"
+            style="padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;width:240px">
+          <button type="button" class="btn-primary" id="email-preview-send-btn">
+            Send Test <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">send</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -7728,8 +7786,32 @@
       // The sequence row only gets created on the first save action
       // (Add step / Save name / Save step).
       openSequenceEditorShell(null, defaultSequenceName());
+      // Land the user directly on Step 1 — empty state was confusing for
+      // a from-scratch flow. The step is local-only until they save.
+      addLocalDraftStep();
       seqState.editingDirty = false;
     });
+
+    // Add a placeholder step in memory only; first Save will POST it.
+    function addLocalDraftStep() {
+      seqState.editingSeq = seqState.editingSeq || { id: null, name: defaultSequenceName(), steps: [] };
+      const isFirst = !(seqState.editingSeq.steps || []).length;
+      seqState.editingSeq.steps.push({
+        id: null, // marks as not-yet-persisted
+        position: (seqState.editingSeq.steps?.length || 0) + 1,
+        step_type: 'email',
+        wait_days: isFirst ? 0 : 3,
+        send_time_local: '09:00',
+        subject_template: isFirst ? '' : null,
+        body_template: '',
+        signature_id: null,
+        include_unsubscribe: false,
+        reply_in_same_thread: !isFirst,
+      });
+      document.getElementById('seq-editor-add-contacts').style.display = '';
+      renderStepList();
+      selectStep(seqState.editingSeq.steps.length - 1);
+    }
 
     // Materialize a draft sequence on first save action.
     async function ensureSequenceMaterialized() {
@@ -8038,35 +8120,91 @@
       };
       try {
         const seqId = await ensureSequenceMaterialized();
-        await api(`/api/sequences/${seqId}/steps/${step.id}`,
-          { method: 'PUT', body: patch });
-        Object.assign(step, patch);
+        if (step.id) {
+          await api(`/api/sequences/${seqId}/steps/${step.id}`,
+            { method: 'PUT', body: patch });
+          Object.assign(step, patch);
+        } else {
+          // First save of a local-only draft step → create it server-side.
+          const data = await api(`/api/sequences/${seqId}/steps`,
+            { method: 'POST', body: patch });
+          if (data?.step) Object.assign(step, data.step);
+        }
         renderStepList();
         seqState.editingDirty = false;
         showToast('Step saved.');
       } catch (err) { alert('Error saving step: ' + err.message); }
     });
 
-    // Preview & test — sends a real test email to the current user using the live draft.
-    document.getElementById('seq-step-preview-test')?.addEventListener('click', async () => {
+    // Preview & test — opens the Email Preview modal showing rendered draft
+    // and lets the user send a test to themselves (or any address).
+    document.getElementById('seq-step-preview-test')?.addEventListener('click', () => {
       const steps = seqState.editingSeq?.steps || [];
       const step = steps[seqState.activeStepIdx];
-      if (!step || !seqState.editingSeqId) return;
-      const btn = document.getElementById('seq-step-preview-test');
+      if (!step) return;
+      openEmailPreviewModal();
+    });
+
+    function openEmailPreviewModal() {
+      const fromEmail = state.user?.email || '';
+      const fromName = (fromEmail.split('@')[0] || 'You')
+        .replace(/^./, c => c.toUpperCase());
+      document.getElementById('email-preview-from').textContent =
+        `${fromName} <${fromEmail}>`;
+      const subj = document.getElementById('seq-step-subject')?.value || '(no subject)';
+      document.getElementById('email-preview-subject').textContent = subj;
+      // Render the body using a sample candidate so chips become real text.
+      const bodyHtml = document.getElementById('seq-step-body')?.innerHTML || '';
+      const sample = {
+        first_name: fromName,
+        current_employer: 'Acme Inc.',
+        current_job_title: 'Senior Engineer',
+        education: 'B.Tech',
+      };
+      const rendered = bodyHtml.replace(/<span class="seq-var" data-var="([^"]+)"[^>]*>\{\{[^}]+\}\}<\/span>/g,
+        (_, key) => {
+          const k = key.toLowerCase().replace(/ /g, '_');
+          return sample[k] || `{{${key}}}`;
+        });
+      document.getElementById('email-preview-body').innerHTML =
+        rendered || '<span style="color:var(--text-muted)">(empty body)</span>';
+      // Default the test-to input to the user's own email.
+      const toInput = document.getElementById('email-preview-to-input');
+      if (toInput) toInput.value = fromEmail;
+      document.getElementById('modal-email-preview').classList.remove('hidden');
+    }
+    function closeEmailPreviewModal() {
+      document.getElementById('modal-email-preview').classList.add('hidden');
+    }
+    document.getElementById('email-preview-close')?.addEventListener('click', closeEmailPreviewModal);
+    document.getElementById('modal-email-preview')?.addEventListener('click', (e) => {
+      if (e.target.id === 'modal-email-preview') closeEmailPreviewModal();
+    });
+
+    document.getElementById('email-preview-send-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('email-preview-send-btn');
+      const toInput = document.getElementById('email-preview-to-input');
+      const to = (toInput.value || '').trim();
+      if (!to || !/^\S+@\S+\.\S+$/.test(to)) {
+        alert('Please enter a valid email address.');
+        return;
+      }
       const orig = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<span class="material-icons-outlined" style="font-size:14px;vertical-align:middle;margin-right:4px">hourglass_empty</span>Sending…';
+      btn.innerHTML = 'Sending…';
       try {
+        const seqId = await ensureSequenceMaterialized();
         const bodyHtml = document.getElementById('seq-step-body').innerHTML;
         const payload = {
-          subject_template: document.getElementById('seq-step-subject').value,
-          body_template: htmlToTemplate(bodyHtml),
+          subject: document.getElementById('seq-step-subject').value,
+          body: htmlToTemplate(bodyHtml),
           signature_id: document.getElementById('seq-step-signature')?.value || null,
-          include_unsubscribe: !!document.getElementById('seq-step-unsubscribe')?.checked,
+          to,
         };
-        const res = await api(`/api/sequences/${seqState.editingSeqId}/test-send`,
+        const res = await api(`/api/sequences/${seqId}/test-send`,
           { method: 'POST', body: payload });
-        showToast(`Test email sent to ${res?.to || 'your inbox'}.`);
+        showToast(`Test email sent to ${res?.to || to}.`);
+        closeEmailPreviewModal();
       } catch (err) { alert('Error sending test: ' + err.message); }
       finally { btn.disabled = false; btn.innerHTML = orig; }
     });
@@ -8109,13 +8247,37 @@
       } catch (err) { alert('Error adding step: ' + err.message); }
     });
 
-    // Save sequence name (materializes the draft if needed).
+    // Save sequence name + the currently-edited step in one shot.
+    // Materializes the draft sequence first if needed.
     document.getElementById('seq-editor-save')?.addEventListener('click', async () => {
       const name = document.getElementById('seq-editor-name').value.trim() || defaultSequenceName();
       try {
         const seqId = await ensureSequenceMaterialized();
         await api(`/api/sequences/${seqId}`, { method: 'PUT', body: { name } });
         if (seqState.editingSeq) seqState.editingSeq.name = name;
+        // Also persist the active step so the user doesn't need a second click.
+        const step = (seqState.editingSeq?.steps || [])[seqState.activeStepIdx];
+        if (step) {
+          const bodyHtml = document.getElementById('seq-step-body')?.innerHTML || '';
+          const patch = {
+            subject_template: document.getElementById('seq-step-subject')?.value || '',
+            body_template: htmlToTemplate(bodyHtml),
+            wait_days: parseInt(document.getElementById('seq-step-wait')?.value) || 0,
+            send_time_local: document.getElementById('seq-step-send-time')?.value || '09:00',
+            signature_id: document.getElementById('seq-step-signature')?.value || null,
+            include_unsubscribe: !!document.getElementById('seq-step-unsubscribe')?.checked,
+          };
+          if (step.id) {
+            await api(`/api/sequences/${seqId}/steps/${step.id}`,
+              { method: 'PUT', body: patch });
+            Object.assign(step, patch);
+          } else {
+            const data = await api(`/api/sequences/${seqId}/steps`,
+              { method: 'POST', body: patch });
+            if (data?.step) Object.assign(step, data.step);
+          }
+          renderStepList();
+        }
         seqState.editingDirty = false;
         showToast('Sequence saved.');
       } catch (err) { alert('Error: ' + err.message); }

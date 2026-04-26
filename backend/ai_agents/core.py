@@ -3823,6 +3823,18 @@ def generate_sequence_stream(payload: dict, user_role: str, user_email: str):
 
 # ── Variable substitution ──────────────────────────────────────
 
+def _spintax_greeting(c: dict) -> str:
+    """Pick a randomized greeting (Hi/Hello/Hey) and append the first name.
+
+    The randomness varies the cold-outreach opening across recipients without
+    needing an LLM call. Falls back to a bare 'Hi there' if no name is on file.
+    """
+    import random
+    fn = _first_name(c.get("name"))
+    opener = random.choice(["Hi", "Hello", "Hey"])
+    return f"{opener} {fn}" if fn else f"{opener} there"
+
+
 VAR_MAP = {
     "First Name":        lambda c, s: _first_name(c.get("name")),
     "Current Company":   lambda c, s: c.get("current_employer") or "your current company",
@@ -3831,6 +3843,7 @@ VAR_MAP = {
     "Sender First Name": lambda c, s: _first_name(s.get("name")),
     "Sender Email":      lambda c, s: s.get("email", ""),
     "Scheduling Link":   lambda c, s: s.get("scheduling_link", ""),
+    "Spintax Greeting":  lambda c, s: _spintax_greeting(c),
 }
 _VAR_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
 
@@ -4731,17 +4744,22 @@ def test_send_step(seq_id: str, payload: dict,
         if sig and sig.get("user_email") == user_email:
             rendered_body = f"{rendered_body}<br><br>{sig['html_body']}"
 
+    # Optional `to` override — Preview & Test modal lets recruiters fire a
+    # test to any address (defaults to themselves). We still enforce that
+    # you can't accidentally send to a sequence enrollee from this path.
+    to_override = (payload.get("to") or "").strip().lower()
+    to_email = to_override or user_email
     test_subject = f"[TEST] {rendered_subject}"
     try:
         outlook.send_email(
             from_email=user_email,
-            to_email=user_email,
+            to_email=to_email,
             subject=test_subject,
             body=rendered_body,
         )
     except Exception as exc:
         raise CoreError(502, f"Send failed: {exc}")
-    return {"ok": True, "to": user_email, "subject": test_subject}
+    return {"ok": True, "to": to_email, "subject": test_subject}
 
 
 # ── Agentic Boost ──────────────────────────────────────────────
