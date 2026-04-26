@@ -1068,7 +1068,14 @@ _apollo_credits_cache: dict = {}  # {"data": {...}, "expires": datetime}
 
 
 def get_apollo_credits() -> dict:
-    """Return remaining Apollo credits. Result is cached for 5 minutes."""
+    """Return remaining Apollo credits. Result is cached for 5 minutes.
+
+    Apollo's /v1/auth/health response shape varies by plan and API version.
+    Some accounts surface credits at the top level (`email_credits_per_month`
+    + `email_credits_used_this_month`); others nest a single pool under
+    `team` (`credits_used` + `credits_remaining`); some only return a global
+    `monthly_credits_limit/_used`. Read all variants and compute remaining.
+    """
     now = datetime.now(timezone.utc)
     if _apollo_credits_cache.get("expires") and now < _apollo_credits_cache["expires"]:
         return _apollo_credits_cache["data"]
@@ -1076,20 +1083,55 @@ def get_apollo_credits() -> dict:
         raw = asyncio.run(sourcing.apollo_account_credits())
     except Exception as e:
         raise CoreError(502, f"Apollo credits check failed: {e}")
-    month = raw.get("monthly_credits_limit", 0)
-    used = raw.get("monthly_credits_used", 0)
-    remaining = max(0, month - used)
-    # Apollo /auth/health doesn't break out email vs phone separately —
-    # expose whatever granularity the API returns.
+
+    team = raw.get("team") or {}
+
+    def _remaining(per_month_key: str, used_key: str) -> int | None:
+        for src in (raw, team):
+            limit = src.get(per_month_key)
+            used = src.get(used_key)
+            if limit is not None and used is not None:
+                return max(0, int(limit) - int(used))
+        return None
+
+    pool_remaining = (
+        _remaining("monthly_credits_limit", "monthly_credits_used")
+        or _remaining("credits_per_user", "credits_used")
+        or team.get("credits_remaining")
+        or 0
+    )
+    pool_used = (
+        raw.get("monthly_credits_used")
+        or team.get("credits_used")
+        or 0
+    )
+    pool_limit = (
+        raw.get("monthly_credits_limit")
+        or team.get("credits_per_user")
+        or (pool_used + pool_remaining)
+    )
+
+    email_remaining = _remaining(
+        "email_credits_per_month", "email_credits_used_this_month")
+    phone_remaining = _remaining(
+        "phone_credits_per_month", "phone_credits_used_this_month")
+    export_remaining = _remaining(
+        "export_credits_per_month", "export_credits_used_this_month")
+
     data = {
-        "email_credits": raw.get("email_credits_per_month", remaining),
-        "phone_credits": raw.get("phone_credits_per_month", remaining),
-        "export_credits": raw.get("export_credits_per_month", remaining),
-        "credits_used_month": used,
-        "credits_limit_month": month,
-        "credits_remaining": remaining,
+        "email_credits": email_remaining if email_remaining is not None else pool_remaining,
+        "phone_credits": phone_remaining if phone_remaining is not None else pool_remaining,
+        "export_credits": export_remaining if export_remaining is not None else pool_remaining,
+        "credits_used_month": pool_used,
+        "credits_limit_month": pool_limit,
+        "credits_remaining": pool_remaining,
         "raw": raw,
     }
+    log.info(
+        "apollo_credits: email=%s phone=%s pool=%s/%s",
+        data["email_credits"], data["phone_credits"],
+        pool_used, pool_limit,
+    )
     _apollo_credits_cache["data"] = data
     _apollo_credits_cache["expires"] = now + timedelta(minutes=5)
     return data
