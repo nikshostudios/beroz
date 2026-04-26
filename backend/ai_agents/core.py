@@ -1965,12 +1965,12 @@ def get_requirement_candidates(req_id: str, user_role: str,
     if not match_rows:
         return {"requirement": requirement, "candidates": [],
                 "cap": DEFAULT_SOURCE_CAP_PER_REQ}
-    cand_ids = [m["candidate_id"] for m in match_rows[:DEFAULT_SOURCE_CAP_PER_REQ]]
+    cand_ids = [m["candidate_id"] for m in match_rows]
     cands = (db.get_client().table("candidates").select("*")
              .in_("id", cand_ids).execute().data)
     cand_by_id = {c["id"]: c for c in cands}
     results = []
-    for m in match_rows[:DEFAULT_SOURCE_CAP_PER_REQ]:
+    for m in match_rows:
         c = cand_by_id.get(m["candidate_id"])
         if not c:
             continue
