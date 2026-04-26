@@ -778,6 +778,7 @@ def run_search(payload: dict, market: str | None) -> dict:
 
     filters: dict = {}
     soft_criteria: list[dict] = []
+    jd_diagnostics: dict = {}
 
     if mode in ("natural", "jd"):
         text = payload.get("text") or payload.get("requirement_text") or ""
@@ -794,6 +795,7 @@ def run_search(payload: dict, market: str | None) -> dict:
             raise CoreError(422, str(e))
         filters = parsed.get("hard_filters", {}) or {}
         soft_criteria = parsed.get("soft_criteria", []) or []
+        jd_diagnostics = parsed.get("jd_diagnostics", {}) or {}
     else:  # manual
         filters = payload.get("filters") or {}
         soft_criteria = payload.get("soft_criteria") or []
@@ -940,6 +942,7 @@ def run_search(payload: dict, market: str | None) -> dict:
         "mode": mode,
         "filters": filters,
         "soft_criteria": soft_criteria,
+        "jd_diagnostics": jd_diagnostics,
         "candidate_pool": len(candidates),
         "candidates": results,
     }
@@ -1462,8 +1465,7 @@ def list_requirements(market: str | None, status: str = "open",
                                         project_id=project_id)
     else:
         q = (db.get_client().table("requirements")
-             .select("id, market, client_name, role_title, skills_required, "
-                     "status, assigned_recruiters, created_at, project_id, is_pinned")
+             .select("*")
              .eq("status", status))
         if market:
             q = q.eq("market", market)

@@ -245,11 +245,7 @@ def insert_requirement(data: dict) -> dict:
 
 def get_open_requirements(market: str | None = None, created_after: str | None = None,
                           project_id: str | None = None):
-    q = get_client().table("requirements").select(
-        "id, market, client_name, role_title, skillset, skills_required, "
-        "experience_min, salary_budget, location, contract_type, status, "
-        "assigned_recruiters, created_at, project_id, is_pinned"
-    ).eq("status", "open")
+    q = get_client().table("requirements").select("*").eq("status", "open")
     if market:
         q = q.eq("market", market)
     if created_after:
