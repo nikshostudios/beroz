@@ -4231,7 +4231,10 @@
               <td>${esc(assignedLabel)}</td>
               <td>${matchedCount > 0 ? `<a href="#" onclick="event.preventDefault();event.stopPropagation();viewSourcedCandidates('${req.id}')" style="color:var(--brand-blue);text-decoration:none">${matchedCount} found</a>` : '<span style="color:var(--text-muted)">—</span>'}</td>
               <td>
-                ${isTL ? `<button class="req-card-close" style="padding:4px 10px;font-size:12px" onclick="event.stopPropagation();closeRequirement('${req.id}', this)">Close</button>` : ''}
+                <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="event.stopPropagation();sourceNow('${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:13px;vertical-align:middle">person_search</span> Source Now
+                </button>
+                ${isTL ? `<button class="req-card-close" style="margin-left:4px;padding:4px 10px;font-size:12px" onclick="event.stopPropagation();closeRequirement('${req.id}', this)">Close</button>` : ''}
               </td>
             `;
             tr.addEventListener('click', () => viewRequirement(req.id));
@@ -4317,6 +4320,9 @@
                     Found ${matchedCount} candidate${matchedCount === 1 ? '' : 's'}
                     <span class="material-icons-outlined" style="font-size:12px">arrow_forward</span>
                   </a>` : ''}
+                <button class="btn-secondary" onclick="event.stopPropagation();sourceNow('${req.id}')">
+                  <span class="material-icons-outlined" style="font-size:14px">person_search</span> Source Now
+                </button>
               </div>
               <div class="req-card-footer">
                 <span class="req-card-assigned">
@@ -4504,6 +4510,26 @@
       };
       switchPage('search');
       renderSearchRequirementContext();
+    }
+
+    // Navigate to Searches page with a pre-built query for a fresh source run
+    function sourceNow(reqId) {
+      const req = state.requirements.find(r => r.id === reqId);
+      if (!req) return;
+      state.searchRequirementContext = {
+        id: req.id,
+        role_title: req.role_title,
+        client_name: req.client_name,
+      };
+      switchPage('search');
+      const parts = [req.role_title];
+      if (req.skills_required?.length) parts.push(req.skills_required.slice(0, 3).join(', '));
+      if (req.location) parts.push(`in ${req.location}`);
+      else if (req.market === 'IN') parts.push('in India');
+      else if (req.market === 'SG') parts.push('in Singapore');
+      const input = document.getElementById('search-hero-input');
+      if (input) input.value = parts.join(' ');
+      runHeroSearch();
     }
 
     function renderSearchRequirementContext() {
@@ -7152,7 +7178,8 @@
         item('Edit',         'edit',          `openSequenceEditor('${seqId}')`) +
         item('Clone',        'content_copy',  `cloneSequence('${seqId}')`) +
         sep +
-        item('Archive',      'archive',       `archiveSequence('${seqId}')`, { danger: true });
+        item('Archive',      'archive',       `archiveSequence('${seqId}')`) +
+        item('Delete',       'delete',        `deleteSequenceHard('${seqId}')`, { danger: true });
       document.body.appendChild(pop);
       const r = ev.target.getBoundingClientRect();
       pop.style.top = `${r.bottom + 4}px`;
@@ -7199,6 +7226,15 @@
       try {
         await api(`/api/sequences/${seqId}`, { method: 'DELETE' });
         showToast('Archived.');
+        loadSequencesPageV2();
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function deleteSequenceHard(seqId) {
+      if (!confirm('Delete this sequence permanently? This cannot be undone.')) return;
+      try {
+        await api(`/api/sequences/${seqId}?hard=1`, { method: 'DELETE' });
+        showToast('Deleted.');
         loadSequencesPageV2();
       } catch (err) { alert('Error: ' + err.message); }
     }
@@ -7289,15 +7325,34 @@
       return `New Sequence - ${mm}/${dd}/${d.getFullYear()}`;
     }
 
-    document.getElementById('seq-chooser-scratch')?.addEventListener('click', async () => {
+    document.getElementById('seq-chooser-scratch')?.addEventListener('click', () => {
       document.getElementById('modal-new-sequence-chooser').classList.add('hidden');
-      try {
-        const data = await api('/api/sequences/new', { method: 'POST',
-          body: { name: defaultSequenceName(), source: 'scratch' } });
-        const seq = data?.sequence;
-        if (seq?.id) openSequenceEditor(seq.id);
-      } catch (err) { alert('Error: ' + err.message); }
+      // Lazy-create: open the editor in draft mode without persisting yet.
+      // The sequence row only gets created on the first save action
+      // (Add step / Save name / Save step).
+      openSequenceEditorShell(null, defaultSequenceName());
+      seqState.editingDirty = false;
     });
+
+    // Materialize a draft sequence on first save action.
+    async function ensureSequenceMaterialized() {
+      if (seqState.editingSeqId) return seqState.editingSeqId;
+      const name = (document.getElementById('seq-editor-name').value || '').trim()
+                   || defaultSequenceName();
+      const data = await api('/api/sequences/new', {
+        method: 'POST',
+        body: { name, source: 'scratch' },
+      });
+      const seq = data?.sequence;
+      if (!seq?.id) throw new Error('Could not create sequence');
+      seqState.editingSeqId = seq.id;
+      if (seqState.editingSeq) {
+        seqState.editingSeq.id = seq.id;
+        seqState.editingSeq.name = seq.name;
+      }
+      setEditorNameMeta(seq);
+      return seq.id;
+    }
     document.getElementById('seq-chooser-ai')?.addEventListener('click', () => {
       document.getElementById('modal-new-sequence-chooser').classList.add('hidden');
       openAiConfigModal();
@@ -7525,6 +7580,7 @@
       if (sigSel) sigSel.value = step.signature_id || '';
       const unsubEl = document.getElementById('seq-step-unsubscribe');
       if (unsubEl) unsubEl.checked = !!step.include_unsubscribe;
+      seqState.editingDirty = false;
     }
 
     function templateToHtml(tpl) {
@@ -7584,10 +7640,12 @@
         include_unsubscribe: !!document.getElementById('seq-step-unsubscribe')?.checked,
       };
       try {
-        await api(`/api/sequences/${seqState.editingSeqId}/steps/${step.id}`,
+        const seqId = await ensureSequenceMaterialized();
+        await api(`/api/sequences/${seqId}/steps/${step.id}`,
           { method: 'PUT', body: patch });
         Object.assign(step, patch);
         renderStepList();
+        seqState.editingDirty = false;
         showToast('Step saved.');
       } catch (err) { alert('Error saving step: ' + err.message); }
     });
@@ -7634,31 +7692,42 @@
       } catch (err) { alert('Error: ' + err.message); }
     });
 
-    // Add step (blank)
+    // Add step (blank) — materializes the sequence first if it's still a draft.
     document.getElementById('seq-editor-add-step')?.addEventListener('click', async () => {
-      const steps = seqState.editingSeq?.steps || [];
-      const pos = steps.length + 1;
-      // POST new step by saving a temp step via update — we need to insert via sequence update
       try {
-        // Create sequence with steps = current + new one via PUT
-        const resp = await api(`/api/sequences/${seqState.editingSeqId}`,
-          { method: 'PUT', body: { config: seqState.editingSeq.config || {} } });
-        // Re-fetch to get the new state
-        await openSequenceEditor(seqState.editingSeqId);
-      } catch(err) { /* ignore, reopen will reset */ }
+        const seqId = await ensureSequenceMaterialized();
+        const data = await api(`/api/sequences/${seqId}/steps`,
+          { method: 'POST', body: {} });
+        const step = data?.step;
+        if (!step) return;
+        if (!seqState.editingSeq) {
+          seqState.editingSeq = { id: seqId, name: '', steps: [] };
+        }
+        seqState.editingSeq.steps = seqState.editingSeq.steps || [];
+        seqState.editingSeq.steps.push(step);
+        document.getElementById('seq-editor-add-contacts').style.display = '';
+        renderStepList();
+        selectStep(seqState.editingSeq.steps.length - 1);
+        seqState.editingDirty = false;
+      } catch (err) { alert('Error adding step: ' + err.message); }
     });
 
-    // Save sequence name
+    // Save sequence name (materializes the draft if needed).
     document.getElementById('seq-editor-save')?.addEventListener('click', async () => {
       const name = document.getElementById('seq-editor-name').value.trim() || defaultSequenceName();
       try {
-        await api(`/api/sequences/${seqState.editingSeqId}`,
-          { method: 'PUT', body: { name } });
+        const seqId = await ensureSequenceMaterialized();
+        await api(`/api/sequences/${seqId}`, { method: 'PUT', body: { name } });
+        if (seqState.editingSeq) seqState.editingSeq.name = name;
+        seqState.editingDirty = false;
         showToast('Sequence saved.');
       } catch (err) { alert('Error: ' + err.message); }
     });
 
-    // Auto-save name on blur / Enter when the user uses the pencil
+    // Auto-save name on blur / Enter when the user uses the pencil. We
+    // intentionally do NOT auto-materialize here — typing in the name field
+    // alone shouldn't create a sequence row. Materialization happens when
+    // the user clicks Add step / Save / Save step.
     async function persistEditorName() {
       if (!seqState.editingSeqId) return;
       const input = document.getElementById('seq-editor-name');
@@ -7676,10 +7745,39 @@
       if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
     });
 
+    // Back button — confirm if there are unsaved edits (or a draft sequence
+    // that was never persisted). Matches the screenshot: "Are you sure you
+    // want to close this dialog? Changes made to any emails will be lost."
+    function editorHasUnsavedChanges() {
+      if (seqState.generating) return true;
+      if (seqState.editingDirty) return true;
+      // Draft mode (no seqId yet) is treated as discardable — nothing has been
+      // persisted, so closing is safe and we simply skip the confirm.
+      return false;
+    }
     document.getElementById('seq-editor-back')?.addEventListener('click', () => {
+      if (editorHasUnsavedChanges()) {
+        if (!confirm('Are you sure you want to close this dialog? Changes made to any emails will be lost.')) return;
+      }
+      seqState.editingDirty = false;
       switchPage('sequences');
       loadSequencesPageV2();
     });
+
+    // Mark the editor dirty whenever the user types into a step field. Reset
+    // on save-step / save-name / Add step.
+    function markEditorDirty() { seqState.editingDirty = true; }
+    [
+      'seq-step-subject', 'seq-step-wait', 'seq-step-send-time',
+      'seq-step-signature', 'seq-step-unsubscribe',
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', markEditorDirty);
+        el.addEventListener('change', markEditorDirty);
+      }
+    });
+    document.getElementById('seq-step-body')?.addEventListener('input', markEditorDirty);
 
     document.getElementById('seq-editor-add-contacts')?.addEventListener('click', () => {
       openAddContactsPage(seqState.editingSeqId,

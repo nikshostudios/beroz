@@ -3645,7 +3645,18 @@ def api_sequences_delete(seq_id):
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
     email = session.get("recruiter_email", "")
-    return _ai_core_call(ai_core.delete_sequence, seq_id, role, email)
+    hard = request.args.get("hard") == "1"
+    return _ai_core_call(ai_core.delete_sequence, seq_id, role, email, hard)
+
+
+@app.route("/api/sequences/<seq_id>/steps", methods=["POST"])
+def api_sequences_create_step(seq_id):
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    return _ai_core_call(ai_core.create_step, seq_id,
+                         request.get_json(silent=True) or {}, role, email)
 
 
 @app.route("/api/sequences/<seq_id>/clone", methods=["POST"])

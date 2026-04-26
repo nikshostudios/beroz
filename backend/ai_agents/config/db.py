@@ -625,6 +625,39 @@ def archive_sequence(seq_id: str) -> dict:
     return update_sequence_row(seq_id, {"status": "archived"})
 
 
+def delete_sequence_row(seq_id: str) -> None:
+    """Hard-delete the sequence row. Cascades to steps/runs via FK."""
+    get_client().table("sequences").delete().eq("id", seq_id).execute()
+
+
+def insert_step_row(seq_id: str, step_data: dict | None = None) -> dict:
+    """Insert a blank step at the end of the sequence (position = max+1)."""
+    client = get_client()
+    existing = (client.table("sequence_steps").select("position")
+                .eq("sequence_id", seq_id)
+                .order("position", desc=True).limit(1)
+                .execute().data) or []
+    next_pos = (existing[0]["position"] + 1) if existing else 1
+    row = {
+        "sequence_id": seq_id,
+        "position": next_pos,
+        "step_type": "email",
+        "wait_days": 0 if next_pos == 1 else 3,
+        "send_time_local": "09:00",
+        "subject_template": "" if next_pos == 1 else None,
+        "body_template": "",
+        "reply_in_same_thread": next_pos > 1,
+    }
+    if step_data:
+        for k in ("step_type", "wait_days", "send_time_local",
+                  "subject_template", "body_template",
+                  "reply_in_same_thread", "signature_id",
+                  "include_unsubscribe"):
+            if k in step_data:
+                row[k] = step_data[k]
+    return client.table("sequence_steps").insert(row).execute().data[0]
+
+
 def clone_sequence_row(seq_id: str, created_by: str) -> dict:
     """Deep-copy a sequence (header + steps) for the given owner."""
     client = get_client()

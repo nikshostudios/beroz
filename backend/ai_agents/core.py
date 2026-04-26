@@ -3631,13 +3631,33 @@ def reorder_steps(seq_id: str, ordered_step_ids: list[str],
     return {"reordered": True}
 
 
-def delete_sequence(seq_id: str, user_role: str, user_email: str) -> dict:
+def delete_sequence(seq_id: str, user_role: str, user_email: str,
+                    hard: bool = False) -> dict:
     _require_role(user_role, ["recruiter", "tl"])
     seq = db.get_sequence_full(seq_id)
     if not seq:
         raise CoreError(404, "Sequence not found")
+    if hard:
+        db.delete_sequence_row(seq_id)
+        return {"deleted": seq_id}
     db.archive_sequence(seq_id)
     return {"archived": seq_id}
+
+
+def create_step(seq_id: str, payload: dict,
+                user_role: str, user_email: str) -> dict:
+    _require_role(user_role, ["recruiter", "tl"])
+    seq = db.get_sequence_full(seq_id)
+    if not seq:
+        raise CoreError(404, "Sequence not found")
+    sig_id = (payload or {}).get("signature_id")
+    if sig_id:
+        sig = db.get_signature(sig_id)
+        if not sig or sig.get("user_email") != user_email:
+            raise CoreError(403, "Signature does not belong to you")
+    new_step = db.insert_step_row(seq_id, payload or {})
+    db.update_sequence_row(seq_id, {})
+    return {"step": new_step}
 
 
 def preview_step1_for_candidates(seq_id: str, payload: dict,
