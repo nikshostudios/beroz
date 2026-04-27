@@ -240,7 +240,23 @@ def count_matched_candidates(requirement_id: str,
 # ── Requirements ────────────────────────────────────────────
 
 def insert_requirement(data: dict) -> dict:
-    return get_client().table("requirements").insert(data).execute().data[0]
+    # Strip columns that don't yet exist in Supabase (e.g. when a recent
+    # schema migration hasn't been applied) and retry instead of failing.
+    payload = dict(data)
+    for _ in range(8):
+        try:
+            return get_client().table("requirements").insert(payload).execute().data[0]
+        except Exception as e:
+            msg = str(e)
+            if "column" in msg and "does not exist" in msg:
+                import re
+                m = re.search(r"column [\"']?\w*\.?(\w+)[\"']? does not exist", msg)
+                if m:
+                    bad = m.group(1)
+                    if bad in payload:
+                        payload.pop(bad)
+                        continue
+            raise
 
 
 def get_open_requirements(market: str | None = None, created_after: str | None = None,
@@ -764,6 +780,24 @@ def count_sequence_metrics(seq_id: str) -> dict:
         "interested": interested,
         "contacts": total,
     }
+
+
+def get_active_runs_for_candidates(candidate_ids: list[str]) -> dict[str, list[str]]:
+    """Return {candidate_id: [run_id, ...]} for any active sequence runs."""
+    if not candidate_ids:
+        return {}
+    rows = (get_client().table("sequence_runs")
+            .select("id, candidate_id")
+            .eq("status", "active")
+            .in_("candidate_id", candidate_ids)
+            .execute().data) or []
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        cid = r.get("candidate_id")
+        if not cid:
+            continue
+        out.setdefault(cid, []).append(r["id"])
+    return out
 
 
 def count_run_engagement(run_ids: list[str]) -> dict[str, dict]:
