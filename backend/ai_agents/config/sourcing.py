@@ -122,6 +122,14 @@ def _build_apollo_search_body(params: dict, market: str) -> dict:
     )
     if params.get("person_seniorities"):
         body["person_seniorities"] = list(params["person_seniorities"])
+    industry = params.get("industry_experience") or []
+    if isinstance(industry, str):
+        industry = [industry]
+    elif isinstance(industry, list):
+        industry = industry[:1]
+    if industry and len((body.get("q_keywords") or "").split()) <= 1:
+        q_existing = (body.get("q_keywords") or "").strip()
+        body["q_keywords"] = (q_existing + " " + industry[0]).strip() if q_existing else industry[0]
     return body
 
 

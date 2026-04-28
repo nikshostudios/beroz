@@ -2642,6 +2642,9 @@
             <!-- Left: recipient list -->
             <div class="seq-add-left">
               <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px">Recipients <span id="seq-add-count" style="font-weight:400;text-transform:none"></span></div>
+              <label style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <input type="checkbox" id="seq-rec-select-all" checked> Select all
+              </label>
               <div id="seq-add-recipient-list"></div>
             </div>
             <!-- Right: email preview -->
@@ -3488,7 +3491,7 @@
               <div id="sig-edit-body" contenteditable="true" spellcheck="true" style="min-height:120px;padding:10px 12px;border:1px solid var(--border-color);border-radius:var(--radius);font-size:13px;background:white;line-height:1.5"></div>
               <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
                 <button class="btn-secondary" id="sig-cancel-btn" type="button">Cancel</button>
-                <button class="btn-primary"   id="sig-save-btn"   type="button">Save signature</button>
+                <button class="btn-primary"   id="sig-save-btn"   type="button" style="cursor:pointer">Save signature</button>
               </div>
             </div>
           </div>
@@ -4330,13 +4333,16 @@
             const assignedLabel = assignedToLabel(req);
             const matchedCount = req.matched_count || 0;
             const isSelected = state.selectedRequirements.has(req.id);
+            const reqPinIcon = req.is_pinned
+              ? `<span class="material-icons-outlined" style="font-size:14px;color:#7c3aed;vertical-align:middle;margin-right:2px">push_pin</span>`
+              : '';
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
             tr.innerHTML = `
               <td class="${isTL ? 'inline-editable' : ''}" data-req-id="${req.id}" style="font-weight:500">
                 <span style="display:flex;align-items:center;gap:8px">
                   <input type="checkbox" class="req-card-check" data-req-id="${req.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()">
-                  <span class="editable-text">${esc(req.role_title || 'Untitled')}</span>
+                  <span class="editable-text">${reqPinIcon}${esc(req.role_title || 'Untitled')}</span>
                   ${isTL ? '<span class="material-icons-outlined edit-icon" style="font-size:14px;margin-left:2px;cursor:pointer">edit</span>' : ''}
                 </span>
               </td>
@@ -5610,7 +5616,7 @@
           <div id="job-posts-body">
             <div style="text-align:center;padding:24px;color:var(--text-secondary)">
               <div class="loading-spinner" style="margin:0 auto 8px"></div>
-              Generating 3 variants — usually 5-10 seconds…
+              Generating 3 variants — this may take a moment…
             </div>
           </div>
         </div>`;
@@ -6171,7 +6177,7 @@
 
         // Surface JD diagnostics inline if the parser flagged anything.
         // Otherwise just close the modal as before — no extra friction.
-        const dxHtml = renderJdDiagnostics(resp?.jd_parsed);
+        const dxHtml = renderJdDiagnostics(resp);
         if (dxHtml) {
           const slot = document.getElementById('req-jd-diagnostics-slot');
           if (slot) {
@@ -7636,8 +7642,14 @@
         item('Archive',      'archive',       `archiveSequence('${seqId}')`) +
         item('Delete',       'delete',        `deleteSequenceHard('${seqId}')`, { danger: true });
       document.body.appendChild(pop);
-      const r = ev.target.getBoundingClientRect();
-      pop.style.top = `${r.bottom + 4}px`;
+      const r = ev.currentTarget.getBoundingClientRect();
+      const popH = pop.offsetHeight;
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < popH + 8) {
+        pop.style.top = `${r.top - popH - 4}px`;
+      } else {
+        pop.style.top = `${r.bottom + 4}px`;
+      }
       pop.style.left = `${Math.min(r.right - 180, window.innerWidth - 200)}px`;
       const close = (e) => {
         if (!pop.contains(e.target)) {
@@ -7774,6 +7786,13 @@
       alert('Clone coming soon!');
     });
     function defaultSequenceName() {
+      const req = state.activeRequirement
+        ? (state.requirements || []).find(r => r.id === state.activeRequirement)
+        : null;
+      if (req) {
+        const client = req.client_name ? ` @ ${req.client_name}` : '';
+        return `${req.role_title || 'Sequence'}${client}`;
+      }
       const d = new Date();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
@@ -8004,6 +8023,9 @@
       const html_body = document.getElementById('sig-edit-body').innerHTML;
       const is_default = document.getElementById('sig-edit-default').checked;
       if (!name) { alert('Give the signature a name.'); return; }
+      const btn = document.getElementById('sig-save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
       try {
         if (sigState.editingId) {
           await api(`/api/signatures/${sigState.editingId}`,
@@ -8015,6 +8037,10 @@
         hideSignatureEditor();
         await loadSettingsSignatures();
       } catch (err) { alert('Error saving signature: ' + err.message); }
+      finally {
+        btn.disabled = false;
+        btn.textContent = 'Save signature';
+      }
     });
 
     function renderStepList() {
@@ -9016,6 +9042,7 @@
       try {
         const data = await api(`/api/sequences/${seqId}?days=${days}`);
         const seq = data?.sequence;
+        seqState.steps = seq?.steps || [];
         const runs = data?.runs || [];
         const metrics = data?.metrics || {};
         const chart = data?.chart || { days: [], sent: [], scheduled: [] };
@@ -9128,6 +9155,8 @@
         const hasIssue = r.issues && r.issues.length > 0;
         return `<div class="seq-recipient-row ${i === seqState.addContacts.activeIdx ? 'active' : ''}"
           data-rec-idx="${i}" onclick="selectRecipient(${i})">
+          <input type="checkbox" class="seq-rec-check" data-idx="${i}" checked
+            style="margin-right:8px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation()">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:13px">${esc(r.name || 'Unknown')}</div>
             <div style="font-size:11px;color:var(--text-secondary)">${esc(r.email || '(no email)')}</div>
@@ -9165,22 +9194,38 @@
       loadSequencesPageV2();
     });
 
+    document.getElementById('seq-rec-select-all')?.addEventListener('change', (e) => {
+      document.querySelectorAll('.seq-rec-check').forEach(cb => {
+        cb.checked = e.target.checked;
+      });
+    });
+
     document.getElementById('seq-add-enroll-btn')?.addEventListener('click', async () => {
       const { seqId, recipients, editedBodies } = seqState.addContacts;
       if (!recipients.length) return;
       const btn = document.getElementById('seq-add-enroll-btn');
       btn.disabled = true;
       btn.textContent = 'Enrolling…';
-      const enrollments = recipients.map((r, i) => ({
-        candidate_id: r.candidate_id,
-        to_email: editedBodies[`${i}_email`] ?? r.email,
-        subject: editedBodies[`${i}_subject`] ?? r.rendered_subject,
-        body: editedBodies[`${i}_body`] ?? r.rendered_body,
-      })).filter(e => e.candidate_id && e.to_email);
+      const checked = new Set(
+        [...document.querySelectorAll('.seq-rec-check:checked')]
+          .map(el => +el.dataset.idx)
+      );
+      const enrollments = recipients
+        .map((r, i) => ({ r, i }))
+        .filter(({ i }) => checked.has(i))
+        .map(({ r, i }) => ({
+          candidate_id: r.candidate_id,
+          to_email: editedBodies[`${i}_email`] ?? r.email,
+          subject: editedBodies[`${i}_subject`] ?? r.rendered_subject,
+          body: editedBodies[`${i}_body`] ?? r.rendered_body,
+        })).filter(e => e.candidate_id && e.to_email);
       try {
         const result = await api(`/api/sequences/${seqId}/enroll`,
           { method: 'POST', body: { enrollments } });
-        alert(`✓ ${result.enrolled} contact(s) enrolled. Step 1 emails are sending now.`);
+        const step0 = (seqState.steps || [])[0];
+        const t = step0?.send_time_local;
+        const sendMsg = t ? `Step 1 emails are scheduled for ${t} today.` : 'Step 1 emails are sending now.';
+        alert(`✓ ${result.enrolled} contact(s) enrolled. ${sendMsg}`);
         switchPage('sequence-detail');
         openSequenceDetail(seqId);
       } catch (err) {

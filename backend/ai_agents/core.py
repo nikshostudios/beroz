@@ -628,7 +628,7 @@ def parse_search(payload: dict) -> dict:
         raise CoreError(422, str(e))
 
 
-SEARCH_RESULT_LIMIT = 30
+SEARCH_RESULT_LIMIT = 50
 
 
 def _exp_years(cand: dict) -> float | None:
@@ -1758,7 +1758,7 @@ def wipe_all_requirements(user_role: str, user_email: str) -> dict:
     return {"status": "ok", "deleted": counts}
 
 
-DEFAULT_SOURCE_CAP_PER_REQ = 5
+DEFAULT_SOURCE_CAP_PER_REQ = 25
 
 
 async def _source_and_score_capped(req_id: str, cap: int,
@@ -4666,7 +4666,13 @@ def create_signature(payload: dict, user_role: str, user_email: str) -> dict:
         raise CoreError(422, "Signature name is required")
     if not html_body:
         raise CoreError(422, "Signature body is required")
-    sig = db.insert_signature(user_email, name, html_body, is_default)
+    try:
+        sig = db.insert_signature(user_email, name, html_body, is_default)
+    except Exception as e:
+        msg = str(e)
+        if "23505" in msg or "uniq_user_default_signature" in msg:
+            raise CoreError(409, "Another signature is already the default — remove it first or reload and try again.")
+        raise
     return {"signature": sig}
 
 
