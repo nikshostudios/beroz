@@ -274,6 +274,9 @@
       background: var(--bg-card); border: 1px solid var(--border-color);
       border-radius: var(--radius-lg); overflow: hidden;
     }
+    #requirements-table { table-layout: fixed; width: 100%; }
+    #requirements-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0; }
+    #requirements-table td:last-child { overflow: visible; white-space: nowrap; max-width: none; text-align: right; }
 
     .table-header {
       padding: 16px 20px; display: flex; align-items: center;
@@ -2238,13 +2241,13 @@
             <table id="requirements-table">
               <thead>
                 <tr>
-                  <th>Role Title</th>
-                  <th>Client</th>
-                  <th>Market</th>
-                  <th>Status</th>
-                  <th>Assigned To</th>
-                  <th>Candidates</th>
-                  <th style="width:110px"></th>
+                  <th style="width:30%">Role Title</th>
+                  <th style="width:13%">Client</th>
+                  <th style="width:9%">Market</th>
+                  <th style="width:9%">Status</th>
+                  <th style="width:21%">Assigned To</th>
+                  <th style="width:9%">Candidates</th>
+                  <th style="width:9%"></th>
                 </tr>
               </thead>
               <tbody id="requirements-tbody"></tbody>
@@ -4351,9 +4354,11 @@
               <td>${statusBadge}</td>
               <td>${esc(assignedLabel)}</td>
               <td>${matchedCount > 0 ? `<a href="#" onclick="event.preventDefault();event.stopPropagation();viewSourcedCandidates('${req.id}')" style="color:var(--brand-blue);text-decoration:none">${matchedCount} found</a>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-              <td style="white-space:nowrap">
-                <button class="btn-secondary" style="padding:4px 8px;font-size:12px" onclick="event.stopPropagation();sourceNow('${req.id}')">
-                  <span class="material-icons-outlined" style="font-size:13px;vertical-align:middle">person_search</span> Source Now
+              <td>
+                <button class="btn-secondary" title="${req.is_pinned ? 'Unpin' : 'Pin'}"
+                  style="padding:4px 6px;font-size:12px;${req.is_pinned ? 'color:#7c3aed;' : ''}"
+                  onclick="event.stopPropagation();pinRequirement('${req.id}', ${!req.is_pinned})">
+                  <span class="material-icons-outlined" style="font-size:16px;vertical-align:middle">push_pin</span>
                 </button>
                 <button class="btn-secondary" style="padding:4px 6px;font-size:12px;margin-left:4px" onclick="event.stopPropagation();openReqRowMenu(event,'${req.id}')">
                   <span class="material-icons-outlined" style="font-size:16px;vertical-align:middle">more_horiz</span>
@@ -4516,6 +4521,7 @@
          </div>`;
       const sep = `<div style="height:1px;background:var(--border-color);margin:4px 0"></div>`;
       pop.innerHTML =
+        item('Source Now', 'person_search', `sourceNow('${reqId}')`) +
         item(isPinned ? 'Unpin' : 'Pin', 'push_pin', `pinRequirement('${reqId}', ${!isPinned})`) +
         item('Edit',   'edit',          `viewRequirement('${reqId}')`) +
         item('Clone',  'content_copy',  `cloneRequirement('${reqId}')`) +
@@ -4524,7 +4530,13 @@
         item('Delete', 'delete',        `deleteRequirement('${reqId}')`, { danger: true });
       document.body.appendChild(pop);
       const r = ev.currentTarget.getBoundingClientRect();
-      pop.style.top = `${r.bottom + 4}px`;
+      const popH = pop.offsetHeight;
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < popH + 8) {
+        pop.style.top = `${r.top - popH - 4}px`;
+      } else {
+        pop.style.top = `${r.bottom + 4}px`;
+      }
       pop.style.left = `${Math.min(r.right - 180, window.innerWidth - 200)}px`;
       const close = (e) => {
         if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); }
