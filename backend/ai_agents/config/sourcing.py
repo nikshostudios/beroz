@@ -775,10 +775,39 @@ def _normalize_apify_linkedin(items: list[dict],
                                    or first.get("address")
                                    or first.get("value"))
 
-        # Tag any match_skill mentioned in the headline so the screener
-        # has signal to bite on.
-        h_lower = (headline or "").lower()
-        skills = [s for s in match_skills if s and s.lower() in h_lower]
+        # Build a skills corpus from every signal harvestapi returns —
+        # headline alone misses too much (e.g. a "PwC | ServiceNow Developer"
+        # headline credits the candidate with only ServiceNow, hiding their
+        # self-declared JavaScript / Glide API / Flow Designer expertise).
+        # Without this, LinkedIn candidates look skill-thin against
+        # Apollo's pre-enriched profiles and lose the screener's top-50 cut.
+        raw_skill_objs = it.get("skills") or []
+        own_skill_names: list[str] = []
+        if isinstance(raw_skill_objs, list):
+            for s in raw_skill_objs[:15]:
+                if isinstance(s, dict) and s.get("name"):
+                    own_skill_names.append(str(s["name"]).strip())
+                elif isinstance(s, str):
+                    own_skill_names.append(s.strip())
+        top_skills_str = it.get("topSkills") or ""
+        own_top = [p.strip() for p in top_skills_str.split("•")
+                   if p.strip()] if isinstance(top_skills_str, str) else []
+        corpus = " ".join(filter(None, [
+            headline, top_skills_str, it.get("about") or "",
+            " ".join(own_skill_names),
+        ])).lower()
+        skills = [s for s in match_skills if s and s.lower() in corpus]
+        # Layer in the candidate's self-declared topSkills + skills array
+        # (capped) so the screener has real signal even when the JD didn't
+        # name those specific terms verbatim.
+        seen = {s.lower() for s in skills}
+        for extra in own_top + own_skill_names:
+            key = extra.lower()
+            if extra and key not in seen:
+                skills.append(extra)
+                seen.add(key)
+            if len(skills) >= 12:
+                break
         if not skills:
             skills = list(match_skills)
         results.append({
