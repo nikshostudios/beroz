@@ -893,9 +893,13 @@ async def source_apify(skills: list[str], location: str | None,
     # harvestapi/linkedin-profile-search takes structured filters, not a
     # search URL. searchQuery is the fuzzy free-text field; currentJobTitles
     # / locations are array-typed structured filters that compose with it.
-    keyword = " ".join(s for s in (skills or []) if s).strip()
-    if not keyword and role_title:
-        keyword = role_title
+    # LinkedIn treats searchQuery as an AND match on the headline/bio, so
+    # concatenating every JD skill narrows results to <5. Prefer role_title
+    # (broad, predictable) and let the screener re-evaluate skills client-side.
+    # Fallback to top 2 skills mirrors the Apr 26 smoke test that returned
+    # 10 items, 9/10 bullseye for ServiceNow Dev + Bangalore.
+    keyword = role_title or " ".join(
+        s for s in (skills or [])[:2] if s).strip()
     geo = location or ("Singapore" if market == "SG" else "India")
 
     linkedin_body: dict = {
