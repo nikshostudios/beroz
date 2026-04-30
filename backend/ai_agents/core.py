@@ -5421,9 +5421,14 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                 linkedin_enrich_summary = None
         top_enriched = _enrich_top_candidates(
             top, requirement_id, user_email)
+        # Quick-win UX: ship the top candidates with the screener's done event
+        # so the frontend can switch to the results view immediately, while the
+        # outreach drafter keeps running. Drafts arrive on boost_done and get
+        # merged into the same rows in place.
         yield _sse({"event": "agent_done", "agent": "screener", "payload": {
             "scored_total": len(pool),
             "top_count": len(top_enriched),
+            "top_candidates": top_enriched,
         }})
         if auto_reveal_summary is not None:
             yield _sse({"event": "agent_done", "agent": "auto_reveal",

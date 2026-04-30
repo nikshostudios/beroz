@@ -2178,6 +2178,10 @@
                 <button id="btn-new-boost" class="btn-primary">New Boost</button>
               </div>
             </div>
+            <div id="boost-drafts-banner" style="display:none;padding:8px 16px;margin:8px 0;border:1px solid #c7d2fe;background:#eef2ff;border-radius:6px;font-size:12px;color:#3730a3;align-items:center;gap:8px">
+              <span class="material-icons-outlined spin" style="font-size:16px">autorenew</span>
+              <span>Drafting outreach emails in the background — they'll appear inline when ready. You can browse and shortlist now.</span>
+            </div>
             <div id="boost-candidate-list"></div>
           </div>
         </div>
@@ -8503,6 +8507,7 @@
         boostState.jdParsed = null;
         boostState.results = run.top_candidates || [];
         boostState.completedAt = run.completed_at || null;
+        boostState.draftsPending = false;
         const titleEl = document.getElementById('boost-req-title');
         if (titleEl) {
           const jd = (run.jd_text || '').slice(0, 60);
@@ -8620,6 +8625,7 @@
       boostState.results = [];
       boostState.currentSessionId = null;
       boostState.completedAt = null;
+      boostState.draftsPending = false;
 
       switchBoostView('progress');
       const statuses = {};
@@ -8726,6 +8732,15 @@
           const desc = document.getElementById('agent-desc-screener');
           if (desc) desc.textContent =
             `Scored ${evt.payload.scored_total || 0}, kept top ${evt.payload.top_count || 0}`;
+          // Quick-win UX: as soon as the screener finishes, jump the user to
+          // the results view with the top candidates. Drafts arrive later via
+          // boost_done; until then the banner advertises the background work.
+          if (Array.isArray(evt.payload.top_candidates) && evt.payload.top_candidates.length) {
+            boostState.results = evt.payload.top_candidates;
+            boostState.draftsPending = true;
+            renderBoostResults();
+            switchBoostView('results');
+          }
         }
         if (evt.agent === 'outreach_drafter' && evt.payload) {
           const desc = document.getElementById('agent-desc-outreach_drafter');
@@ -8743,6 +8758,7 @@
         boostState.results = evt.top_candidates || [];
         if (evt.boolean_string) boostState.booleanString = evt.boolean_string;
         boostState.completedAt = new Date().toISOString();
+        boostState.draftsPending = false;
         renderBoostResults();
         switchBoostView('results');
         // Refresh the session list so the just-finished run shows up.
@@ -8774,6 +8790,8 @@
     function renderBoostResults() {
       const countEl = document.getElementById('boost-top-count');
       if (countEl) countEl.textContent = boostState.results.length;
+      const banner = document.getElementById('boost-drafts-banner');
+      if (banner) banner.style.display = boostState.draftsPending ? 'flex' : 'none';
       const titleEl = document.getElementById('boost-req-title');
       // Only write the title from jdParsed on the fresh-run path;
       // loadBoostSession sets its own rehydrate title before calling us.
