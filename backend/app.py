@@ -3637,9 +3637,47 @@ def api_sequences_generate():
 
 # ── Agentic Boost ─────────────────────────────────────────────
 
+def _sse_with_keepalive(gen, ping_interval: int = 15):
+    """Yield items from gen; emit `: keepalive\\n\\n` if idle > ping_interval.
+
+    Runs the source generator on a daemon thread and feeds events back via a
+    Queue so this wrapper can fall through to a comment-line ping when the
+    upstream stays quiet. Without this, a single >30s LLM batch trips the
+    Railway/Cloudflare proxy idle timeout and silently kills the SSE socket.
+    """
+    import threading
+    import queue as _queue
+
+    q: _queue.Queue = _queue.Queue()
+    sentinel = object()
+    err_holder: dict = {}
+
+    def _producer():
+        try:
+            for item in gen:
+                q.put(item)
+        except Exception as e:
+            err_holder["e"] = e
+        finally:
+            q.put(sentinel)
+
+    threading.Thread(target=_producer, daemon=True).start()
+    while True:
+        try:
+            item = q.get(timeout=ping_interval)
+        except _queue.Empty:
+            yield ": keepalive\n\n"
+            continue
+        if item is sentinel:
+            if "e" in err_holder:
+                raise err_holder["e"]
+            return
+        yield item
+
+
 @app.route("/api/agentic-boost/launch", methods=["POST"])
 def api_agentic_boost_launch():
-    """SSE — multi-agent pipeline from JD paste to ranked candidates."""
+    """SSE — sourcing-only pipeline (screener + outreach are on-demand)."""
     if not is_logged_in():
         return jsonify({"error": "Not authenticated"}), 401
     role = session.get("recruiter_role", "recruiter")
@@ -3648,7 +3686,8 @@ def api_agentic_boost_launch():
 
     def _stream():
         try:
-            yield from ai_core.launch_agentic_boost_stream(payload, role, email)
+            gen = ai_core.launch_agentic_boost_stream(payload, role, email)
+            yield from _sse_with_keepalive(gen, ping_interval=15)
         except Exception as exc:
             import json as _json
             app.logger.exception("agentic boost stream crashed")
@@ -3659,6 +3698,42 @@ def api_agentic_boost_launch():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/api/agentic-boost/runs/<boost_id>/screen", methods=["POST"])
+def api_agentic_boost_screen(boost_id):
+    """SSE — on-demand screener for a sourcing-only boost run."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+
+    def _stream():
+        try:
+            gen = ai_core.screen_boost_run_stream(boost_id, role, email)
+            yield from _sse_with_keepalive(gen, ping_interval=15)
+        except Exception as exc:
+            import json as _json
+            app.logger.exception("agentic boost screen stream crashed")
+            yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
+
+    return Response(
+        stream_with_context(_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/agentic-boost/runs/<boost_id>/draft-outreach", methods=["POST"])
+def api_agentic_boost_draft_outreach(boost_id):
+    """Draft outreach emails for the supplied candidate IDs in this boost run."""
+    if not is_logged_in():
+        return jsonify({"error": "Not authenticated"}), 401
+    role = session.get("recruiter_role", "recruiter")
+    email = session.get("recruiter_email", "")
+    payload = request.get_json(silent=True) or {}
+    return _ai_core_call(ai_core.draft_boost_outreach,
+                         boost_id, payload, role, email)
 
 
 @app.route("/api/agentic-boost/runs", methods=["GET"])

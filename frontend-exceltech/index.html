@@ -2166,6 +2166,12 @@
                 <button id="btn-boost-shortlist" class="btn-secondary" disabled title="Shortlist the selected candidates">
                   <span class="material-icons-outlined">star_outline</span> Shortlist Selected (<span id="boost-shortlist-count">0</span>)
                 </button>
+                <button id="btn-draft-outreach-selected" class="btn-secondary" disabled title="Draft outreach for the selected candidates">
+                  <span class="material-icons-outlined">mail_outline</span> Draft Outreach (<span id="outreach-selected-count">0</span>)
+                </button>
+                <button id="btn-rerun-screening" class="btn-secondary" title="Re-score all candidates">
+                  <span class="material-icons-outlined">leaderboard</span> <span id="screening-status-label">Re-screen</span>
+                </button>
                 <button id="btn-copy-boolean" class="btn-secondary" title="Copy LinkedIn / Naukri / Foundit boolean search string">
                   <span class="material-icons-outlined">content_copy</span> Copy Boolean
                 </button>
@@ -8413,21 +8419,38 @@
 
     // ── Agentic Boost ─────────────────────────────────────────
 
+    // Auto-pipeline ends at sourcing. Screener + Outreach Drafter are
+    // on-demand (kicked off by the frontend from the results page) so they
+    // don't show up as agent cards in the running-pipeline view.
     const AGENTIC_BOOST_AGENTS = [
       { key: 'jd_parser',        label: 'JD Parser',        desc: 'Extracting skills + role' },
       { key: 'boolean_builder',  label: 'Boolean Builder',  desc: 'Building search string' },
       { key: 'sourcing',         label: 'Sourcing',         desc: 'Apollo + LinkedIn + Internal DB' },
-      { key: 'screener',         label: 'Screener',         desc: 'Scoring candidates' },
-      { key: 'outreach_drafter', label: 'Outreach Drafter', desc: 'Writing personalized emails' },
+    ];
+
+    // Visual ordering for the unsorted pool (before scores arrive). Keeps
+    // LinkedIn rows at the top so they're obviously visible the moment
+    // sourcing finishes.
+    const BOOST_SOURCE_ORDER = [
+      'linkedin_apify', 'apollo', 'github', 'huggingface',
+      'yc', 'web_agent', 'internal_db',
     ];
 
     const boostState = {
       controller: null,
+      screenController: null,
       boostId: null,
       requirementId: null,
       booleanString: '',
       jdParsed: null,
       results: [],
+      unsortedPool: [],
+      scoresByCandidateId: {},
+      screening: 'idle',           // 'idle' | 'running' | 'done' | 'error'
+      screeningProgress: 0,        // 0-100
+      screeningTotal: 0,
+      screeningScored: 0,
+      outreachDrafting: 'idle',    // 'idle' | 'running' | 'done' | 'error'
       sessions: [],
       currentSessionId: null,
       viewMode: localStorage.getItem('boostViewMode') || 'table',
@@ -8506,6 +8529,23 @@
         boostState.booleanString = run.boolean_string || '';
         boostState.jdParsed = null;
         boostState.results = run.top_candidates || [];
+        boostState.unsortedPool = run.unsorted_pool || [];
+        boostState.scoresByCandidateId = {};
+        // Stamp any cached scores from results onto scoresByCandidateId so the
+        // unsorted pool render shows them too.
+        boostState.results.forEach(c => {
+          const cid = c.candidate_id || c.id;
+          if (cid && typeof c.score === 'number') {
+            boostState.scoresByCandidateId[cid] = {
+              score: c.score, reasoning: c.reasoning,
+            };
+          }
+        });
+        boostState.screening = boostState.results.length ? 'done' : 'idle';
+        boostState.screeningProgress = 0;
+        boostState.screeningScored = 0;
+        boostState.screeningTotal = 0;
+        boostState.outreachDrafting = 'idle';
         boostState.completedAt = run.completed_at || null;
         boostState.draftsPending = false;
         const titleEl = document.getElementById('boost-req-title');
@@ -8528,6 +8568,17 @@
       if (orphanBanner) orphanBanner.style.display = 'none';
       boostState.orphanDismissed = true;
       boostState.results = [];
+      boostState.unsortedPool = [];
+      boostState.scoresByCandidateId = {};
+      boostState.screening = 'idle';
+      boostState.screeningProgress = 0;
+      boostState.screeningScored = 0;
+      boostState.screeningTotal = 0;
+      boostState.outreachDrafting = 'idle';
+      if (boostState.screenController) {
+        try { boostState.screenController.abort(); } catch (_) {}
+        boostState.screenController = null;
+      }
       boostState.boostId = null;
       boostState.requirementId = null;
       boostState.currentSessionId = null;
@@ -8562,6 +8613,14 @@
       const countEl = document.getElementById('boost-shortlist-count');
       if (btn) btn.disabled = count === 0;
       if (countEl) countEl.textContent = String(count);
+      // Same checkboxes also gate the Draft Outreach action.
+      const outreachBtn = document.getElementById('btn-draft-outreach-selected');
+      const outreachCountEl = document.getElementById('outreach-selected-count');
+      if (outreachBtn) {
+        outreachBtn.disabled = count === 0
+          || boostState.outreachDrafting === 'running';
+      }
+      if (outreachCountEl) outreachCountEl.textContent = String(count);
     }
 
     function wireBoostSelectionCheckboxes(container) {
@@ -8623,6 +8682,17 @@
       boostState.booleanString = '';
       boostState.jdParsed = null;
       boostState.results = [];
+      boostState.unsortedPool = [];
+      boostState.scoresByCandidateId = {};
+      boostState.screening = 'idle';
+      boostState.screeningProgress = 0;
+      boostState.screeningScored = 0;
+      boostState.screeningTotal = 0;
+      boostState.outreachDrafting = 'idle';
+      if (boostState.screenController) {
+        try { boostState.screenController.abort(); } catch (_) {}
+        boostState.screenController = null;
+      }
       boostState.currentSessionId = null;
       boostState.completedAt = null;
       boostState.draftsPending = false;
@@ -8755,7 +8825,16 @@
         renderBoostAgentCards(statuses);
       } else if (evt.event === 'boost_done') {
         boostState.requirementId = evt.requirement_id;
+        // Sourcing-only completion: top_candidates is empty, unsorted_pool
+        // carries every sourced candidate. Render immediately, then auto-fire
+        // the on-demand screener so scores stream in progressively.
         boostState.results = evt.top_candidates || [];
+        boostState.unsortedPool = evt.unsorted_pool || [];
+        boostState.scoresByCandidateId = {};
+        boostState.screening = 'idle';
+        boostState.screeningProgress = 0;
+        boostState.screeningScored = 0;
+        boostState.screeningTotal = boostState.unsortedPool.length;
         if (evt.boolean_string) boostState.booleanString = evt.boolean_string;
         boostState.completedAt = new Date().toISOString();
         boostState.draftsPending = false;
@@ -8766,6 +8845,12 @@
           boostState.sessions = d?.runs || [];
           populateBoostSessionPickers();
         }).catch(() => {});
+        // Auto-screen: fire only if we actually have an unsorted pool. Skips
+        // the kickoff when this `boost_done` came from an old screener-having
+        // run (no unsorted_pool field).
+        if (boostState.unsortedPool.length && boostState.boostId) {
+          startBoostScreening({ rerun: false });
+        }
       } else if (evt.event === 'error') {
         let msg = 'Pipeline error: ' + evt.message;
         const c = boostState.sourcingCounts;
@@ -8787,9 +8872,61 @@
       }
     }
 
+    function _boostMergedRows() {
+      // Merge unsorted_pool with whatever scores have streamed in. If the run
+      // came from the legacy auto-screened path (results populated, pool
+      // empty), just show results. Otherwise overlay scores onto the pool.
+      const scores = boostState.scoresByCandidateId || {};
+      const haveScores = Object.keys(scores).length > 0;
+      if (!boostState.unsortedPool?.length && boostState.results?.length) {
+        return boostState.results.slice();
+      }
+      const rows = (boostState.unsortedPool || []).map(c => {
+        const s = scores[c.id];
+        if (!s) return { ...c };
+        return {
+          ...c,
+          score: s.score,
+          reasoning: s.reasoning,
+          candidate_id: c.id,
+        };
+      });
+      // Sort: scored rows first by score DESC, unscored grouped by source.
+      rows.sort((a, b) => {
+        const aScored = typeof a.score === 'number';
+        const bScored = typeof b.score === 'number';
+        if (aScored && bScored) return b.score - a.score;
+        if (aScored) return -1;
+        if (bScored) return 1;
+        const aIdx = BOOST_SOURCE_ORDER.indexOf(a.source || 'internal_db');
+        const bIdx = BOOST_SOURCE_ORDER.indexOf(b.source || 'internal_db');
+        return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+      });
+      return rows;
+    }
+
+    function _updateScreeningStatusUI() {
+      const btn = document.getElementById('btn-rerun-screening');
+      const lbl = document.getElementById('screening-status-label');
+      if (!lbl || !btn) return;
+      if (boostState.screening === 'running') {
+        const pct = boostState.screeningProgress || 0;
+        lbl.textContent = `Screening… ${pct}%`;
+        btn.disabled = true;
+      } else if (boostState.screening === 'error') {
+        lbl.textContent = 'Re-screen';
+        btn.disabled = !boostState.boostId;
+      } else {
+        lbl.textContent = (boostState.screening === 'done')
+          ? 'Re-screen' : 'Screen now';
+        btn.disabled = !boostState.boostId;
+      }
+    }
+
     function renderBoostResults() {
+      const rows = _boostMergedRows();
       const countEl = document.getElementById('boost-top-count');
-      if (countEl) countEl.textContent = boostState.results.length;
+      if (countEl) countEl.textContent = rows.length;
       const banner = document.getElementById('boost-drafts-banner');
       if (banner) banner.style.display = boostState.draftsPending ? 'flex' : 'none';
       const titleEl = document.getElementById('boost-req-title');
@@ -8803,14 +8940,15 @@
       if (picker && boostState.currentSessionId) {
         picker.value = boostState.currentSessionId;
       }
+      _updateScreeningStatusUI();
       const list = document.getElementById('boost-candidate-list');
       if (!list) return;
-      if (!boostState.results.length) {
-        list.innerHTML = '<div class="boost-muted" style="padding:24px;text-align:center">No candidates passed the screening threshold.</div>';
+      if (!rows.length) {
+        list.innerHTML = '<div class="boost-muted" style="padding:24px;text-align:center">No candidates were sourced.</div>';
         updateBoostShortlistButton();
         return;
       }
-      list.innerHTML = renderSearchResults(boostState.results, [], {
+      list.innerHTML = renderSearchResults(rows, [], {
         withCheckboxes: true,
         mode: boostState.viewMode || 'table',
         toggleFn: 'setBoostViewMode',
@@ -8825,6 +8963,112 @@
         });
       }
       wireBoostSelectionCheckboxes(list);
+    }
+
+    async function startBoostScreening({ rerun = false } = {}) {
+      if (!boostState.boostId) return;
+      if (boostState.screening === 'running') return;
+      // Cancel any prior screen stream — the new request will idempotently
+      // overwrite scores via on_conflict.
+      if (boostState.screenController) {
+        try { boostState.screenController.abort(); } catch (_) {}
+      }
+      boostState.screening = 'running';
+      boostState.screeningProgress = 0;
+      if (!rerun) {
+        boostState.screeningScored = 0;
+        boostState.screeningTotal = boostState.unsortedPool.length || 0;
+      }
+      _updateScreeningStatusUI();
+
+      const controller = new AbortController();
+      boostState.screenController = controller;
+      try {
+        const resp = await fetch(`/api/agentic-boost/runs/${boostState.boostId}/screen`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+        });
+        if (resp.status === 401) { window.location.href = '/'; return; }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const chunks = buf.split('\n\n');
+          buf = chunks.pop();
+          for (const chunk of chunks) {
+            if (!chunk.startsWith('data: ')) continue;
+            let evt;
+            try { evt = JSON.parse(chunk.slice(6)); } catch { continue; }
+            handleBoostScreenEvent(evt);
+          }
+        }
+        boostState.screening = 'done';
+        boostState.screeningProgress = 100;
+        _updateScreeningStatusUI();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('Screen stream error:', err);
+        boostState.screening = 'error';
+        _updateScreeningStatusUI();
+      } finally {
+        if (boostState.screenController === controller) {
+          boostState.screenController = null;
+        }
+      }
+    }
+
+    function handleBoostScreenEvent(evt) {
+      if (!evt || !evt.event) return;
+      if (evt.event === 'agent_start' && evt.agent === 'screener') {
+        boostState.screeningTotal = evt.total || boostState.screeningTotal || 0;
+        boostState.screeningScored = 0;
+        boostState.screeningProgress = 0;
+        _updateScreeningStatusUI();
+      } else if (evt.event === 'agent_progress' && evt.agent === 'screener') {
+        const incoming = Array.isArray(evt.scores) ? evt.scores : [];
+        incoming.forEach(s => {
+          if (s && s.candidate_id) {
+            boostState.scoresByCandidateId[s.candidate_id] = {
+              score: s.score, reasoning: s.reasoning,
+            };
+          }
+        });
+        boostState.screeningScored = evt.scored || boostState.screeningScored;
+        boostState.screeningTotal = evt.total || boostState.screeningTotal;
+        if (boostState.screeningTotal > 0) {
+          boostState.screeningProgress = Math.min(100, Math.round(
+            (boostState.screeningScored / boostState.screeningTotal) * 100));
+        }
+        renderBoostResults();
+      } else if (evt.event === 'screening_done') {
+        boostState.screening = 'done';
+        boostState.screeningProgress = 100;
+        // The server-side enrich produced richer rows for the top_candidates
+        // (with draft state, shortlist flags). Merge those into results so
+        // the existing draft / shortlist UX still works for the top cohort.
+        const enriched = evt.top_candidates || [];
+        boostState.results = enriched;
+        // Stamp those scores into scoresByCandidateId too so the unsorted pool
+        // shows them on the next render.
+        enriched.forEach(c => {
+          const cid = c.candidate_id || c.id;
+          if (cid && typeof c.score === 'number') {
+            boostState.scoresByCandidateId[cid] = {
+              score: c.score, reasoning: c.reasoning,
+            };
+          }
+        });
+        renderBoostResults();
+      } else if (evt.event === 'error') {
+        boostState.screening = 'error';
+        _updateScreeningStatusUI();
+      }
     }
 
     async function sendBoostDraft(draftId, btn) {
@@ -8911,16 +9155,22 @@
         const origHtml = slBtn.innerHTML;
         slBtn.innerHTML = '<span class="material-icons-outlined">hourglass_top</span> Shortlisting…';
         try {
-          const pool = boostState.results;
-          const allAlready = ids.every(id => pool.find(c => c.id === id)?.shortlisted);
+          // Lookup in both results (top, post-screen) and unsortedPool
+          // (pre-screen) so the toggle works whichever pool the row is in.
+          const findCand = (id) =>
+            (boostState.results || []).find(c => c.id === id)
+            || (boostState.unsortedPool || []).find(c => c.id === id);
+          const allAlready = ids.every(id => findCand(id)?.shortlisted);
           await Promise.all(ids.map(id =>
             api(`/api/candidates/${id}/shortlist`, {
               method: 'POST',
               body: { unshortlist: allAlready },
             })
           ));
-          pool.forEach(c => {
-            if (ids.includes(c.id)) c.shortlisted = !allAlready;
+          [boostState.results, boostState.unsortedPool].forEach(pool => {
+            (pool || []).forEach(c => {
+              if (ids.includes(c.id)) c.shortlisted = !allAlready;
+            });
           });
           slBtn.innerHTML = '<span class="material-icons-outlined">check</span> ' +
             (allAlready ? 'Unshortlisted' : 'Shortlisted');
@@ -8929,6 +9179,68 @@
           alert('Shortlist update failed: ' + err.message);
           slBtn.innerHTML = origHtml;
           slBtn.disabled = false;
+        }
+      });
+
+      // Re-screen: kick off (or restart) the on-demand screener.
+      const rescreenBtn = document.getElementById('btn-rerun-screening');
+      if (rescreenBtn) rescreenBtn.addEventListener('click', () => {
+        if (!boostState.boostId) {
+          alert('No boost run to screen yet.');
+          return;
+        }
+        startBoostScreening({ rerun: true });
+      });
+
+      // Draft outreach for the selected candidates.
+      const draftBtn = document.getElementById('btn-draft-outreach-selected');
+      if (draftBtn) draftBtn.addEventListener('click', async () => {
+        const list = document.getElementById('boost-candidate-list');
+        if (!list || !boostState.boostId) return;
+        const ids = Array.from(
+          list.querySelectorAll('.seq-cand-check:checked')
+        ).map(cb => cb.dataset.candId).filter(Boolean);
+        if (!ids.length) return;
+        if (ids.length > 25) {
+          if (!confirm(`Draft outreach for ${ids.length} candidates? This will use one Claude call + ${ids.length} DB inserts.`)) {
+            return;
+          }
+        }
+        boostState.outreachDrafting = 'running';
+        draftBtn.disabled = true;
+        const orig = draftBtn.innerHTML;
+        draftBtn.innerHTML = '<span class="material-icons-outlined">hourglass_top</span> Drafting…';
+        try {
+          const resp = await api(`/api/agentic-boost/runs/${boostState.boostId}/draft-outreach`, {
+            method: 'POST', body: { candidate_ids: ids },
+          });
+          const drafts = resp?.drafts || [];
+          let persisted = 0;
+          drafts.forEach(d => {
+            if (d.draft_id) persisted += 1;
+            // Stamp draft fields onto the matching row in either pool so the
+            // existing inline draft chip can pick them up on next render.
+            [boostState.results, boostState.unsortedPool].forEach(pool => {
+              (pool || []).forEach(c => {
+                if (c.id === d.candidate_id) {
+                  if (d.draft_id) c.draft_id = d.draft_id;
+                  c.draft_subject = d.subject;
+                  c.draft_body = d.body;
+                  c.draft_sendable = d.sendable;
+                  c.draft_status = d.sendable ? 'draft' : c.draft_status;
+                }
+              });
+            });
+          });
+          renderBoostResults();
+          draftBtn.innerHTML = `<span class="material-icons-outlined">check</span> Drafted ${persisted}`;
+          setTimeout(() => { draftBtn.innerHTML = orig; updateBoostShortlistButton(); }, 1500);
+          boostState.outreachDrafting = 'done';
+        } catch (err) {
+          alert('Draft outreach failed: ' + err.message);
+          draftBtn.innerHTML = orig;
+          boostState.outreachDrafting = 'error';
+          updateBoostShortlistButton();
         }
       });
 

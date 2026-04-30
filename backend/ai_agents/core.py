@@ -155,10 +155,18 @@ def _log_tokens(endpoint: str, model: str, input_tokens: int,
 
 
 def _call_claude(model: str, system: str, user_msg: str,
-                 max_tokens: int = 2048, endpoint: str = "unknown") -> str:
+                 max_tokens: int = 2048, endpoint: str = "unknown",
+                 max_retries: int | None = None) -> str:
     if _claude is None:
         raise CoreError(500, "Anthropic client not initialized — check ANTHROPIC_API_KEY")
-    resp = _claude.messages.create(
+    client = _claude
+    # The Anthropic SDK silently retries 2× by default, stacking 60s timeouts
+    # into ~180s per call. Screener batches must surface a hung call quickly
+    # so the proxy keepalive can keep the SSE socket alive — pass
+    # max_retries=0 for those call sites.
+    if max_retries is not None:
+        client = _claude.with_options(max_retries=max_retries)
+    resp = client.messages.create(
         model=model, max_tokens=max_tokens, system=system,
         messages=[{"role": "user", "content": user_msg}],
         timeout=60.0,
@@ -260,6 +268,10 @@ def _score_candidate_batch(candidates: list[dict], requirement: dict) -> list[di
         "You are an expert IT recruitment matcher. Score candidates accurately. "
         "Understand skill synonyms, related technologies, and experience levels.",
         prompt, max_tokens=4096, endpoint="/match-scoring",
+        # SDK default of 2 retries × 60s timeout can stack to ~3 min per batch
+        # and trip the proxy idle-timeout that kills the SSE socket. Single
+        # 60s attempt — let our outer batch loop retry the next batch fresh.
+        max_retries=0,
     )
     parsed = _parse_llm_json(result_text)
     if not isinstance(parsed, list):
@@ -4944,6 +4956,261 @@ def _enrich_top_candidates(top: list[dict], requirement_id: str,
     return out
 
 
+_UNSORTED_POOL_FIELDS = (
+    "id", "name", "email", "phone", "current_job_title", "current_employer",
+    "current_location", "skills", "source", "source_profile_url",
+    "do_not_email", "do_not_call",
+)
+
+
+def _shape_unsorted_pool(pool: list[dict]) -> list[dict]:
+    """Strip a sourced candidate pool to the fields the frontend renders.
+
+    The full row shape leaking out of internal_db / apify / apollo upserts
+    contains internal columns + jsonb metadata that we don't want to ship to
+    the browser. Keep this in sync with `_enrich_top_candidates` so the
+    progressive-render path can stamp scores onto the same row shape.
+    """
+    out: list[dict] = []
+    for c in pool or []:
+        if not c.get("id"):
+            continue
+        out.append({k: c.get(k) for k in _UNSORTED_POOL_FIELDS if k in c})
+    return out
+
+
+def _resolve_boost_pool(row: dict, requirement: dict) -> list[dict]:
+    """Re-derive the candidate pool for a sourced-but-not-screened boost run.
+
+    Preference order:
+      1. Explicit `sourced_candidate_ids` on the boost row (the post-B1
+         shape — written at sourcing completion).
+      2. `match_scores` rows for this requirement (fallback for runs that
+         already started screening — they have rows in match_scores).
+      3. Internal DB pool by skill overlap (legacy runs that never persisted
+         the IDs and never started screening).
+
+    Returns full candidate dicts; downstream callers `select`-trim as needed.
+    """
+    requirement_id = row.get("requirement_id")
+    sourced_ids = row.get("sourced_candidate_ids") or []
+    if not sourced_ids and requirement_id:
+        try:
+            ms_rows = (db.get_client().table("match_scores")
+                       .select("candidate_id")
+                       .eq("requirement_id", requirement_id)
+                       .execute().data) or []
+            sourced_ids = [r["candidate_id"] for r in ms_rows
+                           if r.get("candidate_id")]
+        except Exception:
+            log.exception("resolve_boost_pool: match_scores lookup failed")
+            sourced_ids = []
+    if sourced_ids:
+        try:
+            cand_rows = (db.get_client().table("candidates")
+                         .select("*")
+                         .in_("id", sourced_ids)
+                         .execute().data) or []
+            return cand_rows
+        except Exception:
+            log.exception("resolve_boost_pool: candidates fetch failed")
+    # Legacy fallback — re-derive an internal-DB pool.
+    try:
+        return _run_async(_internal_db_search(requirement, limit=200))
+    except Exception:
+        log.exception("resolve_boost_pool: internal_db fallback failed")
+        return []
+
+
+def screen_boost_run_stream(boost_id: str, user_role: str, user_email: str):
+    """SSE generator — score the candidate pool for an existing boost run.
+
+    Mirrors the screener block previously embedded in
+    `launch_agentic_boost_stream`. Emits per-batch `agent_progress` events
+    with the actual scores so the frontend can update each candidate row in
+    place + re-sort. `screening_done` is the final event.
+    """
+    try:
+        _require_role(user_role, ["recruiter", "tl"])
+    except CoreError as e:
+        yield _sse({"event": "error", "message": e.message})
+        return
+
+    row = db.get_boost_run(boost_id)
+    if not row:
+        yield _sse({"event": "error", "message": "Boost run not found"})
+        return
+    if row.get("created_by") != user_email and user_role != "tl":
+        yield _sse({"event": "error", "message": "Not your boost run"})
+        return
+    requirement_id = row.get("requirement_id")
+    if not requirement_id:
+        yield _sse({"event": "error",
+                    "message": "Boost run has no linked requirement"})
+        return
+
+    requirement = db.get_requirement_by_id(requirement_id)
+    if not requirement:
+        yield _sse({"event": "error", "message": "Requirement not found"})
+        return
+
+    pool = _resolve_boost_pool(row, requirement)
+    if not pool:
+        yield _sse({"event": "error",
+                    "message": "No candidates available to score"})
+        return
+
+    yield _sse({"event": "agent_start", "agent": "screener",
+                "label": f"Scoring {len(pool)} candidates",
+                "total": len(pool)})
+
+    all_ids = [c["id"] for c in pool if c.get("id")]
+    cached = db.get_cached_match_scores(requirement_id, all_ids)
+    # Stream cached scores up-front so previously-screened rows light up
+    # immediately on a re-screen rather than waiting for the full loop.
+    if cached:
+        cached_payload = [
+            {"candidate_id": cid,
+             "score": data.get("score"),
+             "reasoning": data.get("reasoning")}
+            for cid, data in cached.items()
+        ]
+        yield _sse({"event": "agent_progress", "agent": "screener",
+                    "scored": len(cached_payload),
+                    "total": len(pool),
+                    "scores": cached_payload,
+                    "from_cache": True})
+
+    to_score = [c for c in pool if c["id"] not in cached]
+    progress = len(cached)
+    if to_score:
+        for i in range(0, len(to_score), MATCH_BATCH_SIZE):
+            batch = to_score[i:i + MATCH_BATCH_SIZE]
+            try:
+                batch_scores = _score_candidate_batch(batch, requirement)
+            except Exception:
+                log.exception("screener batch failed (i=%s)", i)
+                batch_scores = []
+            if batch_scores:
+                try:
+                    db.upsert_match_scores(requirement_id, batch_scores)
+                except Exception:
+                    log.exception(
+                        "screener: per-batch upsert failed (i=%s)", i)
+            progress += len(batch)
+            yield _sse({"event": "agent_progress", "agent": "screener",
+                        "scored": progress,
+                        "total": len(pool),
+                        "scores": batch_scores})
+
+    # Auto-reveal + linkedin enrichment, same shape as the original auto path.
+    top = (db.get_match_scores_above(
+        requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
+    auto_reveal_summary = None
+    try:
+        auto_reveal_summary = _auto_reveal_top_reachable(
+            requirement_id=requirement_id,
+            candidate_ids_by_score=[t["candidate_id"] for t in top
+                                    if t.get("candidate_id")],
+            requested_by=user_email,
+            budget=5,
+        )
+    except Exception:
+        log.exception("screener: auto-reveal pass failed")
+
+    linkedin_enrich_summary = None
+    if os.environ.get("APIFY_TOKEN"):
+        try:
+            linkedin_enrich_summary = _run_async(
+                _auto_enrich_linkedin_top(
+                    candidate_ids_by_score=[
+                        t["candidate_id"] for t in top
+                        if t.get("candidate_id")],
+                    budget=5,
+                ))
+        except Exception:
+            log.exception("screener: linkedin enrichment failed")
+
+    top_enriched = _enrich_top_candidates(top, requirement_id, user_email)
+
+    if auto_reveal_summary is not None:
+        yield _sse({"event": "agent_done", "agent": "auto_reveal",
+                    "payload": auto_reveal_summary})
+    if linkedin_enrich_summary is not None:
+        yield _sse({"event": "agent_done", "agent": "linkedin_enrich",
+                    "payload": linkedin_enrich_summary})
+    yield _sse({"event": "screening_done",
+                "boost_id": boost_id,
+                "requirement_id": requirement_id,
+                "scored_total": len(pool),
+                "top_candidates": top_enriched})
+
+
+def draft_boost_outreach(boost_id: str, payload: dict,
+                         user_role: str, user_email: str) -> dict:
+    """Draft outreach emails for the supplied candidate IDs in a boost run.
+
+    Single LLM call (template) + per-candidate name substitution + N inserts
+    into outreach_log. Returns the persisted draft IDs so the frontend can
+    open the editor / send dialog without a follow-up fetch.
+    """
+    _require_role(user_role, ["recruiter", "tl"])
+    if not isinstance(payload, dict):
+        raise CoreError(422, "request body must be a JSON object")
+    cand_ids = payload.get("candidate_ids")
+    if not isinstance(cand_ids, list) or not cand_ids:
+        raise CoreError(422, "candidate_ids must be a non-empty list")
+
+    row = db.get_boost_run(boost_id)
+    if not row:
+        raise CoreError(404, "Boost run not found")
+    if row.get("created_by") != user_email and user_role != "tl":
+        raise CoreError(403, "Not your boost run")
+    requirement_id = row.get("requirement_id")
+    if not requirement_id:
+        raise CoreError(409, "Boost run has no linked requirement")
+
+    draft_result = draft_sequence(
+        {"requirement_id": requirement_id,
+         "candidate_ids": cand_ids,
+         "recruiter_name": user_email.split("@")[0].title()},
+        user_role, user_email,
+    )
+
+    drafts: list[dict] = []
+    for em in (draft_result.get("emails") or []):
+        cid = em.get("candidate_id")
+        sendable = bool(em.get("sendable"))
+        draft_id = None
+        if sendable:
+            try:
+                log_row = db.insert_outreach_log({
+                    "candidate_id": cid,
+                    "requirement_id": requirement_id,
+                    "recruiter_email": user_email,
+                    "email_subject": em["subject"],
+                    "email_body": em["body"],
+                    "status": "draft",
+                })
+                draft_id = log_row["id"]
+            except Exception:
+                log.exception(
+                    "draft_boost_outreach: persist failed cid=%s", cid)
+        drafts.append({
+            "candidate_id": cid,
+            "draft_id": draft_id,
+            "subject": em.get("subject"),
+            "body": em.get("body"),
+            "sendable": sendable,
+            "to_email": em.get("to_email"),
+            "to_name": em.get("to_name"),
+        })
+    return {"status": "ok",
+            "boost_id": boost_id,
+            "requirement_id": requirement_id,
+            "drafts": drafts}
+
+
 def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
     """SSE generator — drives the 5-agent Agentic Boost pipeline.
 
@@ -4982,8 +5249,11 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         return
 
     boost_id = boost_row["id"]
+    # Auto-pipeline runs only the first 3 agents (JD parser → boolean builder
+    # → sourcing). Screener + outreach drafter are now on-demand — fired by
+    # the frontend after `boost_done` lands.
     yield _sse({"event": "boost_start",
-                "boost_id": boost_id, "total_agents": 5})
+                "boost_id": boost_id, "total_agents": 3})
 
     # ── Agent 1: JD Parser ─────────────────────────────────────
     yield _sse({"event": "agent_start", "agent": "jd_parser",
@@ -5356,173 +5626,38 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
             pass
         return
 
-    # ── Agent 4: Screener ──────────────────────────────────────
-    yield _sse({"event": "agent_start", "agent": "screener", "idx": 4,
-                "label": f"Scoring {len(pool)} candidates"})
-    top_enriched: list[dict] = []
+    # ── Sourcing-only completion ────────────────────────────────
+    # The auto-pipeline now stops after sourcing. Screener + Outreach Drafter
+    # are on-demand: the frontend kicks off screening immediately on
+    # `boost_done`, but the user is already looking at unsorted candidates by
+    # then. Outreach is per-checkbox via the new draft-outreach endpoint.
+    sourced_ids = [c["id"] for c in pool if c.get("id")]
+    boost_patch: dict = {
+        "status": "completed",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
     try:
-        all_ids = [c["id"] for c in pool]
-        cached = db.get_cached_match_scores(requirement_id, all_ids)
-        to_score = [c for c in pool if c["id"] not in cached]
-        new_scores: list[dict] = []
-        if to_score:
-            for i in range(0, len(to_score), MATCH_BATCH_SIZE):
-                batch = to_score[i:i + MATCH_BATCH_SIZE]
-                try:
-                    batch_scores = _score_candidate_batch(batch, requirement)
-                except Exception:
-                    log.exception("screener batch failed (i=%s)", i)
-                    batch_scores = []
-                new_scores.extend(batch_scores)
-                # Persist per-batch so a stalled run still leaves partial top
-                # candidates visible on rehydrate (get_agentic_boost_run reads
-                # match_scores directly). on_conflict makes this idempotent.
-                if batch_scores:
-                    try:
-                        db.upsert_match_scores(requirement_id, batch_scores)
-                    except Exception:
-                        log.exception("screener: per-batch upsert failed (i=%s)", i)
-                yield _sse({"event": "agent_progress", "agent": "screener",
-                            "message": (f"Scored "
-                                        f"{min(i + MATCH_BATCH_SIZE, len(to_score))}"
-                                        f"/{len(to_score)}")})
-        top = (db.get_match_scores_above(
-            requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
-        # Auto-reveal: budget=5. Walks the score-ordered top list and reveals
-        # the highest-scoring Apollo rows Apollo itself flagged reachable.
-        # Runs BEFORE _enrich so freshly-revealed emails flow into outreach.
-        try:
-            auto_reveal_summary = _auto_reveal_top_reachable(
-                requirement_id=requirement_id,
-                candidate_ids_by_score=[t["candidate_id"] for t in top
-                                        if t.get("candidate_id")],
-                requested_by=user_email,
-                budget=5,
-            )
-        except Exception:
-            log.exception("agentic boost: auto-reveal pass failed")
-            auto_reveal_summary = None
-        # LinkedIn enrichment: budget=5. Mirrors the Apollo auto-reveal but
-        # for non-Apollo top rows that have a LinkedIn URL and no email.
-        # Hits harvestapi/linkedin-profile-scraper to backfill email + phone
-        # so outreach drafting has something to send to.
-        linkedin_enrich_summary = None
-        if os.environ.get("APIFY_TOKEN"):
-            try:
-                linkedin_enrich_summary = _run_async(
-                    _auto_enrich_linkedin_top(
-                        candidate_ids_by_score=[
-                            t["candidate_id"] for t in top
-                            if t.get("candidate_id")],
-                        budget=5,
-                    ))
-            except Exception:
-                log.exception("agentic boost: linkedin enrichment failed")
-                linkedin_enrich_summary = None
-        top_enriched = _enrich_top_candidates(
-            top, requirement_id, user_email)
-        # Quick-win UX: ship the top candidates with the screener's done event
-        # so the frontend can switch to the results view immediately, while the
-        # outreach drafter keeps running. Drafts arrive on boost_done and get
-        # merged into the same rows in place.
-        yield _sse({"event": "agent_done", "agent": "screener", "payload": {
-            "scored_total": len(pool),
-            "top_count": len(top_enriched),
-            "top_candidates": top_enriched,
-        }})
-        if auto_reveal_summary is not None:
-            yield _sse({"event": "agent_done", "agent": "auto_reveal",
-                        "payload": auto_reveal_summary})
-        if linkedin_enrich_summary is not None:
-            yield _sse({"event": "agent_done", "agent": "linkedin_enrich",
-                        "payload": linkedin_enrich_summary})
-    except Exception as exc:
-        log.exception("agentic boost: screener failed")
-        yield _sse({"event": "agent_error", "agent": "screener",
-                    "message": str(exc)})
-        yield _sse({"event": "error",
-                    "message": "Pipeline aborted — screening failed"})
-        try:
-            db.update_boost_run(boost_id, {"status": "failed"})
-        except Exception:
-            pass
-        return
-
-    # ── Agent 5: Outreach Drafter ──────────────────────────────
-    yield _sse({"event": "agent_start", "agent": "outreach_drafter",
-                "idx": 5,
-                "label": f"Drafting {len(top_enriched)} emails"})
-    if not top_enriched:
-        yield _sse({"event": "agent_done", "agent": "outreach_drafter",
-                    "payload": {"drafts_created": 0}})
-    else:
-        try:
-            draft_result = draft_sequence(
-                {"requirement_id": requirement_id,
-                 "candidate_ids": [t["candidate_id"] for t in top_enriched],
-                 "recruiter_name": user_email.split("@")[0].title()},
-                user_role, user_email,
-            )
-            draft_ids_by_candidate: dict[str, str] = {}
-            drafts_by_candidate: dict[str, dict] = {}
-            for em in (draft_result.get("emails") or []):
-                drafts_by_candidate[em["candidate_id"]] = em
-                if not em.get("sendable"):
-                    continue
-                try:
-                    log_row = db.insert_outreach_log({
-                        "candidate_id": em["candidate_id"],
-                        "requirement_id": requirement_id,
-                        "recruiter_email": user_email,
-                        "email_subject": em["subject"],
-                        "email_body": em["body"],
-                        "status": "draft",
-                    })
-                    draft_ids_by_candidate[em["candidate_id"]] = log_row["id"]
-                except Exception:
-                    log.exception("draft persist failed for candidate %s",
-                                  em.get("candidate_id"))
-            # Merge just-drafted subject/body over whatever the enricher
-            # already stamped from DB (fresh drafts win — matters on the
-            # live path where the DB row was just inserted above).
-            for t in top_enriched:
-                cid = t.get("candidate_id") or t.get("id")
-                em = drafts_by_candidate.get(cid)
-                did = draft_ids_by_candidate.get(cid)
-                if did:
-                    t["draft_id"] = did
-                if em:
-                    t["draft_subject"] = em.get("subject")
-                    t["draft_body"] = em.get("body")
-                    t["draft_sendable"] = em.get("sendable", False)
-                    t["draft_status"] = ("draft" if em.get("sendable")
-                                         else t.get("draft_status"))
-                else:
-                    t.setdefault("draft_sendable", False)
-            yield _sse({"event": "agent_done", "agent": "outreach_drafter",
-                        "payload": {
-                            "drafts_created": len(draft_ids_by_candidate),
-                        }})
-        except Exception as exc:
-            log.exception("agentic boost: outreach drafter failed")
-            yield _sse({"event": "agent_error", "agent": "outreach_drafter",
-                        "message": str(exc)})
-
-    # ── Done ───────────────────────────────────────────────────
-    try:
-        db.update_boost_run(boost_id, {
-            "status": "completed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-        })
+        # Persist the sourced IDs so the on-demand screener / outreach can
+        # rebuild the same pool without re-hitting Apollo / GitHub / Apify.
+        # Falls back to a status-only update if the schema migration for
+        # `sourced_candidate_ids` hasn't been applied yet.
+        db.update_boost_run(boost_id,
+                            {**boost_patch, "sourced_candidate_ids": sourced_ids})
     except Exception:
-        log.exception("agentic boost: failed to mark run completed")
+        log.exception(
+            "agentic boost: sourced_candidate_ids update failed; falling back")
+        try:
+            db.update_boost_run(boost_id, boost_patch)
+        except Exception:
+            log.exception("agentic boost: failed to mark run completed")
 
     yield _sse({"event": "boost_done",
                 "boost_id": boost_id,
                 "requirement_id": requirement_id,
                 "boolean_string": boolean_output.get("boolean_string", ""),
                 "linkedin_url": boolean_output.get("linkedin_url", ""),
-                "top_candidates": top_enriched})
+                "unsorted_pool": _shape_unsorted_pool(pool),
+                "top_candidates": []})
 
 
 def get_agentic_boost_run(boost_id: str, user_role: str,
@@ -5538,6 +5673,24 @@ def get_agentic_boost_run(boost_id: str, user_role: str,
             row["requirement_id"], min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
         row["top_candidates"] = _enrich_top_candidates(
             top_raw, row["requirement_id"], user_email)
+        # Also rehydrate the unsorted pool so sourcing-only runs (no scores
+        # yet) still show their candidates when re-opened from the picker.
+        # Skip when we already have a populated top — the legacy auto path
+        # only persisted top_candidates and we don't want to double-render.
+        if not row["top_candidates"]:
+            sourced_ids = row.get("sourced_candidate_ids") or []
+            if sourced_ids:
+                try:
+                    cand_rows = (db.get_client().table("candidates")
+                                 .select(", ".join(_UNSORTED_POOL_FIELDS))
+                                 .in_("id", sourced_ids)
+                                 .execute().data) or []
+                    row["unsorted_pool"] = _shape_unsorted_pool(cand_rows)
+                except Exception:
+                    log.exception("get_agentic_boost_run: pool rehydrate failed")
+                    row["unsorted_pool"] = []
+            else:
+                row["unsorted_pool"] = []
     return row
 
 
