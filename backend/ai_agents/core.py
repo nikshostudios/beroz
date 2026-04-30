@@ -5373,12 +5373,18 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
                     log.exception("screener batch failed (i=%s)", i)
                     batch_scores = []
                 new_scores.extend(batch_scores)
+                # Persist per-batch so a stalled run still leaves partial top
+                # candidates visible on rehydrate (get_agentic_boost_run reads
+                # match_scores directly). on_conflict makes this idempotent.
+                if batch_scores:
+                    try:
+                        db.upsert_match_scores(requirement_id, batch_scores)
+                    except Exception:
+                        log.exception("screener: per-batch upsert failed (i=%s)", i)
                 yield _sse({"event": "agent_progress", "agent": "screener",
                             "message": (f"Scored "
                                         f"{min(i + MATCH_BATCH_SIZE, len(to_score))}"
                                         f"/{len(to_score)}")})
-            if new_scores:
-                db.upsert_match_scores(requirement_id, new_scores)
         top = (db.get_match_scores_above(
             requirement_id, min_score=MATCH_MIN_SCORE)[:BOOST_TOP_N])
         # Auto-reveal: budget=5. Walks the score-ordered top list and reveals
