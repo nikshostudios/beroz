@@ -161,6 +161,7 @@ def _call_claude(model: str, system: str, user_msg: str,
     resp = _claude.messages.create(
         model=model, max_tokens=max_tokens, system=system,
         messages=[{"role": "user", "content": user_msg}],
+        timeout=60.0,
     )
     _log_tokens(endpoint, model, resp.usage.input_tokens, resp.usage.output_tokens)
     return resp.content[0].text
