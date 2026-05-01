@@ -4897,7 +4897,8 @@ def _enrich_top_candidates(top: list[dict], requirement_id: str,
         cand_rows = (client.table("candidates")
                      .select("id, name, email, phone, current_job_title, "
                              "current_employer, current_location, skills, "
-                             "source, do_not_email, do_not_call")
+                             "source, source_profile_url, "
+                             "do_not_email, do_not_call")
                      .in_("id", top_ids).execute().data) or []
     except Exception:
         log.exception("boost enrich: candidates fetch failed")

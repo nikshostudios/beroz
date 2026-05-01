@@ -955,15 +955,19 @@ async def source_apify(skills: list[str], location: str | None,
                 or DEFAULT_APIFY_YC_ACTOR)
 
     # harvestapi/linkedin-profile-search takes structured filters, not a
-    # search URL. searchQuery is the fuzzy free-text field (full role_title
-    # works well — qualifiers help fuzzy match). currentJobTitles is a
-    # strict array filter against `currentPosition.title`, so JD-side
-    # qualifiers like "- Fraud & Risk Intelligence" or "(Bangalore)" must
-    # be stripped or the filter starves the search.
-    keyword = role_title or " ".join(
-        s for s in (skills or [])[:2] if s).strip()
+    # search URL. Both searchQuery and currentJobTitles are AND-style filters:
+    #   - searchQuery: fuzzy AND across profile name/headline/about/title
+    #   - currentJobTitles: strict array filter on currentPosition.title
+    # Passing the full JD title ("Staff ML Engineer - Fraud & Risk
+    # Intelligence") as searchQuery requires every word — including
+    # "Fraud", "&", "Risk", "Intelligence" — to appear somewhere on the
+    # profile. The May-01 19:22 run found 0 profiles because of this.
+    # Use canonical for BOTH filters; let the screener re-judge fit on
+    # qualifier-bearing nuance after sourcing returns a usable pool.
     canonical = (canonical_role_title
                  or _canonicalize_job_title(role_title))
+    keyword = canonical or role_title or " ".join(
+        s for s in (skills or [])[:2] if s).strip()
     geo = location or ("Singapore" if market == "SG" else "India")
 
     linkedin_body: dict = {
