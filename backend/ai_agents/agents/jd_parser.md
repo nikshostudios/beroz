@@ -14,7 +14,8 @@ Return a single JSON object with these fields:
 
 ```json
 {
-  "role_title": "string — normalized job title (e.g., 'ServiceNow Developer', not 'Sr. Snow Dev')",
+  "role_title": "string — normalized job title for display (e.g., 'ServiceNow Developer', not 'Sr. Snow Dev'). Keeps the full descriptive title so the UI + fuzzy search work well.",
+  "canonical_job_title": "string — the BARE job title a candidate would actually write on LinkedIn. Strip JD-side qualifiers: product/team names ('- Fraud & Risk Intelligence'), bracketed locations ('(Singapore / Bangalore)'), pipe specializations ('| ITSM'), seniority adjectives that aren't part of the canonical ladder, and the word 'Lead' when used as a project label vs. seniority. See Canonical Job Title rules below.",
   "skills_required": ["string array — individual skills, decomposed from compound phrases"],
   "skills_nice_to_have": ["string array — optional/preferred skills mentioned"],
   "experience_min": "number or null — minimum years required",
@@ -37,6 +38,33 @@ Return a single JSON object with these fields:
 ```
 
 ## Rules
+
+### Canonical Job Title
+The canonical job title is what a candidate writes on their LinkedIn profile when asked "what is your job title?" — not what HR put in the JD heading. It is used as a strict filter against LinkedIn's `currentPosition.title` field, so adding qualifiers narrows the candidate pool dramatically.
+
+**Strip these:**
+- Product/team qualifiers: `Staff ML Engineer - Fraud & Risk Intelligence` → `Staff Machine Learning Engineer`
+- Bracketed location/seniority/dept hints: `Senior Engineer (Bangalore)` → `Senior Engineer`, `Backend Dev [Platform]` → `Backend Developer`
+- Pipe-separated specializations: `ServiceNow Developer | ITSM | Flow Designer` → `ServiceNow Developer`
+- Slash-separated alternatives: `Frontend / React Developer` → pick the more concrete (`Frontend Developer`)
+- Trailing "for X" / "in Y": `Engineer for Payments Platform` → `Engineer`
+- Internal job-code prefixes: `R-2487 Senior SRE` → `Senior SRE`
+
+**Keep these:**
+- Seniority levels people genuinely use: `Junior`, `Senior`, `Staff`, `Principal`, `Lead`, `Distinguished` — but only when they're standard ladder rungs, not JD adjectives.
+- Domain anchored to the title: `ML Engineer`, `Backend Engineer`, `Data Scientist`, `Solutions Architect` — these are the title.
+- Acronym expansion when LinkedIn-natural: `ML Engineer` → `Machine Learning Engineer` (most LinkedIn profiles use the spelled form). `SRE` → keep as `SRE` (commonly written that way).
+
+**Hard caps:**
+- ≤ 5 words.
+- No commas, no punctuation other than spaces.
+- If the JD's title is already canonical (e.g. "ServiceNow Developer"), `canonical_job_title` equals `role_title`.
+
+**Examples:**
+- `Staff Machine Learning Engineer — Fraud & Risk Intelligence (Singapore / Bangalore)` → `role_title: "Staff Machine Learning Engineer - Fraud & Risk Intelligence"`, `canonical_job_title: "Staff Machine Learning Engineer"`
+- `Senior ServiceNow Developer | ITSM, ITOM` → `role_title: "Senior ServiceNow Developer (ITSM/ITOM)"`, `canonical_job_title: "Senior ServiceNow Developer"`
+- `Frontend Engineer (React) — Growth Pod` → `role_title: "Frontend Engineer (React) - Growth Pod"`, `canonical_job_title: "Frontend Engineer"`
+- `Data Scientist` → both fields the same.
 
 ### Skill Decomposition
 - Split compound skill strings into individual skills: "ServiceNow JavaScript ITSM" → ["ServiceNow", "JavaScript", "ITSM"]

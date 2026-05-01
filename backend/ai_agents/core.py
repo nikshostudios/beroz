@@ -5405,6 +5405,12 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
 
     apify_skills = (requirement.get("skills_required") or [])[:6]
     apify_role = requirement.get("role_title")
+    # Canonical title (no JD-side qualifiers) drives harvestapi's strict
+    # `currentJobTitles` filter — passing the full JD title narrowed the
+    # May-01 Staff ML run to 1 hit. Comes from the JD parser; falls back to
+    # a regex strip inside source_apify when the agent didn't emit one.
+    apify_canonical_role = (jd_parsed.get("canonical_job_title")
+                            if isinstance(jd_parsed, dict) else None)
     apify_location = requirement.get("location") or (
         "Singapore" if market == "SG" else "India")
     if not apify_enabled:
@@ -5439,7 +5445,8 @@ def launch_agentic_boost_stream(payload: dict, user_role: str, user_email: str):
         if apify_enabled:
             task_names.append("apify")
             coros.append(sourcing.source_apify(
-                apify_skills, apify_location, market, apify_role))
+                apify_skills, apify_location, market, apify_role,
+                canonical_role_title=apify_canonical_role))
         if web_agent_enabled:
             task_names.append("web_agent")
             coros.append(sourcing.source_web_agent(

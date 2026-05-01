@@ -902,13 +902,48 @@ def _normalize_apify_yc(items: list[dict], market: str) -> list[dict]:
     return results
 
 
+_JD_TITLE_QUALIFIER_SEPARATORS = (" - ", " — ", " – ", " | ",
+                                  ": ", " (", " [", " / ", ", ")
+
+
+def _canonicalize_job_title(role_title: str | None) -> str | None:
+    """Strip JD-side qualifiers from a role title for strict LinkedIn filters.
+
+    Defensive regex fallback when the JD parser's `canonical_job_title`
+    field isn't available (legacy runs, agent miss). LinkedIn
+    `currentPosition.title` almost never carries product/team qualifiers —
+    feeding the full JD title into harvestapi's `currentJobTitles` array
+    filter narrowed the May-01 Staff ML run to a single hit. Truncate at
+    the first JD-side separator.
+    """
+    if not role_title:
+        return None
+    cleaned = role_title.strip()
+    cuts = [cleaned.find(sep) for sep in _JD_TITLE_QUALIFIER_SEPARATORS]
+    cuts = [c for c in cuts if c > 0]
+    if cuts:
+        cleaned = cleaned[:min(cuts)].strip()
+    cleaned = cleaned.rstrip(" -—–|:,/(")
+    # If a too-long title slipped through, the canonical filter is more
+    # harmful than helpful — bail to None and let searchQuery alone match.
+    if len(cleaned) > 50 or len(cleaned.split()) > 7:
+        return None
+    return cleaned or None
+
+
 async def source_apify(skills: list[str], location: str | None,
-                       market: str, role_title: str | None = None) -> list[dict]:
+                       market: str, role_title: str | None = None,
+                       canonical_role_title: str | None = None) -> list[dict]:
     """Run LinkedIn (always) + YC (only when role hints startup) via Apify.
 
     LinkedIn is the workhorse for IN/SG mid-level engineers; YC is a small
     secondary channel that only fires for startup-flavored requirements
     (founder/early-stage/first hire). Both actors are run in parallel.
+
+    `canonical_role_title` is the JD parser's stripped-down job title that
+    candidates actually write on LinkedIn (e.g. "Staff Machine Learning
+    Engineer", not "Staff ML Engineer - Fraud & Risk Intelligence"). When
+    absent, falls back to a regex strip via `_canonicalize_job_title`.
     """
     token = os.environ.get("APIFY_TOKEN")
     if not token:
@@ -920,15 +955,15 @@ async def source_apify(skills: list[str], location: str | None,
                 or DEFAULT_APIFY_YC_ACTOR)
 
     # harvestapi/linkedin-profile-search takes structured filters, not a
-    # search URL. searchQuery is the fuzzy free-text field; currentJobTitles
-    # / locations are array-typed structured filters that compose with it.
-    # LinkedIn treats searchQuery as an AND match on the headline/bio, so
-    # concatenating every JD skill narrows results to <5. Prefer role_title
-    # (broad, predictable) and let the screener re-evaluate skills client-side.
-    # Fallback to top 2 skills mirrors the Apr 26 smoke test that returned
-    # 10 items, 9/10 bullseye for ServiceNow Dev + Bangalore.
+    # search URL. searchQuery is the fuzzy free-text field (full role_title
+    # works well — qualifiers help fuzzy match). currentJobTitles is a
+    # strict array filter against `currentPosition.title`, so JD-side
+    # qualifiers like "- Fraud & Risk Intelligence" or "(Bangalore)" must
+    # be stripped or the filter starves the search.
     keyword = role_title or " ".join(
         s for s in (skills or [])[:2] if s).strip()
+    canonical = (canonical_role_title
+                 or _canonicalize_job_title(role_title))
     geo = location or ("Singapore" if market == "SG" else "India")
 
     linkedin_body: dict = {
@@ -938,10 +973,14 @@ async def source_apify(skills: list[str], location: str | None,
     }
     if keyword:
         linkedin_body["searchQuery"] = keyword
-    if role_title:
-        linkedin_body["currentJobTitles"] = [role_title]
+    if canonical:
+        linkedin_body["currentJobTitles"] = [canonical]
     if geo:
         linkedin_body["locations"] = [geo]
+    log.info(
+        "apify linkedin: searchQuery=%r currentJobTitles=%r locations=%r",
+        keyword, linkedin_body.get("currentJobTitles"),
+        [geo] if geo else [])
     yc_body = {
         # Default to recent batches; user can override actor input via the
         # APIFY_YC_ACTOR_ID swap if they want a different shape.
